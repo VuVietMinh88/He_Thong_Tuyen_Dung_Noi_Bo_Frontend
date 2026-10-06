@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { authService } from "../../services/auth.service";
 import { tokenService } from "../../services/token.service";
 import {
@@ -61,10 +61,14 @@ export const LoginForm: React.FC = () => {
     return `${minutes} phút ${seconds} giây`;
   };
 
-  const handleLoginSuccess = (accessToken: string, user: { role?: string }, refreshToken?: string) => {
+  const handleLoginSuccess = (
+    accessToken: string,
+    user: { role?: string },
+    refreshToken?: string,
+  ) => {
     clearSuccessfulLoginState();
     setLockVersion((current) => current + 1);
-    
+
     tokenService.setAccessToken(accessToken);
     if (refreshToken) tokenService.setRefreshToken(refreshToken);
     tokenService.setUserData(user as any);
@@ -272,13 +276,12 @@ export const LoginForm: React.FC = () => {
             />
             Ghi nhớ phiên đăng nhập
           </label>
-          <a
-            href="#"
+          <Link
+            to="/forgot-password"
             className="font-semibold text-indigo-600 hover:text-indigo-500 transition-colors"
-            onClick={(event) => event.preventDefault()}
           >
             Quên mật khẩu?
-          </a>
+          </Link>
         </div>
 
         <button

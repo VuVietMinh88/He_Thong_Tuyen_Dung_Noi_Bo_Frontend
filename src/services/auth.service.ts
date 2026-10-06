@@ -30,4 +30,22 @@ export const authService = {
       throw new Error("LOGIN_REQUEST_FAILED");
     }
   },
+
+  requestPasswordReset: async (email: string): Promise<void> => {
+    try {
+      await axiosClient.post("/auth/forgot-password", { email });
+    } catch (error) {
+      // Anti-enumeration: không lộ trạng thái email tồn tại hay không.
+      // Luôn coi request là đã được xử lý thành công ở phía UI.
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+
+        if (status === 400 || status === 404 || status === 422) {
+          return;
+        }
+      }
+
+      return;
+    }
+  },
 };
