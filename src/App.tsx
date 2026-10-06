@@ -1,33 +1,56 @@
-import { useState } from 'react'
-import { getHealth } from './services/healthService'
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
+import LoginPage from "./pages/Login/LoginPage";
+import ForgotPasswordPage from "./pages/ForgotPassword/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPassword/ResetPasswordPage";
+import ChangePasswordPage from "./pages/ChangePassword/ChangePasswordPage";
+import AccountListPage from "./pages/AccountList/AccountListPage";
 
 function App() {
-  const [pending, setPending] = useState(false)
-  const [message, setMessage] = useState('Chưa kiểm tra kết nối Backend.')
-
-  async function checkConnection() {
-    setPending(true)
-    setMessage('Đang kiểm tra kết nối...')
-    try {
-      const health = await getHealth()
-      setMessage(`Kết nối Backend thành công: ${health.status}.`)
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Không kiểm tra được kết nối.')
-    } finally {
-      setPending(false)
-    }
-  }
-
   return (
-    <main>
-      <h1>Hệ thống tuyển dụng nội bộ</h1>
-      <p>Frontend — K3S4_N3</p>
-      <button type="button" disabled={pending} onClick={() => void checkConnection()}>
-        {pending ? 'Đang kiểm tra...' : 'Kiểm tra kết nối Backend'}
-      </button>
-      <p role="status" aria-live="polite">{message}</p>
-    </main>
-  )
+    <Router>
+      <Routes>
+        <Route path="/" element={<Navigate to="/login" replace />} />
+
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/change-password" element={<ChangePasswordPage />} />
+
+        {/* User Story S1-08: Quản lý danh sách tài khoản nội bộ (TKNHTTDNB1-142) */}
+        <Route path="/users" element={<AccountListPage />} />
+        <Route path="/admin/users" element={<AccountListPage />} />
+
+        {/* Các route tương lai sau khi đăng nhập thành công */}
+        <Route
+          path="/admin/dashboard"
+          element={
+            <main className="p-8 text-2xl font-bold">Admin Dashboard</main>
+          }
+        />
+        <Route
+          path="/hr/dashboard"
+          element={<main className="p-8 text-2xl font-bold">HR Dashboard</main>}
+        />
+        <Route
+          path="/interviewer/dashboard"
+          element={
+            <main className="p-8 text-2xl font-bold">
+              Interviewer Dashboard
+            </main>
+          }
+        />
+        <Route
+          path="/dashboard"
+          element={<main className="p-8 text-2xl font-bold">Trang chủ</main>}
+        />
+      </Routes>
+    </Router>
+  );
 }
 
-export default App
+export default App;
