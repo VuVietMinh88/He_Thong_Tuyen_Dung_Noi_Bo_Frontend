@@ -31,6 +31,14 @@ export const authService = {
     }
   },
 
+  logout: async (): Promise<void> => {
+    try {
+      await axiosClient.post("/auth/logout");
+    } catch (error) {
+      console.error("Logout API failed", error);
+    }
+  },
+
   requestPasswordReset: async (email: string): Promise<void> => {
     try {
       await axiosClient.post("/auth/forgot-password", { email });

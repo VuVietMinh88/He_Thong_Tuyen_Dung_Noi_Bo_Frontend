@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { type Role, ROLE_NAMES } from '../../constants/roles';
+import { tokenService } from '../../services/token.service';
+import { authService } from '../../services/auth.service';
 
 // Cấu trúc một Menu Item
 interface MenuItem {
@@ -12,13 +14,12 @@ interface MenuItem {
 
 // Danh sách toàn bộ menu của hệ thống
 const MENU_ITEMS: MenuItem[] = [
-  { title: 'Bảng điều khiển', path: '/dashboard', icon: '📊', allowedRoles: ['SYSTEM_ADMIN', 'HR_MANAGER', 'RECRUITER', 'HEAD_OF_DEPARTMENT', 'INTERVIEWER'] },
-  { title: 'Quản lý tài khoản', path: '/users', icon: '👥', allowedRoles: ['SYSTEM_ADMIN'] },
-  { title: 'Đăng tuyển dụng', path: '/jobs', icon: '📝', allowedRoles: ['SYSTEM_ADMIN', 'HR_MANAGER', 'RECRUITER'] },
-  { title: 'Quản lý CV / Ứng viên', path: '/candidates', icon: '📄', allowedRoles: ['SYSTEM_ADMIN', 'HR_MANAGER', 'RECRUITER', 'HEAD_OF_DEPARTMENT'] },
-  { title: 'Lịch phỏng vấn', path: '/interviews', icon: '📅', allowedRoles: ['SYSTEM_ADMIN', 'HR_MANAGER', 'RECRUITER', 'INTERVIEWER', 'HEAD_OF_DEPARTMENT'] },
-  { title: 'Việc làm của tôi', path: '/my-jobs', icon: '💼', allowedRoles: ['CANDIDATE'] },
-  { title: 'Hồ sơ cá nhân', path: '/profile', icon: '👤', allowedRoles: ['CANDIDATE', 'EMPLOYEE', 'SYSTEM_ADMIN', 'HR_MANAGER', 'RECRUITER', 'INTERVIEWER', 'HEAD_OF_DEPARTMENT'] },
+  { title: 'Bảng điều khiển', path: '/dashboard', icon: '📊', allowedRoles: ['ADMIN', 'HR_MANAGER', 'RECRUITER', 'HIRING_MANAGER', 'INTERVIEWER', 'APPROVER'] },
+  { title: 'Quản lý tài khoản', path: '/users', icon: '👥', allowedRoles: ['ADMIN'] },
+  { title: 'Đăng tuyển dụng', path: '/jobs', icon: '📝', allowedRoles: ['ADMIN', 'HR_MANAGER', 'RECRUITER'] },
+  { title: 'Quản lý CV / Ứng viên', path: '/candidates', icon: '📄', allowedRoles: ['ADMIN', 'HR_MANAGER', 'RECRUITER', 'HIRING_MANAGER'] },
+  { title: 'Lịch phỏng vấn', path: '/interviews', icon: '📅', allowedRoles: ['ADMIN', 'HR_MANAGER', 'RECRUITER', 'INTERVIEWER', 'HIRING_MANAGER'] },
+  { title: 'Hồ sơ cá nhân', path: '/profile', icon: '👤', allowedRoles: ['ADMIN', 'HR_MANAGER', 'RECRUITER', 'INTERVIEWER', 'HIRING_MANAGER', 'APPROVER'] },
 ];
 
 const Sidebar: React.FC = () => {
@@ -26,15 +27,20 @@ const Sidebar: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Lấy thông tin user (Nên thay bằng hook từ Redux/Context như useAuth() trong dự án thật)
-  const userRole = (localStorage.getItem('user_role') as Role) || 'CANDIDATE';
-  const userName = localStorage.getItem('user_name') || 'Nguyễn Văn A';
+  const userData = tokenService.getUserData();
+  const userRoles = userData?.roles || [];
+  const userName = userData?.email || 'Người dùng';
+  
+  const displayRole = userRoles.length > 0 ? (userRoles[0] as Role) : null;
 
-  // Lọc menu: Chỉ giữ lại những menu mà userRole hiện tại có quyền truy cập
-  const visibleMenus = MENU_ITEMS.filter(menu => menu.allowedRoles.includes(userRole));
+  // Lọc menu: Chỉ giữ lại những menu mà userRoles hiện tại có quyền truy cập
+  const visibleMenus = MENU_ITEMS.filter(menu => 
+    menu.allowedRoles.some(role => userRoles.includes(role))
+  );
 
-  const handleLogout = () => {
-    localStorage.clear();
+  const handleLogout = async () => {
+    await authService.logout();
+    tokenService.clearAll();
     navigate('/login');
   };
 
@@ -79,12 +85,12 @@ const Sidebar: React.FC = () => {
         <div className="p-5 border-b border-slate-800 bg-slate-800/50 shrink-0">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-lg font-bold">
-              {userName.charAt(0)}
+              {userName.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-slate-200 truncate">{userName}</p>
               <p className="text-xs font-semibold text-blue-400 mt-0.5 uppercase tracking-wider truncate">
-                {ROLE_NAMES[userRole] || 'Khách'}
+                {displayRole ? ROLE_NAMES[displayRole] : 'Khách'}
               </p>
             </div>
           </div>
@@ -114,26 +120,6 @@ const Sidebar: React.FC = () => {
             })}
           </ul>
         </nav>
-
-        {/* === CODE TOOL TEST (Xóa đi khi release) === */}
-        <div className="p-2 border-b border-slate-800 bg-slate-900">
-          <select 
-            className="w-full bg-slate-800 text-white text-xs p-2 rounded outline-none border border-slate-700"
-            value={userRole}
-            onChange={(e) => {
-              localStorage.setItem('user_role', e.target.value);
-              localStorage.setItem('access_token', 'test_token'); // Giả lập đã có token
-              window.location.reload(); // Reload lại trang để áp quyền mới
-            }}
-          >
-            <option value="SYSTEM_ADMIN">Quản trị hệ thống</option>
-            <option value="HR_MANAGER">Trưởng phòng nhân sự</option>
-            <option value="RECRUITER">Nhân viên tuyển dụng</option>
-            <option value="HEAD_OF_DEPARTMENT">Trưởng bộ phận</option>
-            <option value="CANDIDATE">Ứng viên</option>
-          </select>
-        </div>
-        {/* ========================================= */}
 
         {/* Nút Đăng xuất ở Footer */}
         <div className="p-4 border-t border-slate-800 bg-slate-950 shrink-0">

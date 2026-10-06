@@ -38,7 +38,6 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/change-password" element={<ChangePasswordPage />} />
         
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
@@ -47,24 +46,20 @@ function App() {
             ========================================= */}
         
         {/* Route chung cho nhiều Role */}
-        <Route element={<ProtectedRoute allowedRoles={['SYSTEM_ADMIN', 'HR_MANAGER', 'RECRUITER', 'HEAD_OF_DEPARTMENT', 'INTERVIEWER']} />}>
+        <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'HR_MANAGER', 'RECRUITER', 'HIRING_MANAGER', 'INTERVIEWER', 'APPROVER']} />}>
           <Route path="/dashboard" element={<MainLayout><div className="p-8 text-2xl font-bold bg-white rounded-lg shadow">Bảng điều khiển chung</div></MainLayout>} />
           <Route path="/profile" element={<MainLayout><div className="p-8 text-2xl font-bold bg-white rounded-lg shadow">Hồ sơ cá nhân</div></MainLayout>} />
+          <Route path="/change-password" element={<MainLayout><ChangePasswordPage /></MainLayout>} />
         </Route>
 
         {/* Chỉ ADMIN mới vào được Quản lý tài khoản (/users) */}
-        <Route element={<ProtectedRoute allowedRoles={['SYSTEM_ADMIN']} />}>
+        <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
           <Route path="/users" element={<MainLayout><div className="p-8 text-2xl font-bold bg-white rounded-lg shadow">Trang Quản lý Tài khoản (Chỉ Admin)</div></MainLayout>} />
         </Route>
 
         {/* HR và RECRUITER vào được Quản lý Tuyển dụng */}
-        <Route element={<ProtectedRoute allowedRoles={['SYSTEM_ADMIN', 'HR_MANAGER', 'RECRUITER']} />}>
+        <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'HR_MANAGER', 'RECRUITER']} />}>
           <Route path="/jobs" element={<MainLayout><div className="p-8 text-2xl font-bold bg-white rounded-lg shadow">Đăng Tuyển Dụng</div></MainLayout>} />
-        </Route>
-        
-        {/* Ứng viên */}
-        <Route element={<ProtectedRoute allowedRoles={['CANDIDATE']} />}>
-          <Route path="/my-jobs" element={<MainLayout><div className="p-8 text-2xl font-bold bg-white rounded-lg shadow">Việc làm của tôi (Chỉ Ứng viên)</div></MainLayout>} />
         </Route>
 
         {/* Bắt lỗi trang không tồn tại (404) */}
