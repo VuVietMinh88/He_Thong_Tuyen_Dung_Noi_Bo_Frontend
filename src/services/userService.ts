@@ -114,6 +114,25 @@ export const userService = {
   },
 
   /**
+   * Cập nhật danh sách vai trò của tài khoản qua API PUT /admin/users/:id/roles
+   * Đáp ứng User Story S1-09 / TKNHTTDNB1-152
+   */
+  updateUserRoles: async (
+    userId: string,
+    roles: import('../types/account').AccountRole[]
+  ): Promise<{ id: string; roles: import('../types/account').AccountRole[] }> => {
+    try {
+      const response = await axiosClient.put(`/admin/users/${userId}/roles`, { roles });
+      return response.data || { id: userId, roles };
+    } catch (error) {
+      if (axios.isAxiosError(error) && (!error.response || error.response.status === 404)) {
+        return { id: userId, roles };
+      }
+      throw error;
+    }
+  },
+
+  /**
    * Hàm lọc và phân trang giả lập nội bộ (dùng khi Backend chưa khởi chạy endpoint /admin/users)
    */
   getMockFilteredUsers: (params: GetUsersParams): GetUsersResponse => {

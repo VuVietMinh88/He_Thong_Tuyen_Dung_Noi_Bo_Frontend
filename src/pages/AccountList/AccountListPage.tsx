@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import type { AccountFilterParams, UserAccount } from '../../types/account';
+import type { AccountFilterParams, AccountRole, UserAccount } from '../../types/account';
 import { userService } from '../../services/userService';
 import { useDebounce } from '../../hooks/useDebounce';
 import AccountFilterBar from '../../components/AccountList/AccountFilterBar';
 import AccountTable from '../../components/AccountList/AccountTable';
 import AccountPaginationBar from '../../components/AccountList/AccountPaginationBar';
 import EditAccountModal from '../../components/AccountList/EditAccountModal';
+import ManageRolesModal from '../../components/AccountList/ManageRolesModal';
 import Sidebar from '../../components/Sidebar';
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -36,6 +37,10 @@ export const AccountListPage: React.FC = () => {
   // Modal editing state
   const [editingAccount, setEditingAccount] = useState<UserAccount | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+
+  // Modal managing roles state (User Story S1-09 / TKNHTTDNB1-152)
+  const [managingRolesAccount, setManagingRolesAccount] = useState<UserAccount | null>(null);
+  const [isManageRolesModalOpen, setIsManageRolesModalOpen] = useState<boolean>(false);
 
   // Notification toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -151,6 +156,36 @@ export const AccountListPage: React.FC = () => {
     setIsEditModalOpen(true);
   };
 
+  // Handler for opening manage roles modal (User Story S1-09)
+  const handleOpenManageRoles = (account: UserAccount) => {
+    setManagingRolesAccount(account);
+    setIsManageRolesModalOpen(true);
+  };
+
+  // Handler for updating user roles via API (User Story S1-09)
+  const handleSaveRoles = async (userId: string, newRoles: AccountRole[]) => {
+    try {
+      await userService.updateUserRoles(userId, newRoles);
+
+      setAccounts((prevList) =>
+        prevList.map((item) =>
+          item.id === userId
+            ? { ...item, roles: newRoles, role: newRoles[0] }
+            : item
+        )
+      );
+
+      showNotification('Cập nhật phân quyền vai trò người dùng thành công.');
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Lỗi khi cập nhật vai trò người dùng.';
+      showNotification(message);
+      throw error;
+    }
+  };
+
   // Handler for saving edited account via API
   const handleSaveAccount = async (updatedAccount: UserAccount) => {
     try {
@@ -241,6 +276,7 @@ export const AccountListPage: React.FC = () => {
               accounts={accounts}
               isLoading={isLoading}
               onEditAccount={handleOpenEditModal}
+              onManageRoles={handleOpenManageRoles}
               onToggleStatus={handleToggleStatus}
               onResetFilters={handleResetFilters}
             />
@@ -265,6 +301,14 @@ export const AccountListPage: React.FC = () => {
         account={editingAccount}
         onClose={() => setIsEditModalOpen(false)}
         onSave={handleSaveAccount}
+      />
+
+      {/* Manage Roles Modal (User Story S1-09 / TKNHTTDNB1-152) */}
+      <ManageRolesModal
+        isOpen={isManageRolesModalOpen}
+        account={managingRolesAccount}
+        onClose={() => setIsManageRolesModalOpen(false)}
+        onSaveRoles={handleSaveRoles}
       />
     </div>
   );

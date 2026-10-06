@@ -4,6 +4,7 @@ interface AccountTableProps {
   accounts: UserAccount[];
   isLoading?: boolean;
   onEditAccount: (account: UserAccount) => void;
+  onManageRoles?: (account: UserAccount) => void;
   onToggleStatus: (account: UserAccount) => void;
   onResetFilters?: () => void;
 }
@@ -12,6 +13,7 @@ export const AccountTable: React.FC<AccountTableProps> = ({
   accounts,
   isLoading = false,
   onEditAccount,
+  onManageRoles,
   onToggleStatus,
   onResetFilters,
 }) => {
@@ -41,14 +43,21 @@ export const AccountTable: React.FC<AccountTableProps> = ({
         );
       case 'INTERVIEWER':
         return (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
             Interviewer
           </span>
         );
+      case 'CANDIDATE':
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-inset ring-slate-400/20">
+            <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+            Ứng viên
+          </span>
+        );
       default:
         return (
-          <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-800">
+          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-800">
             {role}
           </span>
         );
@@ -242,9 +251,16 @@ export const AccountTable: React.FC<AccountTableProps> = ({
                     </span>
                   </td>
 
-                  {/* Vai trò column */}
-                  <td className="whitespace-nowrap px-6 py-4">
-                    {renderRoleBadge(account.role)}
+                  {/* Vai trò column (hỗ trợ hiển thị nhiều vai trò) */}
+                  <td className="px-6 py-4">
+                    <div className="flex flex-wrap items-center gap-1.5 max-w-xs">
+                      {(account.roles && account.roles.length > 0
+                        ? account.roles
+                        : [account.role]
+                      ).map((roleItem) => (
+                        <span key={roleItem}>{renderRoleBadge(roleItem)}</span>
+                      ))}
+                    </div>
                   </td>
 
                   {/* Trạng thái column */}
@@ -252,9 +268,24 @@ export const AccountTable: React.FC<AccountTableProps> = ({
                     {renderStatusBadge(account.status)}
                   </td>
 
-                  {/* Thao tác column: Sửa, Khóa / Mở khóa */}
+                  {/* Thao tác column: Phân quyền, Sửa, Khóa / Mở khóa */}
                   <td className="whitespace-nowrap px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
+                      {/* Phân quyền vai trò button (User Story S1-09 / TKNHTTDNB1-152) */}
+                      {onManageRoles && (
+                        <button
+                          type="button"
+                          onClick={() => onManageRoles(account)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50/60 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 hover:border-indigo-300 shadow-xs"
+                          title="Gán và quản lý vai trò người dùng"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                          </svg>
+                          <span>Phân quyền</span>
+                        </button>
+                      )}
+
                       {/* Sửa button */}
                       <button
                         type="button"

@@ -1,4 +1,4 @@
-export type AccountRole = 'ADMIN' | 'RECRUITER' | 'HIRING_MANAGER' | 'INTERVIEWER';
+export type AccountRole = 'ADMIN' | 'RECRUITER' | 'HIRING_MANAGER' | 'INTERVIEWER' | 'CANDIDATE';
 
 export type AccountStatus = 'ACTIVE' | 'LOCKED';
 
@@ -8,6 +8,7 @@ export interface UserAccount {
   email: string;
   department: string;
   role: AccountRole;
+  roles?: AccountRole[];
   status: AccountStatus;
   avatarUrl?: string;
   createdAt: string;
@@ -25,6 +26,15 @@ export const ROLE_DISPLAY_NAMES: Record<AccountRole, string> = {
   RECRUITER: 'Chuyên viên tuyển dụng (Recruiter)',
   HIRING_MANAGER: 'Quản lý tuyển dụng (Hiring Manager)',
   INTERVIEWER: 'Người phỏng vấn (Interviewer)',
+  CANDIDATE: 'Ứng viên (Candidate)',
+};
+
+export const ROLE_DESCRIPTIONS: Record<AccountRole, string> = {
+  ADMIN: 'Toàn quyền cấu hình hệ thống, quản lý tài khoản và phân quyền người dùng.',
+  RECRUITER: 'Đăng tin tuyển dụng, quản lý hồ sơ ứng viên và điều phối quy trình tuyển dụng.',
+  HIRING_MANAGER: 'Tạo và duyệt yêu cầu tuyển dụng, tham gia đánh giá chuyên môn ứng viên.',
+  INTERVIEWER: 'Tham gia các buổi phỏng vấn và gửi phiếu đánh giá phỏng vấn ứng viên.',
+  CANDIDATE: 'Ứng viên nội bộ, xem danh sách việc làm và theo dõi trạng thái ứng tuyển.',
 };
 
 export const STATUS_DISPLAY_NAMES: Record<AccountStatus, string> = {
