@@ -9,40 +9,66 @@ import ForgotPasswordPage from "./pages/ForgotPassword/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPassword/ResetPasswordPage";
 import ChangePasswordPage from "./pages/ChangePassword/ChangePasswordPage";
 
+// Import các component phân quyền mới tạo
+import ProtectedRoute from "./components/routes/ProtectedRoute";
+import UnauthorizedPage from "./pages/error/UnauthorizedPage";
+import Sidebar from "./components/layout/Sidebar";
+
+// Layout có chứa Sidebar
+const MainLayout = ({ children }: { children: React.ReactNode }) => {
+  return (
+    <div className="flex h-screen bg-gray-100">
+      <Sidebar />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-6">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+};
+
 function App() {
   return (
     <Router>
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
-
+        
+        {/* Các trang Public (Không cần đăng nhập) */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/change-password" element={<ChangePasswordPage />} />
+        
+        <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-        {/* Các route tương lai sau khi đăng nhập thành công */}
-        <Route
-          path="/admin/dashboard"
-          element={
-            <main className="p-8 text-2xl font-bold">Admin Dashboard</main>
-          }
-        />
-        <Route
-          path="/hr/dashboard"
-          element={<main className="p-8 text-2xl font-bold">HR Dashboard</main>}
-        />
-        <Route
-          path="/interviewer/dashboard"
-          element={
-            <main className="p-8 text-2xl font-bold">
-              Interviewer Dashboard
-            </main>
-          }
-        />
-        <Route
-          path="/dashboard"
-          element={<main className="p-8 text-2xl font-bold">Trang chủ</main>}
-        />
+        {/* =========================================
+            CÁC TRANG PRIVATE (Bắt buộc đăng nhập & Kiểm tra quyền) 
+            ========================================= */}
+        
+        {/* Route chung cho nhiều Role */}
+        <Route element={<ProtectedRoute allowedRoles={['SYSTEM_ADMIN', 'HR_MANAGER', 'RECRUITER', 'HEAD_OF_DEPARTMENT', 'INTERVIEWER']} />}>
+          <Route path="/dashboard" element={<MainLayout><div className="p-8 text-2xl font-bold bg-white rounded-lg shadow">Bảng điều khiển chung</div></MainLayout>} />
+          <Route path="/profile" element={<MainLayout><div className="p-8 text-2xl font-bold bg-white rounded-lg shadow">Hồ sơ cá nhân</div></MainLayout>} />
+        </Route>
+
+        {/* Chỉ ADMIN mới vào được Quản lý tài khoản (/users) */}
+        <Route element={<ProtectedRoute allowedRoles={['SYSTEM_ADMIN']} />}>
+          <Route path="/users" element={<MainLayout><div className="p-8 text-2xl font-bold bg-white rounded-lg shadow">Trang Quản lý Tài khoản (Chỉ Admin)</div></MainLayout>} />
+        </Route>
+
+        {/* HR và RECRUITER vào được Quản lý Tuyển dụng */}
+        <Route element={<ProtectedRoute allowedRoles={['SYSTEM_ADMIN', 'HR_MANAGER', 'RECRUITER']} />}>
+          <Route path="/jobs" element={<MainLayout><div className="p-8 text-2xl font-bold bg-white rounded-lg shadow">Đăng Tuyển Dụng</div></MainLayout>} />
+        </Route>
+        
+        {/* Ứng viên */}
+        <Route element={<ProtectedRoute allowedRoles={['CANDIDATE']} />}>
+          <Route path="/my-jobs" element={<MainLayout><div className="p-8 text-2xl font-bold bg-white rounded-lg shadow">Việc làm của tôi (Chỉ Ứng viên)</div></MainLayout>} />
+        </Route>
+
+        {/* Bắt lỗi trang không tồn tại (404) */}
+        <Route path="*" element={<div className="flex items-center justify-center h-screen text-2xl">404 - Không tìm thấy trang</div>} />
       </Routes>
     </Router>
   );
