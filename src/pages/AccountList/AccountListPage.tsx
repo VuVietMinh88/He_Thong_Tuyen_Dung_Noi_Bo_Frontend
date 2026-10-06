@@ -7,6 +7,8 @@ import AccountTable from '../../components/AccountList/AccountTable';
 import AccountPaginationBar from '../../components/AccountList/AccountPaginationBar';
 import EditAccountModal from '../../components/AccountList/EditAccountModal';
 import ManageRolesModal from '../../components/AccountList/ManageRolesModal';
+import LockAccountModal from '../../components/AccountList/LockAccountModal';
+import UnlockAccountModal from '../../components/AccountList/UnlockAccountModal';
 import Sidebar from '../../components/Sidebar';
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -41,6 +43,12 @@ export const AccountListPage: React.FC = () => {
   // Modal managing roles state (User Story S1-09 / TKNHTTDNB1-152)
   const [managingRolesAccount, setManagingRolesAccount] = useState<UserAccount | null>(null);
   const [isManageRolesModalOpen, setIsManageRolesModalOpen] = useState<boolean>(false);
+
+  // Modal locking & unlocking state (User Story S1-10 / TKNHTTDNB1-160)
+  const [lockingAccount, setLockingAccount] = useState<UserAccount | null>(null);
+  const [isLockModalOpen, setIsLockModalOpen] = useState<boolean>(false);
+  const [unlockingAccount, setUnlockingAccount] = useState<UserAccount | null>(null);
+  const [isUnlockModalOpen, setIsUnlockModalOpen] = useState<boolean>(false);
 
   // Notification toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -128,25 +136,78 @@ export const AccountListPage: React.FC = () => {
     setCurrentPage(1);
   };
 
-  // Handler for toggling status (Active <-> Locked) via API
-  const handleToggleStatus = async (account: UserAccount) => {
-    const newStatus = account.status === 'ACTIVE' ? 'LOCKED' : 'ACTIVE';
-    const actionText = newStatus === 'LOCKED' ? 'khóa' : 'mở khóa';
+  // Handler for requesting account lock with reason modal (User Story S1-10)
+  const handleRequestLock = (account: UserAccount) => {
+    setLockingAccount(account);
+    setIsLockModalOpen(true);
+  };
 
+  // Handler for requesting account unlock modal (User Story S1-10)
+  const handleRequestUnlock = (account: UserAccount) => {
+    setUnlockingAccount(account);
+    setIsUnlockModalOpen(true);
+  };
+
+  // Handler for confirming lock with reason via API (User Story S1-10 / TKNHTTDNB1-160)
+  const handleConfirmLock = async (userId: string, reason: string) => {
     try {
-      await userService.toggleUserStatus(account.id, newStatus);
+      const result = await userService.lockUser(userId, reason);
 
       setAccounts((prevList) =>
         prevList.map((item) =>
-          item.id === account.id ? { ...item, status: newStatus } : item
+          item.id === userId
+            ? {
+                ...item,
+                status: 'LOCKED',
+                lockReason: reason,
+                lockedAt: result.lockedAt,
+              }
+            : item
         )
       );
 
-      showNotification(
-        `Đã ${actionText} thành công tài khoản: ${account.fullName} (${account.email})`
+      showNotification(`Đã khóa thành công tài khoản. Lý do: "${reason}"`);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Lỗi khi thực hiện khóa tài khoản.';
+      showNotification(message);
+      throw error;
+    }
+  };
+
+  // Handler for confirming unlock via API (User Story S1-10 / TKNHTTDNB1-160)
+  const handleConfirmUnlock = async (userId: string) => {
+    try {
+      await userService.unlockUser(userId);
+
+      setAccounts((prevList) =>
+        prevList.map((item) =>
+          item.id === userId
+            ? {
+                ...item,
+                status: 'ACTIVE',
+                lockReason: undefined,
+                lockedAt: undefined,
+              }
+            : item
+        )
       );
-    } catch {
-      showNotification(`Không thể ${actionText} tài khoản. Vui lòng thử lại.`);
+
+      showNotification('Đã mở khóa thành công tài khoản người dùng.');
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Lỗi khi mở khóa tài khoản.';
+      showNotification(message);
+      throw error;
+    }
+  };
+
+  // Handler for toggling status (Active <-> Locked) via API (fallback)
+  const handleToggleStatus = async (account: UserAccount) => {
+    if (account.status === 'ACTIVE') {
+      handleRequestLock(account);
+    } else {
+      handleRequestUnlock(account);
     }
   };
 
@@ -277,6 +338,8 @@ export const AccountListPage: React.FC = () => {
               isLoading={isLoading}
               onEditAccount={handleOpenEditModal}
               onManageRoles={handleOpenManageRoles}
+              onRequestLock={handleRequestLock}
+              onRequestUnlock={handleRequestUnlock}
               onToggleStatus={handleToggleStatus}
               onResetFilters={handleResetFilters}
             />
@@ -309,6 +372,22 @@ export const AccountListPage: React.FC = () => {
         account={managingRolesAccount}
         onClose={() => setIsManageRolesModalOpen(false)}
         onSaveRoles={handleSaveRoles}
+      />
+
+      {/* Lock Account Modal with Reason & Headcount Warning (User Story S1-10 / TKNHTTDNB1-160) */}
+      <LockAccountModal
+        isOpen={isLockModalOpen}
+        account={lockingAccount}
+        onClose={() => setIsLockModalOpen(false)}
+        onConfirmLock={handleConfirmLock}
+      />
+
+      {/* Unlock Account Modal (User Story S1-10 / TKNHTTDNB1-160) */}
+      <UnlockAccountModal
+        isOpen={isUnlockModalOpen}
+        account={unlockingAccount}
+        onClose={() => setIsUnlockModalOpen(false)}
+        onConfirmUnlock={handleConfirmUnlock}
       />
     </div>
   );

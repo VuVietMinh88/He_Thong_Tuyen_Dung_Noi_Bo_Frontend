@@ -1,11 +1,14 @@
-import type { AccountRole, AccountStatus, UserAccount } from '../../types/account';
+import type { AccountRole, UserAccount } from '../../types/account';
+import { tokenService } from '../../services/token.service';
 
 interface AccountTableProps {
   accounts: UserAccount[];
   isLoading?: boolean;
   onEditAccount: (account: UserAccount) => void;
   onManageRoles?: (account: UserAccount) => void;
-  onToggleStatus: (account: UserAccount) => void;
+  onRequestLock?: (account: UserAccount) => void;
+  onRequestUnlock?: (account: UserAccount) => void;
+  onToggleStatus?: (account: UserAccount) => void;
   onResetFilters?: () => void;
 }
 
@@ -14,9 +17,12 @@ export const AccountTable: React.FC<AccountTableProps> = ({
   isLoading = false,
   onEditAccount,
   onManageRoles,
+  onRequestLock,
+  onRequestUnlock,
   onToggleStatus,
   onResetFilters,
 }) => {
+  const currentUser = tokenService.getUserData();
   // Render badge for role with distinctive semantic styling
   const renderRoleBadge = (role: AccountRole) => {
     switch (role) {
@@ -64,9 +70,9 @@ export const AccountTable: React.FC<AccountTableProps> = ({
     }
   };
 
-  // Render status badge (Active / Locked)
-  const renderStatusBadge = (status: AccountStatus) => {
-    if (status === 'ACTIVE') {
+  // Render status badge (Active / Locked - User Story S1-10)
+  const renderStatusBadge = (account: UserAccount) => {
+    if (account.status === 'ACTIVE') {
       return (
         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
           <span className="relative flex h-2 w-2">
@@ -79,10 +85,24 @@ export const AccountTable: React.FC<AccountTableProps> = ({
     }
 
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 ring-1 ring-inset ring-rose-600/20">
-        <span className="h-2 w-2 rounded-full bg-rose-500" />
-        Đã khóa
-      </span>
+      <div className="flex flex-col items-start gap-1">
+        <span
+          className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 ring-1 ring-inset ring-rose-600/20"
+          title={account.lockReason ? `Lý do khóa: ${account.lockReason}` : 'Tài khoản đã bị khóa'}
+        >
+          <span className="h-2 w-2 rounded-full bg-rose-500" />
+          <span>Đã khóa</span>
+          <span className="text-[11px]">🔒</span>
+        </span>
+        {account.lockReason && (
+          <span
+            className="max-w-[150px] truncate text-[11px] text-slate-500 italic"
+            title={account.lockReason}
+          >
+            "{account.lockReason}"
+          </span>
+        )}
+      </div>
     );
   };
 
@@ -203,16 +223,23 @@ export const AccountTable: React.FC<AccountTableProps> = ({
           <tbody className="divide-y divide-slate-100 bg-white">
             {accounts.map((account) => {
               const isLocked = account.status === 'LOCKED';
+              const isSelf = Boolean(
+                currentUser &&
+                  (currentUser.id === account.id ||
+                    (currentUser.email &&
+                      currentUser.email.toLowerCase() === account.email.toLowerCase()))
+              );
+              const activeJobsCount = account.activeJobsCount ?? (account.assignedJobs?.length || 0);
 
               return (
                 <tr
                   key={account.id}
                   className={[
                     "transition hover:bg-slate-50/80",
-                    isLocked ? "bg-slate-50/30" : "",
+                    isLocked ? "bg-slate-50/40" : "",
                   ].join(" ")}
                 >
-                  {/* Họ tên column with Avatar */}
+                  {/* Họ tên column with Avatar and Headcount warning tag */}
                   <td className="whitespace-nowrap px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className={[
@@ -224,11 +251,28 @@ export const AccountTable: React.FC<AccountTableProps> = ({
                         {getAvatarInitials(account.fullName)}
                       </div>
                       <div className="min-w-0">
-                        <div className="font-semibold text-slate-900 truncate">
-                          {account.fullName}
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-900 truncate">
+                            {account.fullName}
+                          </span>
+                          {isSelf && (
+                            <span className="rounded-md bg-indigo-50 px-1.5 py-0.2 text-[10px] font-bold text-indigo-700 border border-indigo-200">
+                              Tôi
+                            </span>
+                          )}
                         </div>
-                        <div className="text-xs text-slate-400 font-mono">
-                          {account.id}
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-slate-400 font-mono">
+                            {account.id}
+                          </span>
+                          {activeJobsCount > 0 && (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 border border-amber-200 shadow-2xs"
+                              title={`Đang phụ trách ${activeJobsCount} vị trí tuyển dụng: ${(account.assignedJobs || []).join(', ')}`}
+                            >
+                              🎯 {activeJobsCount} vị trí
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -263,9 +307,9 @@ export const AccountTable: React.FC<AccountTableProps> = ({
                     </div>
                   </td>
 
-                  {/* Trạng thái column */}
+                  {/* Trạng thái column (User Story S1-10) */}
                   <td className="whitespace-nowrap px-6 py-4">
-                    {renderStatusBadge(account.status)}
+                    {renderStatusBadge(account)}
                   </td>
 
                   {/* Thao tác column: Phân quyền, Sửa, Khóa / Mở khóa */}
@@ -299,34 +343,46 @@ export const AccountTable: React.FC<AccountTableProps> = ({
                         <span>Sửa</span>
                       </button>
 
-                      {/* Khóa / Mở khóa button */}
-                      <button
-                        type="button"
-                        onClick={() => onToggleStatus(account)}
-                        className={[
-                          "inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition shadow-sm",
-                          isLocked
-                            ? "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                            : "border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100",
-                        ].join(" ")}
-                        title={isLocked ? "Mở khóa tài khoản này" : "Khóa tài khoản này"}
-                      >
-                        {isLocked ? (
-                          <>
-                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                            </svg>
-                            <span>Mở khóa</span>
-                          </>
-                        ) : (
-                          <>
-                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                            </svg>
-                            <span>Khóa</span>
-                          </>
-                        )}
-                      </button>
+                      {/* Khóa / Mở khóa button (User Story S1-10 / TKNHTTDNB1-160) */}
+                      {isLocked ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onRequestUnlock ? onRequestUnlock(account) : onToggleStatus?.(account)
+                          }
+                          className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 hover:border-emerald-300 shadow-xs"
+                          title="Mở khóa tài khoản này"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                          </svg>
+                          <span>Mở khóa</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onRequestLock ? onRequestLock(account) : onToggleStatus?.(account)
+                          }
+                          disabled={isSelf}
+                          className={[
+                            "inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition shadow-xs",
+                            isSelf
+                              ? "border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-60"
+                              : "border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300",
+                          ].join(" ")}
+                          title={
+                            isSelf
+                              ? "Quy tắc bảo mật: Không thể tự khóa tài khoản của chính mình"
+                              : "Khóa tài khoản này"
+                          }
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                          <span>Khóa</span>
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

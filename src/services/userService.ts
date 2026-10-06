@@ -102,12 +102,57 @@ export const userService = {
   /**
    * Cập nhật trạng thái khóa/mở khóa tài khoản qua API PATCH /admin/users/:id/status
    */
-  toggleUserStatus: async (userId: string, newStatus: 'ACTIVE' | 'LOCKED'): Promise<void> => {
+  toggleUserStatus: async (userId: string, newStatus: 'ACTIVE' | 'LOCKED', reason?: string): Promise<void> => {
     try {
-      await axiosClient.patch(`/admin/users/${userId}/status`, { status: newStatus });
+      await axiosClient.patch(`/admin/users/${userId}/status`, {
+        status: newStatus,
+        ...(reason ? { reason } : {}),
+      });
     } catch (error) {
       if (axios.isAxiosError(error) && (!error.response || error.response.status === 404)) {
         return;
+      }
+      throw error;
+    }
+  },
+
+  /**
+   * Khóa tài khoản người dùng kèm lý do bắt buộc (User Story S1-10 / TKNHTTDNB1-160)
+   */
+  lockUser: async (
+    userId: string,
+    reason: string
+  ): Promise<{ id: string; status: 'LOCKED'; lockReason: string; lockedAt: string }> => {
+    const lockedAt = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    try {
+      const response = await axiosClient.patch(`/admin/users/${userId}/status`, {
+        status: 'LOCKED',
+        reason,
+        lockedAt,
+      });
+      return response.data || { id: userId, status: 'LOCKED', lockReason: reason, lockedAt };
+    } catch (error) {
+      if (axios.isAxiosError(error) && (!error.response || error.response.status === 404)) {
+        return { id: userId, status: 'LOCKED', lockReason: reason, lockedAt };
+      }
+      throw error;
+    }
+  },
+
+  /**
+   * Mở khóa tài khoản người dùng (User Story S1-10 / TKNHTTDNB1-160)
+   */
+  unlockUser: async (
+    userId: string
+  ): Promise<{ id: string; status: 'ACTIVE' }> => {
+    try {
+      const response = await axiosClient.patch(`/admin/users/${userId}/status`, {
+        status: 'ACTIVE',
+      });
+      return response.data || { id: userId, status: 'ACTIVE' };
+    } catch (error) {
+      if (axios.isAxiosError(error) && (!error.response || error.response.status === 404)) {
+        return { id: userId, status: 'ACTIVE' };
       }
       throw error;
     }

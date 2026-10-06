@@ -13,6 +13,15 @@ export interface UserAccount {
   avatarUrl?: string;
   createdAt: string;
   lastLogin?: string;
+  lockReason?: string;
+  lockedAt?: string;
+  activeJobsCount?: number;
+  assignedJobs?: string[];
+}
+
+export interface LockAccountPayload {
+  userId: string;
+  reason: string;
 }
 
 export interface AccountFilterParams {
