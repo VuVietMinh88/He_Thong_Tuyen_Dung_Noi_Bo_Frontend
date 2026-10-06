@@ -31,3 +31,22 @@ export const STATUS_DISPLAY_NAMES: Record<AccountStatus, string> = {
   ACTIVE: 'Hoạt động',
   LOCKED: 'Đã khóa',
 };
+
+export interface EditAccountFormData {
+  fullName: string;
+  department: string;
+  role: AccountRole;
+  status: AccountStatus;
+}
+
+export const SYSTEM_DEPARTMENTS: string[] = [
+  'Phòng Kỹ thuật & Công nghệ',
+  'Phòng Tuyển dụng & Đào tạo',
+  'Phòng Quản lý Sản phẩm',
+  'Phòng Thiết kế UI/UX',
+  'Phòng Tài chính - Kế toán',
+  'Phòng Kinh doanh & Marketing',
+  'Phòng Vận hành & IT',
+  'Phòng Chăm sóc Khách hàng',
+];
+
