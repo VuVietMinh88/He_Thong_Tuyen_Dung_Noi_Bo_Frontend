@@ -8,6 +8,13 @@ import LoginPage from "./pages/Login/LoginPage";
 import ForgotPasswordPage from "./pages/ForgotPassword/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPassword/ResetPasswordPage";
 import ChangePasswordPage from "./pages/ChangePassword/ChangePasswordPage";
+import { tokenService } from "./services/token.service";
+
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const hasAccessToken = Boolean(tokenService.getAccessToken());
+
+  return hasAccessToken ? <>{children}</> : <Navigate to="/login" replace />;
+};
 
 function App() {
   return (
@@ -18,7 +25,14 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/change-password" element={<ChangePasswordPage />} />
+        <Route
+          path="/change-password"
+          element={
+            <ProtectedRoute>
+              <ChangePasswordPage />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Các route tương lai sau khi đăng nhập thành công */}
         <Route

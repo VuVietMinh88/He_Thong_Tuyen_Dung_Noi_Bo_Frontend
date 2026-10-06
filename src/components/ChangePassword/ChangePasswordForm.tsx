@@ -3,7 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { authService } from "../../services/auth.service";
 import { tokenService } from "../../services/token.service";
 
-const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
+const PASSWORD_REGEX = /^(?=.*\p{L})(?=.*\d).{8,72}$/u;
+
+const isPasswordWithinByteLimit = (password: string): boolean =>
+  new TextEncoder().encode(password).length <= 72;
 
 export const ChangePasswordForm: React.FC = () => {
   const navigate = useNavigate();
@@ -36,9 +39,12 @@ export const ChangePasswordForm: React.FC = () => {
     if (!newPassword) {
       setNewPasswordError("Vui lòng nhập mật khẩu mới");
       isValid = false;
-    } else if (!PASSWORD_REGEX.test(newPassword)) {
+    } else if (
+      !PASSWORD_REGEX.test(newPassword) ||
+      !isPasswordWithinByteLimit(newPassword)
+    ) {
       setNewPasswordError(
-        "Mật khẩu mới tối thiểu 8 ký tự, phải có cả chữ và số",
+        "Mật khẩu mới phải có tối thiểu 8 ký tự, tối đa 72 ký tự, có chữ và số.",
       );
       isValid = false;
     } else {
@@ -71,8 +77,15 @@ export const ChangePasswordForm: React.FC = () => {
 
     try {
       await authService.changePassword(currentPassword, newPassword);
-      setIsSuccess(true);
+
+      try {
+        await authService.logout();
+      } catch (logoutError) {
+        console.warn("Logout failed after password change", logoutError);
+      }
+
       tokenService.clearAll();
+      setIsSuccess(true);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "CHANGE_PASSWORD_FAILED";
@@ -83,8 +96,14 @@ export const ChangePasswordForm: React.FC = () => {
       }
 
       if (message === "PASSWORD_INVALID") {
+        const fieldMessage =
+          error instanceof Error && "fieldMessage" in error
+            ? (error as Error & { fieldMessage?: string }).fieldMessage
+            : undefined;
+
         setSubmitError(
-          "Mật khẩu mới không đáp ứng yêu cầu bảo mật của hệ thống.",
+          fieldMessage ??
+            "Mật khẩu mới không đáp ứng yêu cầu bảo mật của hệ thống.",
         );
         return;
       }
@@ -109,17 +128,17 @@ export const ChangePasswordForm: React.FC = () => {
             Đổi mật khẩu thành công
           </h2>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            Mật khẩu của bạn đã được cập nhật. Vì lý do bảo mật, các phiên đăng
-            nhập khác đã được thu hồi và bạn cần đăng nhập lại để tiếp tục sử
-            dụng hệ thống.
+            Mật khẩu của bạn đã được cập nhật thành công. Hệ thống đã thu hồi
+            phiên đăng nhập hiện tại để bảo mật, nên bạn cần đăng nhập lại để
+            tiếp tục sử dụng.
           </p>
         </div>
 
         <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-700">
           <p className="font-medium">Lưu ý bảo mật:</p>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-emerald-700/90">
-            <li>Phiên hiện tại đã được cập nhật an toàn.</li>
-            <li>Phiên trước đó đã bị vô hiệu hóa.</li>
+            <li>Phiên hiện tại đã được vô hiệu hóa.</li>
+            <li>Refresh token trên server đã được thu hồi.</li>
             <li>Vui lòng đăng nhập lại để tiếp tục làm việc.</li>
           </ul>
         </div>
