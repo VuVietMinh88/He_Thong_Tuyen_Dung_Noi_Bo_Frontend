@@ -9,17 +9,22 @@ import {
   registerFailedLoginAttempt,
 } from "../../utils/loginState";
 
-const getRoleRedirectPath = (role?: string): string => {
-  switch ((role ?? "").toLowerCase()) {
-    case "admin":
-      return "/admin/dashboard";
-    case "hr":
-      return "/hr/dashboard";
-    case "interviewer":
-      return "/interviewer/dashboard";
-    default:
-      return "/dashboard";
-  }
+const normalizeRole = (value?: string | null): string =>
+  (value ?? "").trim().toUpperCase();
+
+const getRoleRedirectPath = (user?: {
+  roles?: string[];
+  role?: string;
+}): string => {
+  const roles = [
+    ...(Array.isArray(user?.roles) ? user.roles : []),
+    ...(user?.role ? [user.role] : []),
+  ].map((role) => normalizeRole(role));
+
+  if (roles.includes("ADMIN")) return "/admin/dashboard";
+  if (roles.includes("HR")) return "/hr/dashboard";
+  if (roles.includes("INTERVIEWER")) return "/interviewer/dashboard";
+  return "/dashboard";
 };
 
 export const LoginForm: React.FC = () => {
@@ -38,18 +43,18 @@ export const LoginForm: React.FC = () => {
   const [submitError, setSubmitError] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [lockVersion, setLockVersion] = useState<number>(0);
-  const [lockStatus, setLockStatus] = useState(() => getLockStatus());
+  const [lockStatus, setLockStatus] = useState(() => getLockStatus(email));
 
   useEffect(() => {
     const updateLockStatus = () => {
-      setLockStatus(getLockStatus());
+      setLockStatus(getLockStatus(email.trim()));
     };
 
     updateLockStatus();
 
     const intervalId = window.setInterval(updateLockStatus, 1000);
     return () => window.clearInterval(intervalId);
-  }, [lockVersion]);
+  }, [lockVersion, email]);
 
   const isLocked = lockStatus.isLocked;
   const lockTimeLeft = lockStatus.remainingSeconds;
@@ -60,19 +65,23 @@ export const LoginForm: React.FC = () => {
     return `${minutes} phút ${seconds} giây`;
   };
 
-  const handleLoginSuccess = (token: string, user: { role?: string }) => {
-    clearSuccessfulLoginState();
+  const handleLoginSuccess = (
+    token: string,
+    user: { roles?: string[]; role?: string },
+  ) => {
+    const normalizedEmail = email.trim();
+    clearSuccessfulLoginState(normalizedEmail);
     setLockVersion((current) => current + 1);
     localStorage.setItem("token", token);
     localStorage.setItem("user", JSON.stringify(user));
 
     if (rememberMe) {
-      localStorage.setItem("rememberedEmail", email.trim());
+      localStorage.setItem("rememberedEmail", normalizedEmail);
     } else {
       localStorage.removeItem("rememberedEmail");
     }
 
-    navigate(getRoleRedirectPath(user.role));
+    navigate(getRoleRedirectPath(user));
   };
 
   const onSubmit = async (event: React.FormEvent) => {
@@ -117,9 +126,30 @@ export const LoginForm: React.FC = () => {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "LOGIN_REQUEST_FAILED";
+      const typedError = error as Error & {
+        fieldErrors?: Record<string, string[]>;
+      };
+
+      if (errorMessage === "VALIDATION_ERROR") {
+        const emailFieldErrors = typedError.fieldErrors?.email ?? [];
+        const passwordFieldErrors = typedError.fieldErrors?.password ?? [];
+
+        if (emailFieldErrors[0]) {
+          setEmailError(emailFieldErrors[0]);
+        }
+
+        if (passwordFieldErrors[0]) {
+          setPasswordError(passwordFieldErrors[0]);
+        }
+
+        setSubmitError(
+          "Dữ liệu đăng nhập không hợp lệ. Vui lòng kiểm tra lại.",
+        );
+        return;
+      }
 
       if (errorMessage === "INVALID_CREDENTIALS") {
-        const lockState = registerFailedLoginAttempt();
+        const lockState = registerFailedLoginAttempt(normalizedEmail);
         setLockVersion((current) => current + 1);
 
         if (lockState.isLocked) {

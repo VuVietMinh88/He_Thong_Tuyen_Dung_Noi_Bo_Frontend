@@ -18,8 +18,16 @@ export const authService = {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
 
-        if (status === 400 || status === 401) {
+        if (status === 401) {
           throw new Error("INVALID_CREDENTIALS");
+        }
+
+        if (status === 400) {
+          const validationError = new Error("VALIDATION_ERROR") as Error & {
+            fieldErrors?: Record<string, string[]>;
+          };
+          validationError.fieldErrors = error.response?.data?.fieldErrors ?? {};
+          throw validationError;
         }
 
         if (status === 429) {
