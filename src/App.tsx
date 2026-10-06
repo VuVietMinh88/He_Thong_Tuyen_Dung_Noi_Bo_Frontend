@@ -7,6 +7,7 @@ import {
 import LoginPage from "./pages/Login/LoginPage";
 import ForgotPasswordPage from "./pages/ForgotPassword/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPassword/ResetPasswordPage";
+import ChangePasswordPage from "./pages/ChangePassword/ChangePasswordPage";
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/change-password" element={<ChangePasswordPage />} />
 
         {/* Các route tương lai sau khi đăng nhập thành công */}
         <Route

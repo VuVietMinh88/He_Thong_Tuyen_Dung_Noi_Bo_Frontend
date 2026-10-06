@@ -76,4 +76,30 @@ export const authService = {
       throw new Error("RESET_PASSWORD_REQUEST_FAILED");
     }
   },
+
+  changePassword: async (
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> => {
+    try {
+      await axiosClient.post("/auth/change-password", {
+        currentPassword,
+        newPassword,
+      });
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+
+        if (status === 400 || status === 401) {
+          throw new Error("INVALID_CURRENT_PASSWORD");
+        }
+
+        if (status === 422) {
+          throw new Error("PASSWORD_INVALID");
+        }
+      }
+
+      throw new Error("CHANGE_PASSWORD_REQUEST_FAILED");
+    }
+  },
 };
