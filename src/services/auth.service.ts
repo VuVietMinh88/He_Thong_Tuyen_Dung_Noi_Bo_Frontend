@@ -33,19 +33,40 @@ export const authService = {
 
   requestPasswordReset: async (email: string): Promise<void> => {
     try {
-      await axiosClient.post("/auth/forgot-password", { email });
+      const response = await axiosClient.post("/auth/forgot-password", {
+        email,
+      });
+
+      if (response.status >= 200 && response.status < 300) {
+        return;
+      }
+
+      throw new Error("PASSWORD_RESET_REQUEST_FAILED");
     } catch (error) {
-      // Anti-enumeration: không lộ trạng thái email tồn tại hay không.
-      // Luôn coi request là đã được xử lý thành công ở phía UI.
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
 
         if (status === 400 || status === 404 || status === 422) {
-          return;
+          throw new Error("EMAIL_INVALID");
+        }
+
+        if (status === 429) {
+          throw new Error("RATE_LIMITED");
+        }
+
+        if (status === 503 || status === 500) {
+          throw new Error("SERVER_UNAVAILABLE");
         }
       }
 
-      return;
+      if (
+        error instanceof Error &&
+        error.message === "PASSWORD_RESET_REQUEST_FAILED"
+      ) {
+        throw error;
+      }
+
+      throw new Error("NETWORK_ERROR");
     }
   },
 };
