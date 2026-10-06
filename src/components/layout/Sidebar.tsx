@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { type Role, ROLE_NAMES } from '../../constants/roles';
+import { tokenService } from '../../services/token.service';
 
 // --------------------------------------------------------
 // CẤU HÌNH MENU & QUYỀN TRUY CẬP (AC 1)
@@ -28,14 +29,19 @@ const Sidebar: React.FC = () => {
   const navigate = useNavigate();
 
   // Lấy Role từ Storage/Global State (AC 2)
-  const userRole = (localStorage.getItem('user_role') as Role) || 'CANDIDATE';
-  const userName = localStorage.getItem('user_name') || 'Tài khoản khách';
+  const userData = tokenService.getUserData();
+  const userRoles = userData?.roles || [];
+  const userName = userData?.fullName || userData?.email || 'Người dùng';
+  
+  const displayRole = userRoles.length > 0 ? (userRoles[0] as Role) : null;
 
   // Lọc menu theo quyền (AC 1)
-  const visibleMenus = MENU_ITEMS.filter(menu => menu.allowedRoles.includes(userRole));
+  const visibleMenus = MENU_ITEMS.filter(menu => 
+    menu.allowedRoles.some(role => userRoles.includes(role))
+  );
 
   const handleLogout = () => {
-    localStorage.clear();
+    tokenService.clearAll();
     navigate('/login');
   };
 
@@ -90,7 +96,7 @@ const Sidebar: React.FC = () => {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-slate-100 truncate">{userName}</p>
               <p className="text-xs font-medium text-blue-400 mt-0.5 uppercase tracking-wider truncate">
-                {ROLE_NAMES[userRole] || 'Khách'}
+                {displayRole ? (ROLE_NAMES[displayRole] || displayRole) : 'Khách'}
               </p>
             </div>
           </div>
@@ -112,7 +118,7 @@ const Sidebar: React.FC = () => {
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     }`}
                   >
-                    <span className={`mr-3 text-xl transition-transform duration-200 ${!isActive && 'group-hover:scale-110'}`}>
+                    <span className={`mr-3 text-xl transition-transform duration-200 ${isActive ? '' : 'group-hover:scale-110'}`}>
                       {menu.icon}
                     </span>
                     <span className="font-medium text-sm">{menu.title}</span>
