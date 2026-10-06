@@ -5,7 +5,7 @@ import { tokenService } from '../services/token.service';
  * Cấu hình axios client cơ bản để dùng chung cho toàn bộ dự án.
  */
 const axiosClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -16,10 +16,9 @@ const axiosClient = axios.create({
 let isRefreshing = false;
 
 // Hàng đợi lưu các Request bị lỗi 401 khi đang đợi refresh token
-// Việc này giúp tránh reload trang và không mất dữ liệu form (AC 3)
-let failedQueue: Array<{ resolve: (value?: unknown) => void; reject: (reason?: any) => void }> = [];
+let failedQueue: Array<{ resolve: (value?: unknown) => void; reject: (reason?: unknown) => void }> = [];
 
-const processQueue = (error: AxiosError | null, token: string | null = null) => {
+const processQueue = (error: unknown | null, token: string | null = null) => {
   failedQueue.forEach(prom => {
     if (error) {
       prom.reject(error);
@@ -83,8 +82,10 @@ axiosClient.interceptors.response.use(
       
       // Nếu không có refresh token (Chưa từng lưu), đẩy về login
       if (!refreshToken) {
+        processQueue(error, null); // Giải phóng hàng đợi bị treo nếu có
+        isRefreshing = false; // BẮT BUỘC reset cờ trước khi throw error để tránh kẹt hệ thống
         tokenService.clearAll();
-        window.location.href = '/login';
+        window.location.href = '/login'; // Chuyển hướng về trang đăng nhập
         return Promise.reject(error);
       }
 
@@ -114,12 +115,11 @@ axiosClient.interceptors.response.use(
         // Gửi lại request gốc bị lỗi
         return axiosClient(originalRequest);
         
-      } catch (refreshError: any) {
+      } catch (refreshError: unknown) {
         // Nếu Refresh Token cũng hết hạn hoặc bị thu hồi (Lỗi từ khối catch)
         processQueue(refreshError, null);
         tokenService.clearAll();
-        // Điều hướng mượt mà về trang đăng nhập mà không reload lại tài nguyên cục bộ
-        window.location.href = '/login';
+        window.location.href = '/login'; // Chuyển hướng về trang đăng nhập
         return Promise.reject(refreshError);
       } finally {
         // Luôn trả cờ refreshing về false sau khi xong

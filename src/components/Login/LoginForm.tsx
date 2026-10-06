@@ -10,8 +10,9 @@ import {
   registerFailedLoginAttempt,
 } from "../../utils/loginState";
 
-const getRoleRedirectPath = (role?: string): string => {
-  switch ((role ?? "").toLowerCase()) {
+const getRoleRedirectPath = (roles?: string[]): string => {
+  const primaryRole = roles?.[0]?.toLowerCase() || "";
+  switch (primaryRole) {
     case "admin":
       return "/admin/dashboard";
     case "hr":
@@ -61,13 +62,13 @@ export const LoginForm: React.FC = () => {
     return `${minutes} phút ${seconds} giây`;
   };
 
-  const handleLoginSuccess = (accessToken: string, user: { role?: string }, refreshToken?: string) => {
+  const handleLoginSuccess = (accessToken: string, user: import('../../types/auth').User, refreshToken?: string) => {
     clearSuccessfulLoginState();
     setLockVersion((current) => current + 1);
     
     tokenService.setAccessToken(accessToken);
     if (refreshToken) tokenService.setRefreshToken(refreshToken);
-    tokenService.setUserData(user as any);
+    tokenService.setUserData(user); // Đã xoá `as any` ở đây
 
     if (rememberMe) {
       localStorage.setItem("rememberedEmail", email.trim());
@@ -75,7 +76,7 @@ export const LoginForm: React.FC = () => {
       localStorage.removeItem("rememberedEmail");
     }
 
-    navigate(getRoleRedirectPath(user.role));
+    navigate(getRoleRedirectPath(user.roles));
   };
 
   const onSubmit = async (event: React.FormEvent) => {
