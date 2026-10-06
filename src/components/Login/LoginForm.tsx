@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { authService } from "../../services/auth.service";
 import { tokenService } from "../../services/token.service";
+import type { User } from "../../types/auth";
 import {
   MAX_LOGIN_ATTEMPTS,
   clearSuccessfulLoginState,
@@ -63,7 +64,7 @@ export const LoginForm: React.FC = () => {
 
   const handleLoginSuccess = (
     accessToken: string,
-    user: { role?: string },
+    user: User,
     refreshToken?: string,
   ) => {
     clearSuccessfulLoginState();
@@ -71,7 +72,7 @@ export const LoginForm: React.FC = () => {
 
     tokenService.setAccessToken(accessToken);
     if (refreshToken) tokenService.setRefreshToken(refreshToken);
-    tokenService.setUserData(user as any);
+    tokenService.setUserData(user);
 
     if (rememberMe) {
       localStorage.setItem("rememberedEmail", email.trim());
@@ -79,7 +80,8 @@ export const LoginForm: React.FC = () => {
       localStorage.removeItem("rememberedEmail");
     }
 
-    navigate(getRoleRedirectPath(user.role));
+    const primaryRole = user.roles?.[0] ?? user.role;
+    navigate(getRoleRedirectPath(primaryRole));
   };
 
   const onSubmit = async (event: React.FormEvent) => {

@@ -1,122 +1,132 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { tokenService } from "../services/token.service";
+import { ROLES } from "../../constants/roles";
+import { tokenService } from "../../services/token.service";
+import {
+  getVisibleMenuItems,
+  normalizeRole,
+  type SidebarMenuItem,
+} from "../../utils/sidebarAccess";
 
-type MenuItem = {
-  label: string;
-  to: string;
-  icon: string;
-  roles: string[];
-};
-
-const normalizeRole = (value?: string | null): string =>
-  (value ?? "").trim().toLowerCase();
-
-const menuItems: MenuItem[] = [
+const menuItems: SidebarMenuItem[] = [
   {
     label: "Tổng quan",
     to: "/dashboard",
     icon: "⌂",
     roles: [
-      "admin",
-      "hr",
-      "interviewer",
-      "manager",
-      "recruiter",
-      "staff",
-      "candidate",
+      ROLES.ADMIN,
+      ROLES.HR_MANAGER,
+      ROLES.RECRUITER,
+      ROLES.HIRING_MANAGER,
+      ROLES.INTERVIEWER,
+      ROLES.APPROVER,
     ],
   },
   {
     label: "Quản lý ứng viên",
     to: "/candidates",
     icon: "👥",
-    roles: ["admin", "hr", "manager", "recruiter"],
+    roles: [
+      ROLES.ADMIN,
+      ROLES.HR_MANAGER,
+      ROLES.RECRUITER,
+      ROLES.HIRING_MANAGER,
+    ],
   },
   {
     label: "Lịch phỏng vấn",
     to: "/interviews",
     icon: "📅",
-    roles: ["admin", "hr", "interviewer", "manager"],
+    roles: [
+      ROLES.ADMIN,
+      ROLES.HR_MANAGER,
+      ROLES.INTERVIEWER,
+      ROLES.HIRING_MANAGER,
+    ],
   },
   {
     label: "Pipeline tuyển dụng",
     to: "/pipeline",
     icon: "📈",
-    roles: ["admin", "hr", "manager", "recruiter"],
+    roles: [
+      ROLES.ADMIN,
+      ROLES.HR_MANAGER,
+      ROLES.RECRUITER,
+      ROLES.HIRING_MANAGER,
+    ],
   },
   {
     label: "Báo cáo",
     to: "/reports",
     icon: "📊",
-    roles: ["admin", "hr", "manager"],
+    roles: [ROLES.ADMIN, ROLES.HR_MANAGER],
   },
-  { label: "Quản trị người dùng", to: "/users", icon: "🛡️", roles: ["admin"] },
+  {
+    label: "Quản trị người dùng",
+    to: "/users",
+    icon: "🛡️",
+    roles: [ROLES.ADMIN],
+  },
   {
     label: "Đổi mật khẩu",
     to: "/change-password",
     icon: "🔐",
     roles: [
-      "admin",
-      "hr",
-      "interviewer",
-      "manager",
-      "recruiter",
-      "staff",
-      "candidate",
+      ROLES.ADMIN,
+      ROLES.HR_MANAGER,
+      ROLES.RECRUITER,
+      ROLES.HIRING_MANAGER,
+      ROLES.INTERVIEWER,
+      ROLES.APPROVER,
     ],
   },
 ];
 
 const getDisplayName = (
-  role?: string | null,
+  roles?: string[] | null,
   email?: string | null,
 ): string => {
   if (email) {
     const localPart = email.split("@")[0]?.trim();
-    if (localPart) return localPart;
+    if (localPart) {
+      return localPart;
+    }
   }
 
-  switch (normalizeRole(role)) {
-    case "admin":
+  const firstRole = roles?.[0];
+  switch (normalizeRole(firstRole)) {
+    case normalizeRole(ROLES.ADMIN):
       return "Quản trị viên";
-    case "hr":
-      return "HR";
-    case "interviewer":
-      return "Phỏng vấn";
-    case "manager":
-      return "Quản lý";
-    case "recruiter":
+    case normalizeRole(ROLES.HR_MANAGER):
+      return "HR Manager";
+    case normalizeRole(ROLES.RECRUITER):
       return "Recruiter";
-    case "candidate":
-      return "Ứng viên";
+    case normalizeRole(ROLES.HIRING_MANAGER):
+      return "Hiring Manager";
+    case normalizeRole(ROLES.INTERVIEWER):
+      return "Interviewer";
+    case normalizeRole(ROLES.APPROVER):
+      return "Approver";
     default:
       return "Nhân sự";
   }
 };
 
-const canAccessMenu = (
-  allowedRoles: string[],
-  currentRole?: string | null,
-): boolean => {
-  if (!allowedRoles.length) return true;
-  const role = normalizeRole(currentRole);
-  return allowedRoles.some((item) => normalizeRole(item) === role);
-};
-
 export const Sidebar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-
   const user = tokenService.getUserData();
-  const currentRole = normalizeRole(user?.role);
-
-  const visibleMenu = useMemo(
-    () => menuItems.filter((item) => canAccessMenu(item.roles, currentRole)),
-    [currentRole],
-  );
-
-  const displayName = getDisplayName(user?.role, user?.email);
-  const roleLabel = user?.role ? user.role.toUpperCase() : "USER";
+  const userRoles =
+    user?.roles && user.roles.length > 0
+      ? user.roles
+      : user?.role
+        ? [user.role]
+        : [];
+  const visibleMenu = getVisibleMenuItems(menuItems, userRoles);
+  const displayName = getDisplayName(userRoles, user?.email);
+  const roleLabel =
+    userRoles.length > 0
+      ? userRoles.map((role) => role.toUpperCase()).join(", ")
+      : "USER";
 
   return (
     <>

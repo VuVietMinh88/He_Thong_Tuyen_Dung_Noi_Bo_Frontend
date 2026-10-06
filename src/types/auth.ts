@@ -1,7 +1,8 @@
 export interface User {
   id: string;
   email: string;
-  role: string;
+  role?: string;
+  roles?: string[];
 }
 
 export interface LoginResponse {
