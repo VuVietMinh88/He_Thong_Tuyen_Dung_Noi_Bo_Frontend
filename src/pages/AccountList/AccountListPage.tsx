@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { AccountFilterParams, UserAccount } from '../../types/account';
-import { MOCK_ACCOUNTS } from '../../data/mockAccounts';
+import { userService } from '../../services/userService';
+import { useDebounce } from '../../hooks/useDebounce';
 import AccountFilterBar from '../../components/AccountList/AccountFilterBar';
 import AccountTable from '../../components/AccountList/AccountTable';
 import AccountPaginationBar from '../../components/AccountList/AccountPaginationBar';
@@ -8,6 +9,7 @@ import EditAccountModal from '../../components/AccountList/EditAccountModal';
 import Sidebar from '../../components/Sidebar';
 
 const DEFAULT_PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_DELAY_MS = 350;
 
 const INITIAL_FILTERS: AccountFilterParams = {
   searchKeyword: '',
@@ -16,10 +18,20 @@ const INITIAL_FILTERS: AccountFilterParams = {
 };
 
 export const AccountListPage: React.FC = () => {
-  const [accountList, setAccountList] = useState<UserAccount[]>(MOCK_ACCOUNTS);
+  // Account list, counts and server pagination state
+  const [accounts, setAccounts] = useState<UserAccount[]>([]);
+  const [totalItems, setTotalItems] = useState<number>(0);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [totalSystemUsers, setTotalSystemUsers] = useState<number>(0);
+
+  // Filter and pagination controls
   const [filterParams, setFilterParams] = useState<AccountFilterParams>(INITIAL_FILTERS);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
+
+  // Asynchronous states
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   // Modal editing state
   const [editingAccount, setEditingAccount] = useState<UserAccount | null>(null);
@@ -28,6 +40,12 @@ export const AccountListPage: React.FC = () => {
   // Notification toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Debounce search keyword to avoid flooding API requests while typing
+  const debouncedSearchKeyword = useDebounce(
+    filterParams.searchKeyword,
+    SEARCH_DEBOUNCE_DELAY_MS
+  );
+
   const showNotification = (message: string) => {
     setToastMessage(message);
     setTimeout(() => {
@@ -35,37 +53,59 @@ export const AccountListPage: React.FC = () => {
     }, 3500);
   };
 
-  // Filter accounts based on search keyword and selected role/status
-  const filteredAccounts = useMemo(() => {
-    return accountList.filter((account) => {
-      const keyword = filterParams.searchKeyword.trim().toLowerCase();
+  // Fetch accounts from API whenever search, filter, or pagination changes
+  useEffect(() => {
+    let isMounted = true;
 
-      // Search matches by full name, email or department
-      const matchesSearch =
-        keyword === '' ||
-        account.fullName.toLowerCase().includes(keyword) ||
-        account.email.toLowerCase().includes(keyword) ||
-        account.department.toLowerCase().includes(keyword);
+    const loadData = async () => {
+      setIsLoading(true);
+      setApiError(null);
 
-      // Filter matches by role
-      const matchesRole =
-        filterParams.role === 'ALL' || account.role === filterParams.role;
+      try {
+        const response = await userService.getUsers({
+          search: debouncedSearchKeyword,
+          role: filterParams.role,
+          status: filterParams.status,
+          page: currentPage,
+          limit: pageSize,
+        });
 
-      // Filter matches by status
-      const matchesStatus =
-        filterParams.status === 'ALL' || account.status === filterParams.status;
+        if (isMounted) {
+          setAccounts(response.users);
+          setTotalItems(response.totalItems);
+          setTotalPages(response.totalPages);
 
-      return matchesSearch && matchesRole && matchesStatus;
-    });
-  }, [accountList, filterParams]);
+          // Store total count on initial load when no filter is applied
+          if (!debouncedSearchKeyword && filterParams.role === 'ALL' && filterParams.status === 'ALL') {
+            setTotalSystemUsers(response.totalItems);
+          }
+        }
+      } catch (error) {
+        if (isMounted) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : 'Không thể kết nối đến máy chủ để lấy danh sách tài khoản.';
+          setApiError(message);
+          setAccounts([]);
+          setTotalItems(0);
+          setTotalPages(1);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
 
-  // Paginate filtered results (Default 20 items per page)
-  const paginatedAccounts = useMemo(() => {
-    const startIndex = (currentPage - 1) * pageSize;
-    return filteredAccounts.slice(startIndex, startIndex + pageSize);
-  }, [filteredAccounts, currentPage, pageSize]);
+    loadData();
 
-  // Handler for filter changes, automatically resetting page to 1
+    return () => {
+      isMounted = false;
+    };
+  }, [debouncedSearchKeyword, filterParams.role, filterParams.status, currentPage, pageSize]);
+
+  // Handler for filter changes, resetting page to 1
   const handleFilterChange = (newFilters: Partial<AccountFilterParams>) => {
     setFilterParams((prev) => ({ ...prev, ...newFilters }));
     setCurrentPage(1);
@@ -83,20 +123,26 @@ export const AccountListPage: React.FC = () => {
     setCurrentPage(1);
   };
 
-  // Handler for toggling status (Active <-> Locked)
-  const handleToggleStatus = (account: UserAccount) => {
+  // Handler for toggling status (Active <-> Locked) via API
+  const handleToggleStatus = async (account: UserAccount) => {
     const newStatus = account.status === 'ACTIVE' ? 'LOCKED' : 'ACTIVE';
     const actionText = newStatus === 'LOCKED' ? 'khóa' : 'mở khóa';
 
-    setAccountList((prevList) =>
-      prevList.map((item) =>
-        item.id === account.id ? { ...item, status: newStatus } : item
-      )
-    );
+    try {
+      await userService.toggleUserStatus(account.id, newStatus);
 
-    showNotification(
-      `Đã ${actionText} thành công tài khoản: ${account.fullName} (${account.email})`
-    );
+      setAccounts((prevList) =>
+        prevList.map((item) =>
+          item.id === account.id ? { ...item, status: newStatus } : item
+        )
+      );
+
+      showNotification(
+        `Đã ${actionText} thành công tài khoản: ${account.fullName} (${account.email})`
+      );
+    } catch {
+      showNotification(`Không thể ${actionText} tài khoản. Vui lòng thử lại.`);
+    }
   };
 
   // Handler for opening edit modal
@@ -105,22 +151,24 @@ export const AccountListPage: React.FC = () => {
     setIsEditModalOpen(true);
   };
 
-  // Handler for saving edited account
-  const handleSaveAccount = (updatedAccount: UserAccount) => {
-    setAccountList((prevList) =>
-      prevList.map((item) =>
-        item.id === updatedAccount.id ? updatedAccount : item
-      )
-    );
-    showNotification(`Đã cập nhật thông tin tài khoản: ${updatedAccount.fullName}`);
-  };
+  // Handler for saving edited account via API
+  const handleSaveAccount = async (updatedAccount: UserAccount) => {
+    try {
+      const savedAccount = await userService.updateUser(updatedAccount);
 
-  // Summary counts for dashboard badges
-  const activeCount = useMemo(
-    () => accountList.filter((account) => account.status === 'ACTIVE').length,
-    [accountList]
-  );
-  const lockedCount = accountList.length - activeCount;
+      setAccounts((prevList) =>
+        prevList.map((item) =>
+          item.id === savedAccount.id ? savedAccount : item
+        )
+      );
+
+      showNotification(`Đã cập nhật thông tin tài khoản: ${savedAccount.fullName}`);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Lỗi khi cập nhật tài khoản.';
+      showNotification(message);
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-slate-100/75">
@@ -146,13 +194,13 @@ export const AccountListPage: React.FC = () => {
             {/* Quick stats tags */}
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-xs">
-                Tổng số: <strong className="text-indigo-600">{accountList.length}</strong>
+                Tổng cộng: <strong className="text-indigo-600">{totalSystemUsers || totalItems}</strong>
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-xs">
-                Hoạt động: <strong>{activeCount}</strong>
+              <span className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 shadow-xs">
+                Kết quả: <strong>{totalItems}</strong>
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 shadow-xs">
-                Đã khóa: <strong>{lockedCount}</strong>
+              <span className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-xs">
+                Trang: <strong>{currentPage}/{totalPages}</strong>
               </span>
             </div>
           </div>
@@ -168,30 +216,41 @@ export const AccountListPage: React.FC = () => {
             </div>
           )}
 
+          {/* API Error Notification */}
+          {apiError && (
+            <div className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-medium text-rose-800">
+              <div className="flex items-center gap-2">
+                <span>⚠️</span>
+                <span>{apiError}</span>
+              </div>
+            </div>
+          )}
+
           {/* Search & Filters Component */}
           <AccountFilterBar
             filterParams={filterParams}
-            totalFilteredCount={filteredAccounts.length}
-            totalCount={accountList.length}
+            totalFilteredCount={totalItems}
+            totalCount={totalSystemUsers || totalItems}
             onFilterChange={handleFilterChange}
             onResetFilters={handleResetFilters}
           />
 
-          {/* Data Table Component */}
+          {/* Data Table Component with Loading Skeleton */}
           <div className="space-y-0">
             <AccountTable
-              accounts={paginatedAccounts}
+              accounts={accounts}
+              isLoading={isLoading}
               onEditAccount={handleOpenEditModal}
               onToggleStatus={handleToggleStatus}
               onResetFilters={handleResetFilters}
             />
 
             {/* Pagination Component */}
-            {filteredAccounts.length > 0 && (
+            {!isLoading && totalItems > 0 && (
               <AccountPaginationBar
                 currentPage={currentPage}
                 pageSize={pageSize}
-                totalItems={filteredAccounts.length}
+                totalItems={totalItems}
                 onPageChange={setCurrentPage}
                 onPageSizeChange={handlePageSizeChange}
               />

@@ -50,3 +50,19 @@ export const SYSTEM_DEPARTMENTS: string[] = [
   'Phòng Chăm sóc Khách hàng',
 ];
 
+export interface GetUsersParams {
+  search?: string;
+  role?: AccountRole | 'ALL';
+  status?: AccountStatus | 'ALL';
+  page?: number;
+  limit?: number;
+}
+
+export interface GetUsersResponse {
+  users: UserAccount[];
+  totalItems: number;
+  totalPages: number;
+  currentPage: number;
+}
+
+

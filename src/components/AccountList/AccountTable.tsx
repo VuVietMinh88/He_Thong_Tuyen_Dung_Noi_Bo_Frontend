@@ -2,6 +2,7 @@ import type { AccountRole, AccountStatus, UserAccount } from '../../types/accoun
 
 interface AccountTableProps {
   accounts: UserAccount[];
+  isLoading?: boolean;
   onEditAccount: (account: UserAccount) => void;
   onToggleStatus: (account: UserAccount) => void;
   onResetFilters?: () => void;
@@ -9,6 +10,7 @@ interface AccountTableProps {
 
 export const AccountTable: React.FC<AccountTableProps> = ({
   accounts,
+  isLoading = false,
   onEditAccount,
   onToggleStatus,
   onResetFilters,
@@ -83,6 +85,60 @@ export const AccountTable: React.FC<AccountTableProps> = ({
     }
     return (name.slice(0, 2) || 'TK').toUpperCase();
   };
+
+  if (isLoading) {
+    return (
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm text-slate-600">
+            <thead className="border-b border-slate-200 bg-slate-50/75 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <tr>
+                <th className="px-6 py-4">Họ tên</th>
+                <th className="px-6 py-4">Email</th>
+                <th className="px-6 py-4">Phòng ban</th>
+                <th className="px-6 py-4">Vai trò</th>
+                <th className="px-6 py-4">Trạng thái</th>
+                <th className="px-6 py-4 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white animate-pulse">
+              {[1, 2, 3, 4, 5].map((skeletonIndex) => (
+                <tr key={`skeleton-${skeletonIndex}`}>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-slate-200" />
+                      <div className="space-y-1.5">
+                        <div className="h-3.5 w-32 rounded bg-slate-200" />
+                        <div className="h-2.5 w-16 rounded bg-slate-100" />
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-3.5 w-40 rounded bg-slate-200" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-5 w-28 rounded-lg bg-slate-100" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-5 w-20 rounded-full bg-slate-100" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-5 w-24 rounded-full bg-slate-100" />
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <div className="h-7 w-12 rounded-lg bg-slate-100" />
+                      <div className="h-7 w-14 rounded-lg bg-slate-100" />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
 
   if (accounts.length === 0) {
     return (
