@@ -8,6 +8,9 @@ function App() {
         <Route path="/" element={<Navigate to="/login" replace />} />
         
         <Route path="/login" element={<LoginPage />} />
+        
+        {/* Route phục vụ kiểm tra sức khỏe hệ thống (Ping/Health Check) */}
+        <Route path="/health" element={<div className="p-4 text-green-600 font-bold">System is healthy (200 OK)</div>} />
 
         {/* Các route tương lai sau khi đăng nhập thành công */}
         <Route path="/admin/dashboard" element={<main className="p-8 text-2xl font-bold">Admin Dashboard</main>} />

@@ -1,41 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../../services/auth.service';
+import { AxiosError } from 'axios';
 
 const MAX_ATTEMPTS = 5;
-const LOCK_TIME_MS = 15 * 60 * 1000; // 15 phút tính bằng milliseconds
+const LOCK_TIME_MS = 15 * 60 * 1000;
 
 export const LoginForm: React.FC = () => {
   const navigate = useNavigate();
 
-  // Các state lưu trữ dữ liệu form
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [rememberMe, setRememberMe] = useState<boolean>(false);
   
-  // State quản lý UI và Lỗi (Inline Errors theo AC 2)
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [emailError, setEmailError] = useState<string>('');
   const [passwordError, setPasswordError] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // State quản lý việc khóa tài khoản tạm thời
-  const [isLocked, setIsLocked] = useState<boolean>(false);
-  const [lockTimeLeft, setLockTimeLeft] = useState<number>(0);
+  const getInitialLockStatus = () => {
+    const lockedUntilStr = localStorage.getItem('lockUntil');
+    if (lockedUntilStr) {
+      const lockedUntil = parseInt(lockedUntilStr, 10);
+      const timeRemaining = lockedUntil - Date.now();
+      if (timeRemaining > 0) {
+        return { isLocked: true, timeLeft: Math.ceil(timeRemaining / 1000) };
+      }
+      localStorage.removeItem('lockUntil');
+      localStorage.removeItem('loginAttempts');
+    }
+    return { isLocked: false, timeLeft: 0 };
+  };
 
-  // Chạy một lần khi component render để thiết lập bộ đếm thời gian khóa
-  useEffect(() => {
-    checkLockStatus();
-    const interval = setInterval(() => {
-      checkLockStatus();
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  const [isLocked, setIsLocked] = useState<boolean>(() => getInitialLockStatus().isLocked);
+  const [lockTimeLeft, setLockTimeLeft] = useState<number>(() => getInitialLockStatus().timeLeft);
 
-  /**
-   * Kiểm tra trạng thái khóa trong localStorage
-   */
-  const checkLockStatus = () => {
+  const checkLockStatus = useCallback(() => {
     const lockedUntilStr = localStorage.getItem('lockUntil');
     if (lockedUntilStr) {
       const lockedUntil = parseInt(lockedUntilStr, 10);
@@ -50,11 +50,15 @@ export const LoginForm: React.FC = () => {
         localStorage.removeItem('loginAttempts');
       }
     }
-  };
+  }, []);
 
-  /**
-   * Xử lý khi đăng nhập sai thông tin
-   */
+  useEffect(() => {
+    const interval = setInterval(() => {
+      checkLockStatus();
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [checkLockStatus]);
+
   const handleLoginFail = () => {
     const currentAttempts = parseInt(localStorage.getItem('loginAttempts') || '0', 10);
     const newAttempts = currentAttempts + 1;
@@ -67,14 +71,10 @@ export const LoginForm: React.FC = () => {
     }
   };
 
-  /**
-   * Xử lý khi đăng nhập thành công
-   */
   const handleLoginSuccess = (role: string, token: string) => {
     localStorage.removeItem('loginAttempts');
     localStorage.removeItem('lockUntil');
     
-    // Lưu token
     localStorage.setItem('token', token);
     if (rememberMe) {
       localStorage.setItem('rememberedEmail', email);
@@ -82,7 +82,6 @@ export const LoginForm: React.FC = () => {
       localStorage.removeItem('rememberedEmail');
     }
 
-    // Chuyển hướng theo vai trò (Role-based redirect)
     switch (role) {
       case 'admin': navigate('/admin/dashboard'); break;
       case 'hr': navigate('/hr/dashboard'); break;
@@ -91,19 +90,14 @@ export const LoginForm: React.FC = () => {
     }
   };
 
-  /**
-   * Xử lý submit form
-   */
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Reset lỗi
     setEmailError('');
     setPasswordError('');
 
     let valid = true;
 
-    // AC 2: Validate dữ liệu trống và định dạng email bằng Regex
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email.trim()) {
       setEmailError('Vui lòng nhập email công ty');
@@ -113,7 +107,6 @@ export const LoginForm: React.FC = () => {
       valid = false;
     }
 
-    // AC 2: Validate dữ liệu trống và độ dài mật khẩu (tối thiểu 8 ký tự)
     if (!password) {
       setPasswordError('Vui lòng nhập mật khẩu');
       valid = false;
@@ -126,24 +119,25 @@ export const LoginForm: React.FC = () => {
 
     setIsLoading(true);
     try {
-      // Gọi API qua service
       const data = await authService.login(email, password);
       handleLoginSuccess(data.user.role, data.token);
     } catch (error: unknown) {
-      handleLoginFail();
-      
-      const currentAttempts = parseInt(localStorage.getItem('loginAttempts') || '0', 10);
-      
-      // AC 3: Nếu chưa bị khóa, hiển thị số lần sai kèm cảnh báo khóa tài khoản
-      if (currentAttempts < MAX_ATTEMPTS) {
-        setPasswordError(`Thông tin đăng nhập không chính xác. Bạn đã sai ${currentAttempts}/${MAX_ATTEMPTS} lần nếu sai quá ${MAX_ATTEMPTS} lần sẽ bị khóa.`);
+      // Chỉ tăng biến đếm sai khi lỗi do sai thông tin đăng nhập (401)
+      if (error instanceof AxiosError && error.response?.status === 401) {
+        handleLoginFail();
+        
+        const currentAttempts = parseInt(localStorage.getItem('loginAttempts') || '0', 10);
+        if (currentAttempts < MAX_ATTEMPTS) {
+          setPasswordError(`Thông tin đăng nhập không chính xác. Bạn đã sai ${currentAttempts}/${MAX_ATTEMPTS} lần nếu sai quá ${MAX_ATTEMPTS} lần sẽ bị khóa.`);
+        }
+      } else {
+        setPasswordError('Hệ thống đang gặp sự cố. Vui lòng thử lại sau.');
       }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Hàm phụ định dạng hiển thị phút/giây cho bộ đếm ngược
   const formatTimeLeft = () => {
     const minutes = Math.floor(lockTimeLeft / 60);
     const seconds = lockTimeLeft % 60;
@@ -153,7 +147,6 @@ export const LoginForm: React.FC = () => {
   return (
     <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-10 sm:p-12 border border-gray-100">
       <div className="text-center mb-8">
-        {/* Logo bảo mật */}
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-50 mb-4">
           <span className="text-3xl">🔐</span>
         </div>
@@ -170,7 +163,6 @@ export const LoginForm: React.FC = () => {
         </div>
       ) : (
         <form onSubmit={onSubmit} className="space-y-5" noValidate>
-          {/* Ô nhập Email */}
           <div>
             <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
               Email công ty
@@ -183,7 +175,6 @@ export const LoginForm: React.FC = () => {
               value={email}
               onChange={(e) => { setEmail(e.target.value); setEmailError(''); }}
             />
-            {/* Lỗi inline cho Email */}
             {emailError && (
               <p className="text-red-500 text-xs font-medium mt-2 flex items-center">
                 <svg className="w-3.5 h-3.5 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"></path></svg>
@@ -192,7 +183,6 @@ export const LoginForm: React.FC = () => {
             )}
           </div>
           
-          {/* Ô nhập Mật khẩu */}
           <div>
             <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-2">
               Mật khẩu
@@ -215,7 +205,6 @@ export const LoginForm: React.FC = () => {
                 {showPassword ? 'Ẩn' : 'Hiện'}
               </button>
             </div>
-            {/* Lỗi inline cho Mật khẩu */}
             {passwordError && (
               <p className="text-red-500 text-xs font-medium mt-2 flex items-center">
                 <svg className="w-3.5 h-3.5 mr-1 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"></path></svg>
@@ -224,7 +213,6 @@ export const LoginForm: React.FC = () => {
             )}
           </div>
 
-          {/* Các tuỳ chọn phụ */}
           <div className="flex items-center justify-between text-sm pt-2">
             <label className="flex items-center text-gray-600 cursor-pointer hover:text-gray-800 transition-colors">
               <input 
@@ -240,7 +228,6 @@ export const LoginForm: React.FC = () => {
             </a>
           </div>
 
-          {/* Nút Submit */}
           <button 
             type="submit" 
             className="w-full mt-2 py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
@@ -261,3 +248,4 @@ export const LoginForm: React.FC = () => {
     </div>
   );
 };
+
