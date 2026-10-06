@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { authService } from "../../services/auth.service";
+import { tokenService } from "../../services/token.service";
 import {
   MAX_LOGIN_ATTEMPTS,
   clearSuccessfulLoginState,
@@ -60,11 +61,13 @@ export const LoginForm: React.FC = () => {
     return `${minutes} phút ${seconds} giây`;
   };
 
-  const handleLoginSuccess = (token: string, user: { role?: string }) => {
+  const handleLoginSuccess = (accessToken: string, user: { role?: string }, refreshToken?: string) => {
     clearSuccessfulLoginState();
     setLockVersion((current) => current + 1);
-    localStorage.setItem("token", token);
-    localStorage.setItem("user", JSON.stringify(user));
+    
+    tokenService.setAccessToken(accessToken);
+    if (refreshToken) tokenService.setRefreshToken(refreshToken);
+    tokenService.setUserData(user as any);
 
     if (rememberMe) {
       localStorage.setItem("rememberedEmail", email.trim());
@@ -113,7 +116,7 @@ export const LoginForm: React.FC = () => {
 
     try {
       const data = await authService.login(normalizedEmail, password);
-      handleLoginSuccess(data.token, data.user);
+      handleLoginSuccess(data.accessToken, data.user, data.refreshToken);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "LOGIN_REQUEST_FAILED";
