@@ -48,4 +48,32 @@ export const authService = {
       return;
     }
   },
+
+  resetPassword: async (token: string, newPassword: string): Promise<void> => {
+    try {
+      await axiosClient.post("/auth/reset-password", {
+        token,
+        newPassword,
+      });
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+
+        if (
+          status === 400 ||
+          status === 401 ||
+          status === 404 ||
+          status === 410
+        ) {
+          throw new Error("INVALID_OR_EXPIRED_TOKEN");
+        }
+
+        if (status === 422) {
+          throw new Error("PASSWORD_INVALID");
+        }
+      }
+
+      throw new Error("RESET_PASSWORD_REQUEST_FAILED");
+    }
+  },
 };

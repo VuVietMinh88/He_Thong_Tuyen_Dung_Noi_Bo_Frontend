@@ -6,6 +6,7 @@ import {
 } from "react-router-dom";
 import LoginPage from "./pages/Login/LoginPage";
 import ForgotPasswordPage from "./pages/ForgotPassword/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPassword/ResetPasswordPage";
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
 
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         {/* Các route tương lai sau khi đăng nhập thành công */}
         <Route
