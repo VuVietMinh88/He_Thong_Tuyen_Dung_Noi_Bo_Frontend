@@ -9,17 +9,10 @@ import {
   registerFailedLoginAttempt,
 } from "../../utils/loginState";
 
-const normalizeRole = (value?: string | null): string =>
-  (value ?? "").trim().toUpperCase();
-
 const getRoleRedirectPath = (user?: {
   roles?: string[];
-  role?: string;
 }): string => {
-  const roles = [
-    ...(Array.isArray(user?.roles) ? user.roles : []),
-    ...(user?.role ? [user.role] : []),
-  ].map((role) => normalizeRole(role));
+  const roles = user?.roles ?? [];
 
   if (roles.includes("ADMIN")) return "/admin/dashboard";
   if (roles.includes("HR")) return "/hr/dashboard";
@@ -67,7 +60,7 @@ export const LoginForm: React.FC = () => {
 
   const handleLoginSuccess = (
     token: string,
-    user: { roles?: string[]; role?: string },
+    user: { roles?: string[] },
   ) => {
     const normalizedEmail = email.trim();
     clearSuccessfulLoginState(normalizedEmail);

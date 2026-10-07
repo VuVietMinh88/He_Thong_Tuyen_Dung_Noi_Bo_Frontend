@@ -26,7 +26,21 @@ export const authService = {
           const validationError = new Error("VALIDATION_ERROR") as Error & {
             fieldErrors?: Record<string, string[]>;
           };
-          validationError.fieldErrors = error.response?.data?.fieldErrors ?? {};
+
+          const rawFieldErrors = (error.response?.data as Record<string, unknown>)?.fieldErrors ?? {};
+          const parsedFieldErrors: Record<string, string[]> = {};
+
+          if (typeof rawFieldErrors === "object" && rawFieldErrors !== null) {
+            Object.entries(rawFieldErrors).forEach(([key, value]) => {
+              if (typeof value === "string") {
+                parsedFieldErrors[key] = [value];
+              } else if (Array.isArray(value)) {
+                parsedFieldErrors[key] = value.map(String);
+              }
+            });
+          }
+
+          validationError.fieldErrors = parsedFieldErrors;
           throw validationError;
         }
 
