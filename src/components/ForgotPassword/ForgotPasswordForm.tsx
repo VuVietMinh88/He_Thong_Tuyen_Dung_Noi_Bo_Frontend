@@ -1,14 +1,40 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { authService } from "../../services/auth.service";
+import axios from "axios";
 
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const ForgotPasswordForm: React.FC = () => {
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState("");
+  const [submitError, setSubmitError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+
+  const getSubmitErrorMessage = (error: unknown): string => {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status;
+      if (status === 400 || status === 404 || status === 422) {
+        return "Email không hợp lệ hoặc không tồn tại trong hệ thống.";
+      }
+      if (status === 429) {
+        return "Bạn đã gửi yêu cầu quá nhiều lần. Vui lòng thử lại sau vài phút.";
+      }
+      if (status === 503 || status === 500) {
+        return "Hệ thống đang bận. Vui lòng thử lại sau.";
+      }
+      return "Không thể gửi liên kết đặt lại mật khẩu. Vui lòng thử lại sau.";
+    }
+    
+    if (error instanceof Error) {
+      if (error.message === "NETWORK_ERROR" || error.message.includes("Network Error")) {
+        return "Không thể kết nối tới máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.";
+      }
+    }
+
+    return "Không thể kết nối tới máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.";
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -17,27 +43,30 @@ export const ForgotPasswordForm: React.FC = () => {
 
     if (!normalizedEmail) {
       setEmailError("Vui lòng nhập email công ty");
+      setSubmitError("");
       return;
     }
 
-    if (!emailRegex.test(normalizedEmail)) {
+    if (!EMAIL_REGEX.test(normalizedEmail)) {
       setEmailError(
         "Email không hợp lệ. Vui lòng nhập đúng định dạng (vd: ten@congty.com)",
       );
+      setSubmitError("");
       return;
     }
 
     setEmailError("");
+    setSubmitError("");
     setIsSubmitting(true);
 
     try {
       await authService.requestPasswordReset(normalizedEmail);
-    } catch {
-      // Anti-enumeration: không lộ email có tồn tại hay không.
-      // Dù có lỗi API hay email không tồn tại, UI vẫn hiển thị trạng thái thành công chung.
+      setIsSubmitted(true);
+    } catch (error) {
+      setSubmitError(getSubmitErrorMessage(error));
+      setIsSubmitted(false);
     } finally {
       setIsSubmitting(false);
-      setIsSubmitted(true);
     }
   };
 
@@ -128,6 +157,12 @@ export const ForgotPasswordForm: React.FC = () => {
             </p>
           )}
         </div>
+
+        {submitError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {submitError}
+          </div>
+        )}
 
         <button
           type="submit"

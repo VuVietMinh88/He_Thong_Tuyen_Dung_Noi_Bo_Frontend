@@ -28,10 +28,12 @@ const Sidebar: React.FC = () => {
   const navigate = useNavigate();
 
   const userData = tokenService.getUserData();
-  const userRoles = userData?.roles || [];
-  const userName = userData?.email || 'Người dùng';
-  
-  const displayRole = userRoles.length > 0 ? (userRoles[0] as Role) : null;
+  const userRoles = userData?.roles ?? [];
+  const userName = userData?.fullName || userData?.email || 'Người dùng';
+
+  const displayRole = userRoles.find(
+    (role): role is Role => Object.hasOwn(ROLE_NAMES, role),
+  );
 
   // Lọc menu: Chỉ giữ lại những menu mà userRoles hiện tại có quyền truy cập
   const visibleMenus = MENU_ITEMS.filter(menu => 
@@ -39,9 +41,14 @@ const Sidebar: React.FC = () => {
   );
 
   const handleLogout = async () => {
-    await authService.logout();
-    tokenService.clearAll();
-    navigate('/login');
+    try {
+      await authService.logout();
+    } catch (error: unknown) {
+      console.error("Logout API failed", error);
+    } finally {
+      tokenService.clearAll();
+      navigate('/login');
+    }
   };
 
   return (
@@ -137,4 +144,3 @@ const Sidebar: React.FC = () => {
 };
 
 export default Sidebar;
-

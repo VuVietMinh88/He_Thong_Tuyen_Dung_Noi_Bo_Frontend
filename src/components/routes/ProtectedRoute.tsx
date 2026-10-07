@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import type { Role } from '../../constants/roles';
+import { ROLES } from '../../constants/roles';
 
 import { tokenService } from '../../services/token.service';
 
@@ -13,7 +14,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
   
   const token = tokenService.getAccessToken();
   const userData = tokenService.getUserData();
-  const userRoles = userData?.roles || [];
+  const roles =
+    userData?.roles.filter(
+      (role): role is Role => Object.hasOwn(ROLES, role),
+    ) ?? [];
 
   // 1. Nếu chưa đăng nhập -> Đẩy về trang Login, lưu lại state `from` để quay lại sau khi đăng nhập thành công
   if (!token) {
@@ -21,7 +25,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
   }
 
   // 2. Đã đăng nhập và có quyền hợp lệ -> Render giao diện tuyến đường con (Outlet)
-  const hasAllowedRole = allowedRoles.some(role => userRoles.includes(role));
+  const hasAllowedRole = roles.some((role) => allowedRoles.includes(role));
   
   if (hasAllowedRole) {
     return <Outlet />;
@@ -32,4 +36,3 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
 };
 
 export default ProtectedRoute;
-
