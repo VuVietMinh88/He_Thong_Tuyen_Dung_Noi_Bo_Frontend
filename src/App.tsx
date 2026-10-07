@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import ToastProvider from './components/notifications/ToastProvider'
+import { useToast } from './components/notifications/useToast'
 import ProtectedRoute from './components/routes/ProtectedRoute'
 import { ROLES } from './constants/roles'
 import UnauthorizedPage from './pages/error/UnauthorizedPage'
@@ -8,15 +10,20 @@ import { getHealth } from './services/healthService'
 function HomePage() {
   const [pending, setPending] = useState(false)
   const [message, setMessage] = useState('Chưa kiểm tra kết nối Backend.')
+  const { notify } = useToast()
 
   async function checkConnection() {
     setPending(true)
     setMessage('Đang kiểm tra kết nối...')
     try {
       const health = await getHealth()
-      setMessage(`Kết nối Backend thành công: ${health.status}.`)
+      const successMessage = `Kết nối Backend thành công: ${health.status}.`
+      setMessage(successMessage)
+      notify(successMessage, 'success')
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Không kiểm tra được kết nối.')
+      const errorMessage = error instanceof Error ? error.message : 'Không kiểm tra được kết nối.'
+      setMessage(errorMessage)
+      notify(errorMessage, 'error')
     } finally {
       setPending(false)
     }
@@ -46,12 +53,14 @@ function HomePage() {
 
 function LoginPage() {
   const navigate = useNavigate()
+  const { notify } = useToast()
   const [role, setRole] = useState('RECRUITER')
 
   const handleLogin = () => {
     localStorage.setItem('access_token', 'demo-access-token')
     localStorage.setItem('refresh_token', 'demo-refresh-token')
     localStorage.setItem('user_role', role)
+    notify('Đăng nhập demo thành công.', 'success')
     navigate('/dashboard')
   }
 
@@ -109,19 +118,21 @@ function DashboardPage() {
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/login" element={<LoginPage />} />
+    <ToastProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/login" element={<LoginPage />} />
 
-        <Route element={<ProtectedRoute allowedRoles={[ROLES.RECRUITER, ROLES.HR_MANAGER, ROLES.SYSTEM_ADMIN]} />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
-        </Route>
+          <Route element={<ProtectedRoute allowedRoles={[ROLES.RECRUITER, ROLES.HR_MANAGER, ROLES.SYSTEM_ADMIN]} />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+          </Route>
 
-        <Route path="/unauthorized" element={<UnauthorizedPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+          <Route path="/unauthorized" element={<UnauthorizedPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </ToastProvider>
   )
 }
 
