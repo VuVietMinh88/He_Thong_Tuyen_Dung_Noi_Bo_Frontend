@@ -183,7 +183,7 @@ export const LoginForm: React.FC = () => {
         </p>
       </div>
 
-      {isLocked && (
+      {isLocked ? (
         <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-5 rounded-2xl mb-6 text-center shadow-sm">
           <p className="font-semibold text-lg mb-1">
             Tài khoản bị khóa tạm thời!
@@ -196,152 +196,154 @@ export const LoginForm: React.FC = () => {
             {formatTimeLeft()}
           </p>
         </div>
-      )}
-
-      {submitError && !isLocked && (
-        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {submitError}
-        </div>
-      )}
-
-      <form onSubmit={onSubmit} className="space-y-5" noValidate>
-        <div>
-          <label
-            htmlFor="email"
-            className="block text-sm font-semibold text-gray-700 mb-2"
-          >
-            Email công ty
-          </label>
-          <input
-            type="email"
-            id="email"
-            className={`w-full px-4 py-3 bg-gray-50 border ${emailError ? "border-red-400 focus:ring-red-400" : "border-gray-200 focus:ring-indigo-500 focus:border-indigo-500"} rounded-xl focus:ring-2 transition-all outline-none text-gray-800 placeholder-gray-400`}
-            placeholder="nhansu@congty.com"
-            value={email}
-            onChange={(event) => {
-              setEmail(event.target.value);
-              setEmailError("");
-              setSubmitError("");
-            }}
-          />
-          {emailError && (
-            <p className="text-red-500 text-xs font-medium mt-2 flex items-center">
-              <svg
-                className="w-3.5 h-3.5 mr-1"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              {emailError}
-            </p>
+      ) : (
+        <>
+          {submitError && (
+            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {submitError}
+            </div>
           )}
-        </div>
 
-        <div>
-          <label
-            htmlFor="password"
-            className="block text-sm font-semibold text-gray-700 mb-2"
-          >
-            Mật khẩu
-          </label>
-          <div className="relative">
-            <input
-              type={showPassword ? "text" : "password"}
-              id="password"
-              className={`w-full px-4 py-3 bg-gray-50 border ${passwordError ? "border-red-400 focus:ring-red-400" : "border-gray-200 focus:ring-indigo-500 focus:border-indigo-500"} rounded-xl focus:ring-2 transition-all outline-none text-gray-800 placeholder-gray-400 pr-12`}
-              placeholder="Nhập mật khẩu của bạn (Tối thiểu 8 ký tự)"
-              value={password}
-              onChange={(event) => {
-                setPassword(event.target.value);
-                setPasswordError("");
-                setSubmitError("");
-              }}
-            />
+          <form onSubmit={onSubmit} className="space-y-5" noValidate>
+            <div>
+              <label
+                htmlFor="email"
+                className="block text-sm font-semibold text-gray-700 mb-2"
+              >
+                Email công ty
+              </label>
+              <input
+                type="email"
+                id="email"
+                className={`w-full px-4 py-3 bg-gray-50 border ${emailError ? "border-red-400 focus:ring-red-400" : "border-gray-200 focus:ring-indigo-500 focus:border-indigo-500"} rounded-xl focus:ring-2 transition-all outline-none text-gray-800 placeholder-gray-400`}
+                placeholder="nhansu@congty.com"
+                value={email}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  setEmailError("");
+                  setSubmitError("");
+                }}
+              />
+              {emailError && (
+                <p className="text-red-500 text-xs font-medium mt-2 flex items-center">
+                  <svg
+                    className="w-3.5 h-3.5 mr-1"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  {emailError}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label
+                htmlFor="password"
+                className="block text-sm font-semibold text-gray-700 mb-2"
+              >
+                Mật khẩu
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  id="password"
+                  className={`w-full px-4 py-3 bg-gray-50 border ${passwordError ? "border-red-400 focus:ring-red-400" : "border-gray-200 focus:ring-indigo-500 focus:border-indigo-500"} rounded-xl focus:ring-2 transition-all outline-none text-gray-800 placeholder-gray-400 pr-12`}
+                  placeholder="Nhập mật khẩu của bạn (Tối thiểu 8 ký tự)"
+                  value={password}
+                  onChange={(event) => {
+                    setPassword(event.target.value);
+                    setPasswordError("");
+                    setSubmitError("");
+                  }}
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 px-4 text-sm font-medium text-gray-500 hover:text-indigo-600 focus:outline-none"
+                  onClick={() => setShowPassword((current) => !current)}
+                  tabIndex={-1}
+                >
+                  {showPassword ? "Ẩn" : "Hiện"}
+                </button>
+              </div>
+              {passwordError && (
+                <p className="text-red-500 text-xs font-medium mt-2 flex items-center">
+                  <svg
+                    className="w-3.5 h-3.5 mr-1 flex-shrink-0"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  {passwordError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between text-sm pt-2">
+              <label className="flex items-center text-gray-600 cursor-pointer hover:text-gray-800 transition-colors">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 mr-2"
+                  checked={rememberMe}
+                  onChange={(event) => setRememberMe(event.target.checked)}
+                />
+                Ghi nhớ phiên đăng nhập
+              </label>
+              <a
+                href="#"
+                className="font-semibold text-indigo-600 hover:text-indigo-500 transition-colors"
+                onClick={(event) => event.preventDefault()}
+              >
+                Quên mật khẩu?
+              </a>
+            </div>
+
             <button
-              type="button"
-              className="absolute inset-y-0 right-0 px-4 text-sm font-medium text-gray-500 hover:text-indigo-600 focus:outline-none"
-              onClick={() => setShowPassword((current) => !current)}
-              tabIndex={-1}
+              type="submit"
+              className="w-full mt-2 py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
+              disabled={isLoading || isLocked}
             >
-              {showPassword ? "Ẩn" : "Hiện"}
+              {isLoading ? (
+                <span className="flex items-center justify-center">
+                  <svg
+                    className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  Đang xác thực...
+                </span>
+              ) : (
+                "Đăng nhập hệ thống"
+              )}
             </button>
-          </div>
-          {passwordError && (
-            <p className="text-red-500 text-xs font-medium mt-2 flex items-center">
-              <svg
-                className="w-3.5 h-3.5 mr-1 flex-shrink-0"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              {passwordError}
-            </p>
-          )}
-        </div>
-
-        <div className="flex items-center justify-between text-sm pt-2">
-          <label className="flex items-center text-gray-600 cursor-pointer hover:text-gray-800 transition-colors">
-            <input
-              type="checkbox"
-              className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 mr-2"
-              checked={rememberMe}
-              onChange={(event) => setRememberMe(event.target.checked)}
-            />
-            Ghi nhớ phiên đăng nhập
-          </label>
-          <a
-            href="#"
-            className="font-semibold text-indigo-600 hover:text-indigo-500 transition-colors"
-            onClick={(event) => event.preventDefault()}
-          >
-            Quên mật khẩu?
-          </a>
-        </div>
-
-        <button
-          type="submit"
-          className="w-full mt-2 py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
-          disabled={isLoading || isLocked}
-        >
-          {isLoading ? (
-            <span className="flex items-center justify-center">
-              <svg
-                className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                ></circle>
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-              </svg>
-              Đang xác thực...
-            </span>
-          ) : (
-            "Đăng nhập hệ thống"
-          )}
-        </button>
-      </form>
+          </form>
+        </>
+      )}
     </div>
   );
 };
