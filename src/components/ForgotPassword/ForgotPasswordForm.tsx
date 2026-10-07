@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { authService } from "../../services/auth.service";
+import axios from "axios";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -12,22 +13,27 @@ export const ForgotPasswordForm: React.FC = () => {
   const [isSubmitted, setIsSubmitted] = useState(false);
 
   const getSubmitErrorMessage = (error: unknown): string => {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status;
+      if (status === 400 || status === 404 || status === 422) {
+        return "Email không hợp lệ hoặc không tồn tại trong hệ thống.";
+      }
+      if (status === 429) {
+        return "Bạn đã gửi yêu cầu quá nhiều lần. Vui lòng thử lại sau vài phút.";
+      }
+      if (status === 503 || status === 500) {
+        return "Hệ thống đang bận. Vui lòng thử lại sau.";
+      }
+      return "Không thể gửi liên kết đặt lại mật khẩu. Vui lòng thử lại sau.";
+    }
+    
     if (error instanceof Error) {
-      switch (error.message) {
-        case "EMAIL_INVALID":
-          return "Email không hợp lệ. Vui lòng kiểm tra lại địa chỉ email.";
-        case "RATE_LIMITED":
-          return "Bạn đã gửi yêu cầu quá nhiều lần. Vui lòng thử lại sau vài phút.";
-        case "SERVER_UNAVAILABLE":
-          return "Hệ thống đang bận. Vui lòng thử lại sau.";
-        case "NETWORK_ERROR":
-          return "Không thể kết nối tới máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.";
-        default:
-          return "Không thể gửi liên kết đặt lại mật khẩu. Vui lòng thử lại sau.";
+      if (error.message === "NETWORK_ERROR" || error.message.includes("Network Error")) {
+        return "Không thể kết nối tới máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.";
       }
     }
 
-    return "Không thể gửi liên kết đặt lại mật khẩu. Vui lòng thử lại sau.";
+    return "Không thể kết nối tới máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.";
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {

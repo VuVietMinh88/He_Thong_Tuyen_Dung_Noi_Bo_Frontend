@@ -18,8 +18,30 @@ export const authService = {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
 
-        if (status === 400 || status === 401) {
+        if (status === 401) {
           throw new Error("INVALID_CREDENTIALS");
+        }
+
+        if (status === 400) {
+          const validationError = new Error("VALIDATION_ERROR") as Error & {
+            fieldErrors?: Record<string, string[]>;
+          };
+
+          const rawFieldErrors = (error.response?.data as Record<string, unknown>)?.fieldErrors ?? {};
+          const parsedFieldErrors: Record<string, string[]> = {};
+
+          if (typeof rawFieldErrors === "object" && rawFieldErrors !== null) {
+            Object.entries(rawFieldErrors).forEach(([key, value]) => {
+              if (typeof value === "string") {
+                parsedFieldErrors[key] = [value];
+              } else if (Array.isArray(value)) {
+                parsedFieldErrors[key] = value.map(String);
+              }
+            });
+          }
+
+          validationError.fieldErrors = parsedFieldErrors;
+          throw validationError;
         }
 
         if (status === 429) {
@@ -32,41 +54,6 @@ export const authService = {
   },
 
   requestPasswordReset: async (email: string): Promise<void> => {
-    try {
-      const response = await axiosClient.post("/auth/forgot-password", {
-        email,
-      });
-
-      if (response.status >= 200 && response.status < 300) {
-        return;
-      }
-
-      throw new Error("PASSWORD_RESET_REQUEST_FAILED");
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const status = error.response?.status;
-
-        if (status === 400 || status === 404 || status === 422) {
-          throw new Error("EMAIL_INVALID");
-        }
-
-        if (status === 429) {
-          throw new Error("RATE_LIMITED");
-        }
-
-        if (status === 503 || status === 500) {
-          throw new Error("SERVER_UNAVAILABLE");
-        }
-      }
-
-      if (
-        error instanceof Error &&
-        error.message === "PASSWORD_RESET_REQUEST_FAILED"
-      ) {
-        throw error;
-      }
-
-      throw new Error("NETWORK_ERROR");
-    }
+    await axiosClient.post("/auth/forgot-password", { email });
   },
 };
