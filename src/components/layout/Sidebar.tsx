@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { type Role, ROLE_NAMES } from '../../constants/roles';
 import { tokenService } from '../../services/token.service';
+import { authService } from '../../services/auth.service';
 
 // --------------------------------------------------------
 // CẤU HÌNH MENU & QUYỀN TRUY CẬP (AC 1)
@@ -14,13 +15,12 @@ interface MenuItem {
 }
 
 const MENU_ITEMS: MenuItem[] = [
-  { title: 'Bảng điều khiển', path: '/dashboard', icon: '📊', allowedRoles: ['SYSTEM_ADMIN', 'HR_MANAGER', 'RECRUITER', 'HEAD_OF_DEPARTMENT', 'INTERVIEWER'] },
-  { title: 'Quản lý tài khoản', path: '/users', icon: '👥', allowedRoles: ['SYSTEM_ADMIN'] },
-  { title: 'Đăng tuyển dụng', path: '/jobs', icon: '📝', allowedRoles: ['SYSTEM_ADMIN', 'HR_MANAGER', 'RECRUITER'] },
-  { title: 'Quản lý CV / Ứng viên', path: '/candidates', icon: '📄', allowedRoles: ['SYSTEM_ADMIN', 'HR_MANAGER', 'RECRUITER', 'HEAD_OF_DEPARTMENT'] },
-  { title: 'Lịch phỏng vấn', path: '/interviews', icon: '📅', allowedRoles: ['SYSTEM_ADMIN', 'HR_MANAGER', 'RECRUITER', 'INTERVIEWER', 'HEAD_OF_DEPARTMENT'] },
-  { title: 'Việc làm của tôi', path: '/my-jobs', icon: '💼', allowedRoles: ['CANDIDATE'] },
-  { title: 'Hồ sơ cá nhân', path: '/profile', icon: '👤', allowedRoles: ['CANDIDATE', 'EMPLOYEE', 'SYSTEM_ADMIN', 'HR_MANAGER', 'RECRUITER', 'INTERVIEWER', 'HEAD_OF_DEPARTMENT'] },
+  { title: 'Bảng điều khiển', path: '/dashboard', icon: '📊', allowedRoles: ['ADMIN', 'HR_MANAGER', 'RECRUITER', 'HIRING_MANAGER', 'INTERVIEWER', 'APPROVER'] },
+  { title: 'Quản lý tài khoản', path: '/users', icon: '👥', allowedRoles: ['ADMIN'] },
+  { title: 'Đăng tuyển dụng', path: '/jobs', icon: '📝', allowedRoles: ['ADMIN', 'HR_MANAGER', 'RECRUITER'] },
+  { title: 'Quản lý CV / Ứng viên', path: '/candidates', icon: '📄', allowedRoles: ['ADMIN', 'HR_MANAGER', 'RECRUITER', 'HIRING_MANAGER'] },
+  { title: 'Lịch phỏng vấn', path: '/interviews', icon: '📅', allowedRoles: ['ADMIN', 'HR_MANAGER', 'RECRUITER', 'INTERVIEWER', 'HIRING_MANAGER'] },
+  { title: 'Hồ sơ cá nhân', path: '/profile', icon: '👤', allowedRoles: ['ADMIN', 'HR_MANAGER', 'RECRUITER', 'INTERVIEWER', 'HIRING_MANAGER', 'APPROVER'] },
 ];
 
 const Sidebar: React.FC = () => {
@@ -28,21 +28,27 @@ const Sidebar: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Lấy Role từ Storage/Global State (AC 2)
   const userData = tokenService.getUserData();
-  const userRoles = userData?.roles || [];
+  const userRoles = userData?.roles ?? [];
   const userName = userData?.fullName || userData?.email || 'Người dùng';
   
-  const displayRole = userRoles.length > 0 ? (userRoles[0] as Role) : null;
+  const displayRole = userRoles.find(
+    (role): role is Role => Object.hasOwn(ROLE_NAMES, role),
+  );
 
-  // Lọc menu theo quyền (AC 1)
   const visibleMenus = MENU_ITEMS.filter(menu => 
     menu.allowedRoles.some(role => userRoles.includes(role))
   );
 
-  const handleLogout = () => {
-    tokenService.clearAll();
-    navigate('/login');
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+    } catch (error: unknown) {
+      console.error("Logout API failed", error);
+    } finally {
+      tokenService.clearAll();
+      navigate('/login');
+    }
   };
 
   return (
@@ -129,7 +135,7 @@ const Sidebar: React.FC = () => {
           </ul>
         </nav>
 
-        {/* Nút Đăng xuất */}
+        {/* Nút Đăng xuất ở Footer */}
         <div className="p-4 border-t border-slate-800 bg-slate-950 shrink-0">
           <button 
             className="w-full flex items-center justify-center px-4 py-2.5 bg-slate-800 hover:bg-red-600/90 text-slate-300 hover:text-white rounded-lg transition-colors duration-200"

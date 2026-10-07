@@ -1,22 +1,20 @@
 export const ROLES = {
-  CANDIDATE: 'CANDIDATE',
-  RECRUITER: 'RECRUITER',
-  HEAD_OF_DEPARTMENT: 'HEAD_OF_DEPARTMENT',
-  SYSTEM_ADMIN: 'SYSTEM_ADMIN',
-  INTERVIEWER: 'INTERVIEWER',
+  ADMIN: 'ADMIN',
   HR_MANAGER: 'HR_MANAGER',
-  EMPLOYEE: 'EMPLOYEE',
+  RECRUITER: 'RECRUITER',
+  HIRING_MANAGER: 'HIRING_MANAGER',
+  INTERVIEWER: 'INTERVIEWER',
+  APPROVER: 'APPROVER',
 } as const;
 
 export type Role = keyof typeof ROLES;
 
 export const ROLE_NAMES: Record<Role, string> = {
-  CANDIDATE: 'Ứng viên',
-  RECRUITER: 'Nhân viên tuyển dụng',
-  HEAD_OF_DEPARTMENT: 'Trưởng bộ phận',
-  SYSTEM_ADMIN: 'Quản trị hệ thống',
-  INTERVIEWER: 'Người phỏng vấn',
+  ADMIN: 'Quản trị hệ thống',
   HR_MANAGER: 'Trưởng phòng nhân sự',
-  EMPLOYEE: 'Nhân viên nội bộ',
+  RECRUITER: 'Nhân viên tuyển dụng',
+  HIRING_MANAGER: 'Quản lý tuyển dụng',
+  INTERVIEWER: 'Người phỏng vấn',
+  APPROVER: 'Người phê duyệt',
 };
 
