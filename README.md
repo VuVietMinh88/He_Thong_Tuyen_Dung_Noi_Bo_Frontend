@@ -7,10 +7,10 @@ Subtask [TKNHTTDNB1-584](https://ttcs-k3s4-n3.atlassian.net/browse/TKNHTTDNB1-58
 
 1. Dùng Node.js đáp ứng engines của dependencies, chạy `npm ci`.
 2. Sao chép `.env.example` thành `.env`:
-   `VITE_API_BASE_URL=http://localhost:8080/api`.
+   `VITE_API_BASE_URL=http://localhost:8080/api/v1`.
 3. Trong repository Backend, cấu hình PostgreSQL qua `.env`, đặt `SERVER_PORT=8080`, `CORS_ALLOWED_ORIGINS=http://localhost:5173`, chạy `./mvnw.cmd spring-boot:run` (Linux/macOS: `sh ./mvnw spring-boot:run`).
 4. Chạy `npm run dev`, mở `http://localhost:5173` và bấm **Kiểm tra kết nối Backend**.
-5. Trong Network của trình duyệt, kiểm tra GET `http://localhost:8080/api/health`, HTTP 200 và JSON `{"status":"UP"}`.
+5. Trong Network của trình duyệt, kiểm tra GET `http://localhost:8080/api/v1/health`, HTTP 200 và JSON `{"status":"UP"}`.
 
 Vite cố định port 5173 và báo lỗi nếu port bị chiếm để không vô tình lệch origin CORS.
 Đổi `.env` cần khởi động lại Vite; build production cần cấu hình URL trước `npm run build`.
