@@ -7,6 +7,7 @@ type ApiFieldErrors = Record<string, string[] | string | undefined>;
 type BackendErrorPayload = {
   code?: string;
   fieldErrors?: ApiFieldErrors;
+  message?: string;
 };
 
 const getFieldErrorMessage = (fieldErrors: unknown): string | null => {
@@ -51,8 +52,30 @@ export const authService = {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
 
-        if (status === 400 || status === 401) {
+        if (status === 401) {
           throw new Error("INVALID_CREDENTIALS");
+        }
+
+        if (status === 400) {
+          const validationError = new Error("VALIDATION_ERROR") as Error & {
+            fieldErrors?: Record<string, string[]>;
+          };
+
+          const rawFieldErrors = (error.response?.data as Record<string, unknown>)?.fieldErrors ?? {};
+          const parsedFieldErrors: Record<string, string[]> = {};
+
+          if (typeof rawFieldErrors === "object" && rawFieldErrors !== null) {
+            Object.entries(rawFieldErrors).forEach(([key, value]) => {
+              if (typeof value === "string") {
+                parsedFieldErrors[key] = [value];
+              } else if (Array.isArray(value)) {
+                parsedFieldErrors[key] = value.map(String);
+              }
+            });
+          }
+
+          validationError.fieldErrors = parsedFieldErrors;
+          throw validationError;
         }
 
         if (status === 429) {
