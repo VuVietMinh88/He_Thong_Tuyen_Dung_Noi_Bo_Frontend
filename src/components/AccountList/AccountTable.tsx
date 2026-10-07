@@ -1,5 +1,6 @@
 import type { AccountRole, UserAccount } from '../../types/account';
 import { tokenService } from '../../services/token.service';
+import { ToggleStatusButton } from './ToggleStatusButton';
 
 interface AccountTableProps {
   accounts: UserAccount[];
@@ -343,46 +344,17 @@ export const AccountTable: React.FC<AccountTableProps> = ({
                         <span>Sửa</span>
                       </button>
 
-                      {/* Khóa / Mở khóa button (User Story S1-10 / TKNHTTDNB1-160) */}
-                      {isLocked ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onRequestUnlock ? onRequestUnlock(account) : onToggleStatus?.(account)
-                          }
-                          className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 hover:border-emerald-300 shadow-xs"
-                          title="Mở khóa tài khoản này"
-                        >
-                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                          </svg>
-                          <span>Mở khóa</span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onRequestLock ? onRequestLock(account) : onToggleStatus?.(account)
-                          }
-                          disabled={isSelf}
-                          className={[
-                            "inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition shadow-xs",
-                            isSelf
-                              ? "border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-60"
-                              : "border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300",
-                          ].join(" ")}
-                          title={
-                            isSelf
-                              ? "Quy tắc bảo mật: Không thể tự khóa tài khoản của chính mình"
-                              : "Khóa tài khoản này"
-                          }
-                        >
-                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                          </svg>
-                          <span>Khóa</span>
-                        </button>
-                      )}
+                      {/* Nút Khóa / Mở khóa tài khoản (Story 19 / TKNHTTDNB1-161) */}
+                      <ToggleStatusButton
+                        account={account}
+                        isSelf={isSelf}
+                        onRequestLock={(target) =>
+                          onRequestLock ? onRequestLock(target) : onToggleStatus?.(target)
+                        }
+                        onRequestUnlock={(target) =>
+                          onRequestUnlock ? onRequestUnlock(target) : onToggleStatus?.(target)
+                        }
+                      />
                     </div>
                   </td>
                 </tr>

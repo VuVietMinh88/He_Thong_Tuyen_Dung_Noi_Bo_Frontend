@@ -267,7 +267,7 @@ export const AccountListPage: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-100/75">
+    <div className="flex flex-col md:flex-row min-h-screen bg-slate-100/75">
       {/* Shared Navigation Sidebar */}
       <Sidebar />
 
