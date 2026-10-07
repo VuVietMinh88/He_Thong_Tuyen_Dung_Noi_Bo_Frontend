@@ -2,7 +2,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import type { Role } from '../../constants/roles';
 
 interface ProtectedRouteProps {
-  allowedRoles: Role[];
+  allowedRoles: readonly Role[];
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {

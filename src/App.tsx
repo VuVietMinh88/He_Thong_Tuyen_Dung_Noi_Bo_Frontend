@@ -3,7 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-route
 import ToastProvider from './components/notifications/ToastProvider'
 import { useToast } from './components/notifications/useToast'
 import ProtectedRoute from './components/routes/ProtectedRoute'
-import { ROLES } from './constants/roles'
+import { DASHBOARD_ROLES } from './constants/roles'
 import UnauthorizedPage from './pages/error/UnauthorizedPage'
 import { getHealth } from './services/healthService'
 
@@ -124,7 +124,7 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
 
-          <Route element={<ProtectedRoute allowedRoles={[ROLES.RECRUITER, ROLES.HR_MANAGER, ROLES.SYSTEM_ADMIN]} />}>
+          <Route element={<ProtectedRoute allowedRoles={DASHBOARD_ROLES} />}>
             <Route path="/dashboard" element={<DashboardPage />} />
           </Route>
 
