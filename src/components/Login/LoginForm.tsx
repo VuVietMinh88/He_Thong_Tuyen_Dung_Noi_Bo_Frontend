@@ -1,17 +1,54 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authService } from '../../services/auth.service';
+import { authService, InvalidLoginResponseError } from '../../services/auth.service';
+import { tokenService } from '../../services/token.service';
 import { AxiosError } from 'axios';
 
 const MAX_ATTEMPTS = 5;
 const LOCK_TIME_MS = 15 * 60 * 1000;
 
+const getStoredValue = (key: string): string | null => {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+const setStoredValue = (key: string, value: string): boolean => {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    window.localStorage.setItem(key, value);
+    return window.localStorage.getItem(key) === value;
+  } catch {
+    return false;
+  }
+};
+
+const removeStoredValue = (key: string): void => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Ignore storage errors so login still works in restricted browser environments.
+  }
+};
+
+const getStoredNumber = (key: string, fallback = 0): number => {
+  const value = Number.parseInt(getStoredValue(key) ?? '', 10);
+  return Number.isFinite(value) ? value : fallback;
+};
+
 export const LoginForm: React.FC = () => {
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState<string>('');
+  const [email, setEmail] = useState<string>(() => getStoredValue('rememberedEmail') ?? '');
   const [password, setPassword] = useState<string>('');
-  const [rememberMe, setRememberMe] = useState<boolean>(false);
+  const [rememberMe, setRememberMe] = useState<boolean>(() => Boolean(getStoredValue('rememberedEmail')));
   
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [emailError, setEmailError] = useState<string>('');
@@ -19,15 +56,14 @@ export const LoginForm: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const getInitialLockStatus = () => {
-    const lockedUntilStr = localStorage.getItem('lockUntil');
-    if (lockedUntilStr) {
-      const lockedUntil = parseInt(lockedUntilStr, 10);
+    const lockedUntil = getStoredNumber('lockUntil');
+    if (lockedUntil > 0) {
       const timeRemaining = lockedUntil - Date.now();
       if (timeRemaining > 0) {
         return { isLocked: true, timeLeft: Math.ceil(timeRemaining / 1000) };
       }
-      localStorage.removeItem('lockUntil');
-      localStorage.removeItem('loginAttempts');
+      removeStoredValue('lockUntil');
+      removeStoredValue('loginAttempts');
     }
     return { isLocked: false, timeLeft: 0 };
   };
@@ -36,9 +72,8 @@ export const LoginForm: React.FC = () => {
   const [lockTimeLeft, setLockTimeLeft] = useState<number>(() => getInitialLockStatus().timeLeft);
 
   const checkLockStatus = useCallback(() => {
-    const lockedUntilStr = localStorage.getItem('lockUntil');
-    if (lockedUntilStr) {
-      const lockedUntil = parseInt(lockedUntilStr, 10);
+    const lockedUntil = getStoredNumber('lockUntil');
+    if (lockedUntil > 0) {
       const timeRemaining = lockedUntil - Date.now();
       
       if (timeRemaining > 0) {
@@ -46,8 +81,8 @@ export const LoginForm: React.FC = () => {
         setLockTimeLeft(Math.ceil(timeRemaining / 1000));
       } else {
         setIsLocked(false);
-        localStorage.removeItem('lockUntil');
-        localStorage.removeItem('loginAttempts');
+        removeStoredValue('lockUntil');
+        removeStoredValue('loginAttempts');
       }
     }
   }, []);
@@ -60,31 +95,47 @@ export const LoginForm: React.FC = () => {
   }, [checkLockStatus]);
 
   const handleLoginFail = () => {
-    const currentAttempts = parseInt(localStorage.getItem('loginAttempts') || '0', 10);
+    const currentAttempts = getStoredNumber('loginAttempts');
     const newAttempts = currentAttempts + 1;
-    localStorage.setItem('loginAttempts', newAttempts.toString());
+    setStoredValue('loginAttempts', newAttempts.toString());
 
     if (newAttempts >= MAX_ATTEMPTS) {
       const lockUntil = Date.now() + LOCK_TIME_MS;
-      localStorage.setItem('lockUntil', lockUntil.toString());
+      setStoredValue('lockUntil', lockUntil.toString());
       checkLockStatus();
     }
   };
 
-  const handleLoginSuccess = (role: string, token: string) => {
-    localStorage.removeItem('loginAttempts');
-    localStorage.removeItem('lockUntil');
-    
-    localStorage.setItem('token', token);
-    if (rememberMe) {
-      localStorage.setItem('rememberedEmail', email);
-    } else {
-      localStorage.removeItem('rememberedEmail');
+  const handleLoginSuccess = (role: string, accessToken: unknown) => {
+    if (
+      typeof accessToken !== 'string'
+      || accessToken.trim().length === 0
+      || accessToken.trim().toLowerCase() === 'undefined'
+    ) {
+      tokenService.removeToken();
+      setPasswordError('Phiên đăng nhập không hợp lệ. Vui lòng thử lại.');
+      return;
     }
 
-    switch (role) {
+    const normalizedToken = accessToken.trim();
+
+    if (!tokenService.setToken(normalizedToken)) {
+      setPasswordError('Không thể lưu phiên đăng nhập trên thiết bị này. Vui lòng bật bộ nhớ trình duyệt và thử lại.');
+      return;
+    }
+
+    removeStoredValue('loginAttempts');
+    removeStoredValue('lockUntil');
+
+    if (rememberMe) {
+      setStoredValue('rememberedEmail', email.trim());
+    } else {
+      removeStoredValue('rememberedEmail');
+    }
+
+    switch (role.trim().toLowerCase().replace(/^role_/, '')) {
       case 'admin': navigate('/admin/dashboard'); break;
-      case 'hr': navigate('/hr/dashboard'); break;
+      case 'hr_manager': navigate('/hr/dashboard'); break;
       case 'interviewer': navigate('/interviewer/dashboard'); break;
       default: navigate('/dashboard'); break;
     }
@@ -98,11 +149,12 @@ export const LoginForm: React.FC = () => {
 
     let valid = true;
 
+    const normalizedEmail = email.trim();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email.trim()) {
+    if (!normalizedEmail) {
       setEmailError('Vui lòng nhập email công ty');
       valid = false;
-    } else if (!emailRegex.test(email.trim())) {
+    } else if (!emailRegex.test(normalizedEmail)) {
       setEmailError('Email không hợp lệ. Vui lòng nhập đúng định dạng (vd: ten@congty.com)');
       valid = false;
     }
@@ -119,17 +171,23 @@ export const LoginForm: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const data = await authService.login(email, password);
-      handleLoginSuccess(data.user.role, data.token);
+      const data = await authService.login(normalizedEmail, password);
+      handleLoginSuccess(data.user?.role ?? '', data.accessToken);
     } catch (error: unknown) {
-      // Chỉ tăng biến đếm sai khi lỗi do sai thông tin đăng nhập (401)
-      if (error instanceof AxiosError && error.response?.status === 401) {
+      if (error instanceof InvalidLoginResponseError) {
+        tokenService.removeToken();
+        setPasswordError('Thông tin xác thực từ máy chủ không hợp lệ. Vui lòng thử lại sau.');
+      } else if (error instanceof AxiosError && error.response?.status === 401) {
         handleLoginFail();
         
-        const currentAttempts = parseInt(localStorage.getItem('loginAttempts') || '0', 10);
+        const currentAttempts = getStoredNumber('loginAttempts');
         if (currentAttempts < MAX_ATTEMPTS) {
-          setPasswordError(`Thông tin đăng nhập không chính xác. Bạn đã sai ${currentAttempts}/${MAX_ATTEMPTS} lần nếu sai quá ${MAX_ATTEMPTS} lần sẽ bị khóa.`);
+          setPasswordError(`Thông tin đăng nhập không chính xác. Bạn đã sai ${currentAttempts}/${MAX_ATTEMPTS} lần; sai ${MAX_ATTEMPTS} lần tài khoản sẽ bị khóa.`);
         }
+      } else if (error instanceof AxiosError && error.code === 'ECONNABORTED') {
+        setPasswordError('Máy chủ phản hồi quá thời gian chờ. Vui lòng kiểm tra Backend rồi thử lại.');
+      } else if (error instanceof AxiosError && !error.response) {
+        setPasswordError('Không kết nối được máy chủ. Vui lòng kiểm tra Backend, mạng và cấu hình CORS.');
       } else {
         setPasswordError('Hệ thống đang gặp sự cố. Vui lòng thử lại sau.');
       }
@@ -157,7 +215,7 @@ export const LoginForm: React.FC = () => {
       {isLocked ? (
         <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-5 rounded-2xl mb-6 text-center shadow-sm">
           <p className="font-semibold text-lg mb-1">Tài khoản bị khóa tạm thời!</p>
-          <p className="text-sm opacity-90 mb-3">Bạn đã nhập sai quá {MAX_ATTEMPTS} lần.</p>
+          <p className="text-sm opacity-90 mb-3">Bạn đã nhập sai {MAX_ATTEMPTS} lần.</p>
           <p className="text-sm">Vui lòng thử lại sau:</p>
           <p className="text-2xl font-bold mt-1 text-red-600 animate-pulse">{formatTimeLeft()}</p>
         </div>
@@ -170,6 +228,7 @@ export const LoginForm: React.FC = () => {
             <input 
               type="email" 
               id="email"
+              autoComplete="email"
               className={`w-full px-4 py-3 bg-gray-50 border ${emailError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-indigo-500 focus:border-indigo-500'} rounded-xl focus:ring-2 transition-all outline-none text-gray-800 placeholder-gray-400`}
               placeholder="nhansu@congty.com"
               value={email}
@@ -191,6 +250,7 @@ export const LoginForm: React.FC = () => {
               <input 
                 type={showPassword ? "text" : "password"} 
                 id="password"
+                autoComplete="current-password"
                 className={`w-full px-4 py-3 bg-gray-50 border ${passwordError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-indigo-500 focus:border-indigo-500'} rounded-xl focus:ring-2 transition-all outline-none text-gray-800 placeholder-gray-400 pr-12`}
                 placeholder="Nhập mật khẩu của bạn (Tối thiểu 8 ký tự)"
                 value={password}
@@ -200,7 +260,8 @@ export const LoginForm: React.FC = () => {
                 type="button" 
                 className="absolute inset-y-0 right-0 px-4 text-sm font-medium text-gray-500 hover:text-indigo-600 focus:outline-none"
                 onClick={() => setShowPassword(!showPassword)}
-                tabIndex={-1}
+                aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                aria-pressed={showPassword}
               >
                 {showPassword ? 'Ẩn' : 'Hiện'}
               </button>
@@ -248,4 +309,3 @@ export const LoginForm: React.FC = () => {
     </div>
   );
 };
-
