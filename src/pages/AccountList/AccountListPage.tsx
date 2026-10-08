@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useToast } from '../../components/notifications/useToast';
 import type { AccountFilterParams, AccountRole, UserAccount } from '../../types/account';
 import { userService } from '../../services/userService';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -52,11 +53,7 @@ export const AccountListPage: React.FC = () => {
   const [unlockingAccount, setUnlockingAccount] = useState<UserAccount | null>(null);
   const [isUnlockModalOpen, setIsUnlockModalOpen] = useState<boolean>(false);
 
-  // Notification toast state
-  const [toastMessage, setToastMessage] = useState<{
-    message: string;
-    type: 'success' | 'error';
-  } | null>(null);
+  const { notify } = useToast();
 
   // Debounce search keyword to avoid flooding API requests while typing
   const debouncedSearchKeyword = useDebounce(
@@ -64,12 +61,8 @@ export const AccountListPage: React.FC = () => {
     SEARCH_DEBOUNCE_DELAY_MS
   );
 
-  const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
-    setToastMessage({ message, type });
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 3500);
-  };
+  const showNotification = (message: string, type: 'success' | 'error' = 'success') =>
+    notify(message, type);
 
   // Fetch accounts from API whenever search, filter, or pagination changes
   useEffect(() => {
@@ -319,21 +312,6 @@ export const AccountListPage: React.FC = () => {
 
         {/* Content Container */}
         <div className="p-6 space-y-6 max-w-7xl mx-auto">
-          {/* Toast Notification */}
-          {toastMessage && (
-            <div
-              role={toastMessage.type === 'error' ? 'alert' : 'status'}
-              className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium shadow-sm transition-all animate-bounce-short ${
-                toastMessage.type === 'error'
-                  ? 'border-rose-200 bg-rose-50 text-rose-800'
-                  : 'border-emerald-200 bg-emerald-50 text-emerald-800'
-              }`}
-            >
-              <span>{toastMessage.type === 'error' ? '⚠️' : '✓'}</span>
-              <span>{toastMessage.message}</span>
-            </div>
-          )}
-
           {/* API Error Notification */}
           {apiError && (
             <div className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-medium text-rose-800">

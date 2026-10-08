@@ -1,7 +1,17 @@
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '../../components/notifications/useToast';
 
 const UnauthorizedPage = () => {
   const navigate = useNavigate();
+  const { notify } = useToast();
+  const notified = useRef(false);
+
+  useEffect(() => {
+    if (notified.current) return;
+    notified.current = true;
+    notify('Bạn không có quyền truy cập trang này.', 'error');
+  }, [notify]);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-10 text-slate-800">

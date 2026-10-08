@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import ToastProvider from './components/notifications/ToastProvider';
 import LoginPage from './pages/Login/LoginPage';
 import ForgotPasswordPage from './pages/ForgotPassword/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPassword/ResetPasswordPage';
@@ -73,76 +74,78 @@ const PlaceholderPage = ({ title }: { title: string }) => (
 
 function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/health" element={<HealthCheck />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/unauthorized" element={<UnauthorizedPage />} />
+    <ToastProvider>
+      <Router>
+        <Routes>
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/health" element={<HealthCheck />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-        <Route element={<ProtectedRoute allowedRoles={ALL_ROLES} />}>
-          <Route path="/dashboard" element={<MainLayout><PlaceholderPage title="Bảng điều khiển chung" /></MainLayout>} />
-          <Route path="/profile" element={<MainLayout><PlaceholderPage title="Hồ sơ cá nhân" /></MainLayout>} />
+          <Route element={<ProtectedRoute allowedRoles={ALL_ROLES} />}>
+            <Route path="/dashboard" element={<MainLayout><PlaceholderPage title="Bảng điều khiển chung" /></MainLayout>} />
+            <Route path="/profile" element={<MainLayout><PlaceholderPage title="Hồ sơ cá nhân" /></MainLayout>} />
+            <Route
+              path="/change-password"
+              element={<MainLayout><ChangePasswordPage /></MainLayout>}
+            />
+          </Route>
+
+          <Route element={<ProtectedRoute allowedRoles={[ROLES.ADMIN]} />}>
+            <Route path="/users" element={<AccountListPage />} />
+            <Route path="/admin/users" element={<AccountListPage />} />
+            <Route path="/admin/dashboard" element={<AccountListPage />} />
+          </Route>
+
           <Route
-            path="/change-password"
-            element={<MainLayout><ChangePasswordPage /></MainLayout>}
+            element={
+              <ProtectedRoute
+                allowedRoles={[ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER]}
+              />
+            }
+          >
+            <Route path="/jobs" element={<MainLayout><PlaceholderPage title="Đăng tuyển dụng" /></MainLayout>} />
+          </Route>
+
+          <Route
+            element={
+              <ProtectedRoute
+                allowedRoles={[ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER, ROLES.HIRING_MANAGER]}
+              />
+            }
+          >
+            <Route path="/candidates" element={<MainLayout><PlaceholderPage title="Quản lý CV / Ứng viên" /></MainLayout>} />
+          </Route>
+
+          <Route
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  ROLES.ADMIN,
+                  ROLES.HR_MANAGER,
+                  ROLES.RECRUITER,
+                  ROLES.HIRING_MANAGER,
+                  ROLES.INTERVIEWER,
+                ]}
+              />
+            }
+          >
+            <Route path="/interviews" element={<MainLayout><PlaceholderPage title="Lịch phỏng vấn" /></MainLayout>} />
+          </Route>
+
+          <Route
+            path="*"
+            element={
+              <div className="flex h-screen items-center justify-center text-2xl">
+                404 - Không tìm thấy trang
+              </div>
+            }
           />
-        </Route>
-
-        <Route element={<ProtectedRoute allowedRoles={[ROLES.ADMIN]} />}>
-          <Route path="/users" element={<AccountListPage />} />
-          <Route path="/admin/users" element={<AccountListPage />} />
-          <Route path="/admin/dashboard" element={<AccountListPage />} />
-        </Route>
-
-        <Route
-          element={
-            <ProtectedRoute
-              allowedRoles={[ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER]}
-            />
-          }
-        >
-          <Route path="/jobs" element={<MainLayout><PlaceholderPage title="Đăng Tuyển Dụng" /></MainLayout>} />
-        </Route>
-
-        <Route
-          element={
-            <ProtectedRoute
-              allowedRoles={[ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER, ROLES.HIRING_MANAGER]}
-            />
-          }
-        >
-          <Route path="/candidates" element={<MainLayout><PlaceholderPage title="Quản lý CV / Ứng viên" /></MainLayout>} />
-        </Route>
-
-        <Route
-          element={
-            <ProtectedRoute
-              allowedRoles={[
-                ROLES.ADMIN,
-                ROLES.HR_MANAGER,
-                ROLES.RECRUITER,
-                ROLES.HIRING_MANAGER,
-                ROLES.INTERVIEWER,
-              ]}
-            />
-          }
-        >
-          <Route path="/interviews" element={<MainLayout><PlaceholderPage title="Lịch phỏng vấn" /></MainLayout>} />
-        </Route>
-
-        <Route
-          path="*"
-          element={
-            <div className="flex h-screen items-center justify-center text-2xl">
-              404 - Không tìm thấy trang
-            </div>
-          }
-        />
-      </Routes>
-    </Router>
+        </Routes>
+      </Router>
+    </ToastProvider>
   );
 }
 
