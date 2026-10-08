@@ -98,4 +98,14 @@ describe('Login API contract', () => {
     await expect(authService.login('user@company.com', 'password123'))
       .rejects.toThrow('NETWORK_ERROR');
   });
+
+  it('does not report a password reset request as successful when the API fails', async () => {
+    const apiError = new Error('Request failed with status code 503');
+    postMock.mockRejectedValue(apiError);
+
+    await expect(authService.requestPasswordReset('user@company.com')).rejects.toBe(apiError);
+    expect(postMock).toHaveBeenCalledWith('/auth/forgot-password', {
+      email: 'user@company.com',
+    });
+  });
 });

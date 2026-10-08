@@ -117,25 +117,7 @@ export const authService = {
   },
 
   requestPasswordReset: async (email: string): Promise<void> => {
-    try {
-      await axiosClient.post("/auth/forgot-password", { email });
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const status = error.response?.status;
-        const isNetworkOrNotFound = !error.response || status === 404 || status === 502 || status === 503;
-        if (isNetworkOrNotFound) {
-          // Mockup: Simulate successful request
-          await new Promise(resolve => setTimeout(resolve, 600));
-          return;
-        }
-
-        if (status === 400 || status === 404 || status === 422) {
-          return;
-        }
-      }
-
-      return;
-    }
+    await axiosClient.post("/auth/forgot-password", { email });
   },
 
   resetPassword: async (token: string, newPassword: string): Promise<void> => {
