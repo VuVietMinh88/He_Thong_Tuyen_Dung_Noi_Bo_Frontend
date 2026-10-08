@@ -1,3 +1,5 @@
+import type { User } from '../types/auth';
+
 const ACCESS_TOKEN_KEY = 'accessToken';
 const REFRESH_TOKEN_KEY = 'refreshToken';
 const USER_DATA_KEY = 'userData';
@@ -52,6 +54,10 @@ export const tokenService = {
     return this.getToken();
   },
 
+  removeAccessToken(): void {
+    window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+  },
+
   getRefreshToken(): string | null {
     try {
       const token = window.localStorage.getItem(REFRESH_TOKEN_KEY);
@@ -65,6 +71,10 @@ export const tokenService = {
     }
   },
 
+  removeRefreshToken(): void {
+    window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+  },
+
   setAccessToken(accessToken: unknown): boolean {
     if (!isValidToken(accessToken)) {
       clearPersistedTokens();
@@ -72,8 +82,8 @@ export const tokenService = {
     }
 
     try {
-      window.localStorage.setItem(ACCESS_TOKEN_KEY, accessToken.trim());
-      const saved = window.localStorage.getItem(ACCESS_TOKEN_KEY) === accessToken.trim();
+      window.localStorage.setItem(ACCESS_TOKEN_KEY, (accessToken as string).trim());
+      const saved = window.localStorage.getItem(ACCESS_TOKEN_KEY) === (accessToken as string).trim();
       if (!saved) window.localStorage.removeItem(ACCESS_TOKEN_KEY);
       return saved;
     } catch {
@@ -102,8 +112,8 @@ export const tokenService = {
     }
 
     try {
-      window.localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken.trim());
-      return window.localStorage.getItem(REFRESH_TOKEN_KEY) === refreshToken.trim();
+      window.localStorage.setItem(REFRESH_TOKEN_KEY, (refreshToken as string).trim());
+      return window.localStorage.getItem(REFRESH_TOKEN_KEY) === (refreshToken as string).trim();
     } catch {
       return false;
     }
@@ -121,16 +131,20 @@ export const tokenService = {
     }
   },
 
-  getUserData(): TokenUserData | null {
+  getUserData(): User | null {
     try {
       const serializedUser = window.localStorage.getItem(USER_DATA_KEY);
       if (!serializedUser) return null;
 
       const user: unknown = JSON.parse(serializedUser);
-      return isTokenUserData(user) ? user : null;
+      return isTokenUserData(user) ? (user as unknown as User) : null;
     } catch {
       return null;
     }
+  },
+
+  removeUserData(): void {
+    window.localStorage.removeItem(USER_DATA_KEY);
   },
 
   saveTokens(accessToken: unknown, refreshToken?: unknown): boolean {
@@ -143,13 +157,13 @@ export const tokenService = {
     }
 
     try {
-      window.localStorage.setItem(ACCESS_TOKEN_KEY, accessToken.trim());
+      window.localStorage.setItem(ACCESS_TOKEN_KEY, (accessToken as string).trim());
       if (isValidToken(refreshToken)) {
-        window.localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken.trim());
+        window.localStorage.setItem(REFRESH_TOKEN_KEY, (refreshToken as string).trim());
       } else {
         window.localStorage.removeItem(REFRESH_TOKEN_KEY);
       }
-      const saved = window.localStorage.getItem(ACCESS_TOKEN_KEY) === accessToken.trim();
+      const saved = window.localStorage.getItem(ACCESS_TOKEN_KEY) === (accessToken as string).trim();
       if (!saved) clearPersistedTokens();
       return saved;
     } catch {
@@ -191,4 +205,8 @@ export const tokenService = {
       // Storage can be unavailable in restricted browser contexts.
     }
   },
+
+  clearAll(): void {
+    this.clearTokens();
+  }
 };

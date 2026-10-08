@@ -1,78 +1,97 @@
-const LOGIN_ATTEMPTS_KEY = 'loginAttempts';
-const LOCK_UNTIL_KEY = 'lockUntil';
-const LOCK_DURATION_MS = 15 * 60 * 1000;
-
 export const MAX_LOGIN_ATTEMPTS = 5;
+export const LOCK_DURATION_MS = 15 * 60 * 1000;
 
-export interface LoginLockStatus {
-  isLocked: boolean;
-  attempts: number;
-  remainingSeconds: number;
-}
-
-const readNumber = (key: string): number => {
-  try {
-    const value = Number.parseInt(window.localStorage.getItem(key) ?? '', 10);
-    return Number.isFinite(value) && value >= 0 ? value : 0;
-  } catch {
-    return 0;
-  }
-};
-
-const removeLoginState = (): void => {
-  try {
-    window.localStorage.removeItem(LOGIN_ATTEMPTS_KEY);
-    window.localStorage.removeItem(LOCK_UNTIL_KEY);
-  } catch {
-    // Storage can be unavailable in restricted browser contexts.
-  }
-};
-
-export const getLockStatus = (): LoginLockStatus => {
-  const attempts = readNumber(LOGIN_ATTEMPTS_KEY);
-  const lockUntil = readNumber(LOCK_UNTIL_KEY);
-  const remainingMs = lockUntil - Date.now();
-
-  if (lockUntil > 0 && remainingMs <= 0) {
-    removeLoginState();
-    return { isLocked: false, attempts: 0, remainingSeconds: 0 };
-  }
+const createFallbackStorage = (): Storage => {
+  const store = new Map<string, string>();
 
   return {
-    isLocked: remainingMs > 0,
-    attempts,
-    remainingSeconds: remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0,
+    getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
+    setItem: (key: string, value: string) => {
+      store.set(key, value);
+    },
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+    clear: () => {
+      store.clear();
+    },
+    key: (index: number) => Array.from(store.keys())[index] ?? null,
+    get length() {
+      return store.size;
+    },
   };
 };
 
-export const registerFailedLoginAttempt = (): LoginLockStatus => {
-  const attempts = readNumber(LOGIN_ATTEMPTS_KEY) + 1;
-
-  try {
-    window.localStorage.setItem(LOGIN_ATTEMPTS_KEY, attempts.toString());
-    if (attempts >= MAX_LOGIN_ATTEMPTS) {
-      window.localStorage.setItem(LOCK_UNTIL_KEY, (Date.now() + LOCK_DURATION_MS).toString());
-    }
-  } catch {
-    // Lockout tracking is best-effort; authentication is enforced by the backend.
+const getStorage = (): Storage => {
+  const storage = globalThis.localStorage;
+  if (storage) {
+    return storage;
   }
 
-  return getLockStatus();
+  return createFallbackStorage();
+};
+
+export const calculateLockRemainingSeconds = (lockUntil: number): number => {
+  const remainingMs = lockUntil - Date.now();
+  return remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
+};
+
+export const getLockStatus = (): {
+  isLocked: boolean;
+  remainingSeconds: number;
+} => {
+  const storage = getStorage();
+  const lockUntilValue = storage.getItem("lockUntil");
+
+  if (!lockUntilValue) {
+    return { isLocked: false, remainingSeconds: 0 };
+  }
+
+  const lockUntil = Number(lockUntilValue);
+  if (Number.isNaN(lockUntil)) {
+    storage.removeItem("lockUntil");
+    storage.removeItem("loginAttempts");
+    return { isLocked: false, remainingSeconds: 0 };
+  }
+
+  const remainingSeconds = calculateLockRemainingSeconds(lockUntil);
+  if (remainingSeconds <= 0) {
+    storage.removeItem("lockUntil");
+    storage.removeItem("loginAttempts");
+    return { isLocked: false, remainingSeconds: 0 };
+  }
+
+  return { isLocked: true, remainingSeconds };
+};
+
+export const registerFailedLoginAttempt = (): {
+  isLocked: boolean;
+  remainingSeconds: number;
+} => {
+  const storage = getStorage();
+  const currentAttempts =
+    Number.parseInt(storage.getItem("loginAttempts") ?? "0", 10) || 0;
+  const nextAttempts = currentAttempts + 1;
+
+  storage.setItem("loginAttempts", String(nextAttempts));
+
+  if (nextAttempts >= MAX_LOGIN_ATTEMPTS) {
+    const lockUntil = Date.now() + LOCK_DURATION_MS;
+    storage.setItem("lockUntil", String(lockUntil));
+    return {
+      isLocked: true,
+      remainingSeconds: calculateLockRemainingSeconds(lockUntil),
+    };
+  }
+
+  return { isLocked: false, remainingSeconds: 0 };
 };
 
 export const clearSuccessfulLoginState = (): void => {
-  removeLoginState();
+  const storage = getStorage();
+  storage.removeItem("loginAttempts");
+  storage.removeItem("lockUntil");
 };
 
-export const getGenericLoginErrorMessage = (error?: unknown): string => {
-  if (
-    typeof error === 'object'
-    && error !== null
-    && 'code' in error
-    && error.code === 'ECONNABORTED'
-  ) {
-    return 'Máy chủ phản hồi quá thời gian chờ. Vui lòng kiểm tra Backend rồi thử lại.';
-  }
-
-  return 'Thông tin đăng nhập không chính xác hoặc hệ thống đang gặp sự cố. Vui lòng thử lại.';
-};
+export const getGenericLoginErrorMessage = (): string =>
+  "Email hoặc mật khẩu không chính xác.";
