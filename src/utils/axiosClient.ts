@@ -11,7 +11,6 @@ type RetryRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 const normalizeApiBaseUrl = (baseUrl?: string): string => {
   const trimmed = (baseUrl ?? '').trim().replace(/\/+$/, '');
   if (!trimmed) return 'http://localhost:8080/api/v1';
-
   if (/\/api\/v1(?:\/v1)+$/i.test(trimmed)) {
     return trimmed.replace(/(?:\/v1)+$/i, '/v1');
   }
@@ -73,6 +72,7 @@ const processQueue = (error: unknown | null, token?: string): void => {
 const redirectToLogin = (): void => {
   tokenService.clearAll();
   if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+    window.alert('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!');
     window.location.href = '/login';
   }
 };
