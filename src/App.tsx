@@ -1,28 +1,40 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/Login/LoginPage';
-import axiosClient from './utils/axiosClient';
+import ForgotPasswordPage from "./pages/ForgotPassword/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPassword/ResetPasswordPage";
+import ChangePasswordPage from "./pages/ChangePassword/ChangePasswordPage";
+import AccountListPage from "./pages/AccountList/AccountListPage";
+import { getHealth, type HealthResponse } from './services/healthService';
 
 function HealthCheck() {
-  const [status, setStatus] = useState<any>(null);
+  const [status, setStatus] = useState<HealthResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Thay đổi endpoint '/health' thành endpoint thực tế trên backend của bạn
-    axiosClient.get('/health')
-      .then(response => {
-        setStatus({ status: 'connected', backend_data: response.data });
+    let isCurrent = true;
+
+    getHealth()
+      .then((response) => {
+        if (isCurrent) setStatus(response);
       })
-      .catch(err => {
-        setError(err.message || 'Lỗi kết nối tới server/database');
+      .catch((requestError: unknown) => {
+        if (isCurrent) {
+          setError(requestError instanceof Error
+            ? requestError.message
+            : 'Lỗi kết nối tới server/database');
+        }
       });
+
+    return () => {
+      isCurrent = false;
+    };
   }, []);
 
   if (error) {
-    // Trả về JSON lỗi mô phỏng (HTTP Status 500 không thể set trực tiếp từ React client)
     return (
       <div style={{ fontFamily: 'monospace', padding: '20px', color: 'red' }}>
-        {JSON.stringify({ status: 'error', message: error, http_status: 500 }, null, 2)}
+        {JSON.stringify({ status: 'error', message: error }, null, 2)}
       </div>
     );
   }
@@ -33,7 +45,7 @@ function HealthCheck() {
 
   return (
     <div style={{ fontFamily: 'monospace', padding: '20px', color: 'green' }}>
-      {JSON.stringify({ ...status, http_status: 200 }, null, 2)}
+      {JSON.stringify({ status: 'connected', backend_data: status }, null, 2)}
     </div>
   );
 }
@@ -43,17 +55,43 @@ function App() {
     <Router>
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
-        
+
         <Route path="/login" element={<LoginPage />} />
         
         {/* Route phục vụ kiểm tra sức khỏe hệ thống (Ping/Health Check) */}
         <Route path="/health" element={<HealthCheck />} />
+        
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/change-password" element={<ChangePasswordPage />} />
+
+        {/* User Story S1-08: Quản lý danh sách tài khoản nội bộ (TKNHTTDNB1-142) */}
+        <Route path="/users" element={<AccountListPage />} />
+        <Route path="/admin/users" element={<AccountListPage />} />
 
         {/* Các route tương lai sau khi đăng nhập thành công */}
-        <Route path="/admin/dashboard" element={<main className="p-8 text-2xl font-bold">Admin Dashboard</main>} />
-        <Route path="/hr/dashboard" element={<main className="p-8 text-2xl font-bold">HR Dashboard</main>} />
-        <Route path="/interviewer/dashboard" element={<main className="p-8 text-2xl font-bold">Interviewer Dashboard</main>} />
-        <Route path="/dashboard" element={<main className="p-8 text-2xl font-bold">Trang chủ</main>} />
+        <Route
+          path="/admin/dashboard"
+          element={
+            <main className="p-8 text-2xl font-bold">Admin Dashboard</main>
+          }
+        />
+        <Route
+          path="/hr/dashboard"
+          element={<main className="p-8 text-2xl font-bold">HR Dashboard</main>}
+        />
+        <Route
+          path="/interviewer/dashboard"
+          element={
+            <main className="p-8 text-2xl font-bold">
+              Interviewer Dashboard
+            </main>
+          }
+        />
+        <Route
+          path="/dashboard"
+          element={<main className="p-8 text-2xl font-bold">Trang chủ</main>}
+        />
       </Routes>
     </Router>
   );
