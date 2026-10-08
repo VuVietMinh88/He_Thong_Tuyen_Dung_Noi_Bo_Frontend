@@ -9,7 +9,8 @@ export const normalizeRole = (value?: string | null): string =>
   (value ?? "")
     .trim()
     .replace(/[-_\s]+/g, "_")
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/^role_/, "");
 
 export const canAccessMenu = (
   allowedRoles: string[],

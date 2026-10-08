@@ -1,8 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { authService } from "../../services/auth.service";
-
-const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
+import { isValidPassword } from "../../utils/passwordValidation";
 
 export const ResetPasswordForm: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -27,8 +26,10 @@ export const ResetPasswordForm: React.FC = () => {
       return false;
     }
 
-    if (!PASSWORD_REGEX.test(newPassword)) {
-      setPasswordError("Mật khẩu mới tối thiểu 8 ký tự, phải có chữ và số");
+    if (!isValidPassword(newPassword)) {
+      setPasswordError(
+        "Mật khẩu mới phải có tối thiểu 8 ký tự, tối đa 72 byte UTF-8, có chữ và số.",
+      );
       return false;
     }
 
@@ -79,8 +80,14 @@ export const ResetPasswordForm: React.FC = () => {
       }
 
       if (message === "PASSWORD_INVALID") {
+        const fieldMessage =
+          error instanceof Error && "fieldMessage" in error
+            ? (error as Error & { fieldMessage?: string }).fieldMessage
+            : undefined;
+
         setSubmitError(
-          "Mật khẩu mới không đáp ứng yêu cầu bảo mật của hệ thống.",
+          fieldMessage ??
+            "Mật khẩu mới không đáp ứng yêu cầu bảo mật của hệ thống.",
         );
         return;
       }

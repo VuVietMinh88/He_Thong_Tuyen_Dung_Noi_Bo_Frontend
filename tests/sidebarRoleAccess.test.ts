@@ -12,10 +12,12 @@ describe("sidebar role access", () => {
     expect(normalizeRole("HR_MANAGER")).toBe("hr_manager");
     expect(normalizeRole("hr_manager")).toBe("hr_manager");
     expect(normalizeRole("  hr_manager  ")).toBe("hr_manager");
+    expect(normalizeRole("ROLE_HR_MANAGER")).toBe("hr_manager");
   });
 
   it("checks menu access using backend roles array", () => {
     expect(canAccessMenu([ROLES.ADMIN], ROLES.ADMIN)).toBe(true);
+    expect(canAccessMenu([ROLES.ADMIN], "ROLE_ADMIN")).toBe(true);
     expect(canAccessMenu([ROLES.ADMIN], ROLES.HR_MANAGER)).toBe(false);
     expect(
       canAccessMenu([ROLES.RECRUITER, ROLES.HR_MANAGER], ROLES.RECRUITER),

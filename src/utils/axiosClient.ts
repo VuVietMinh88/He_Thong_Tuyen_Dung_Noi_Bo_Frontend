@@ -1,134 +1,156 @@
-import axios, { type InternalAxiosRequestConfig, type AxiosResponse, type AxiosError } from 'axios';
+import axios, {
+  type AxiosError,
+  type AxiosResponse,
+  type InternalAxiosRequestConfig,
+} from 'axios';
+import type { LoginResponse } from '../types/auth';
 import { tokenService } from '../services/token.service';
 
-/**
- * Cấu hình axios client cơ bản để dùng chung cho toàn bộ dự án.
- */
+type RetryRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
+
+const normalizeApiBaseUrl = (baseUrl?: string): string => {
+  const trimmed = (baseUrl ?? '').trim().replace(/\/+$/, '');
+  if (!trimmed) return 'http://localhost:8080/api/v1';
+  if (/\/api\/v1(?:\/v1)+$/i.test(trimmed)) {
+    return trimmed.replace(/(?:\/v1)+$/i, '/v1');
+  }
+  if (/\/api\/v1$/i.test(trimmed)) return trimmed;
+  if (/\/api$/i.test(trimmed)) return `${trimmed}/v1`;
+  return /\/v1$/i.test(trimmed) ? trimmed : `${trimmed}/api/v1`;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((role) => typeof role === 'string' && role.length > 0);
+
+const isTokenResponse = (value: unknown): value is LoginResponse => {
+  if (!isRecord(value) || !isRecord(value.user)) return false;
+  const { user } = value;
+  return typeof value.accessToken === 'string'
+    && value.accessToken.trim().length > 0
+    && value.accessToken.trim().toLowerCase() !== 'undefined'
+    && typeof value.refreshToken === 'string'
+    && /^[A-Za-z0-9_-]{43}$/.test(value.refreshToken)
+    && value.tokenType === 'Bearer'
+    && typeof value.expiresIn === 'number'
+    && value.expiresIn > 0
+    && typeof value.refreshExpiresAt === 'string'
+    && !Number.isNaN(Date.parse(value.refreshExpiresAt))
+    && typeof user.id === 'string'
+    && typeof user.email === 'string'
+    && typeof user.fullName === 'string'
+    && isStringArray(user.roles)
+    && user.roles.length > 0;
+};
+
+const isAuthRequest = (url?: string): boolean =>
+  /\/auth\/(?:login|refresh)\/?$/i.test(url ?? '');
+
 const axiosClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  timeout: 15000, // Tăng timeout cho các tác vụ lâu như tải file, lưu form
+  baseURL: normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL),
+  headers: { 'Content-Type': 'application/json' },
+  timeout: 15000,
 });
 
-// Biến cờ (flag) kiểm soát trạng thái đang làm mới token (Refresh Token)
 let isRefreshing = false;
+let failedQueue: Array<{
+  resolve: (token: string) => void;
+  reject: (reason: unknown) => void;
+}> = [];
 
-// Hàng đợi lưu các Request bị lỗi 401 khi đang đợi refresh token
-// Việc này giúp tránh reload trang và không mất dữ liệu form (AC 3)
-let failedQueue: Array<{ resolve: (value?: unknown) => void; reject: (reason?: any) => void }> = [];
-
-const processQueue = (error: AxiosError | null, token: string | null = null) => {
-  failedQueue.forEach(prom => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token);
-    }
+const processQueue = (error: unknown | null, token?: string): void => {
+  failedQueue.forEach((request) => {
+    if (error !== null) request.reject(error);
+    else if (token) request.resolve(token);
+    else request.reject(new Error('Token refresh did not return an access token.'));
   });
   failedQueue = [];
 };
 
-// AC 2: Request Interceptor - Tự động đính kèm Access Token vào Header
+const redirectToLogin = (): void => {
+  tokenService.clearAll();
+  if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+    window.alert('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!');
+    window.location.href = '/login';
+  }
+};
+
 axiosClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = tokenService.getAccessToken();
-    if (token && config.headers) {
-      config.headers.Authorization = `Bearer ${token}`;
+    tokenService.removeInvalidStoredTokens();
+    if (isAuthRequest(config.url)) {
+      config.headers.delete('Authorization');
+      return config;
     }
+
+    const accessToken = tokenService.getAccessToken();
+    if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
     return config;
   },
-  (error: unknown) => {
-    return Promise.reject(error);
-  }
+  (error: unknown) => Promise.reject(error),
 );
 
-// AC 2 & 3: Response Interceptor - Xử lý thông minh khi hết hạn phiên (401)
 axiosClient.interceptors.response.use(
-  (response: AxiosResponse) => {
-    return response;
-  },
+  (response: AxiosResponse) => response,
   async (error: AxiosError) => {
-    // Mở rộng kiểu để hỗ trợ cờ retry tự tạo
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-
-    // Nếu lỗi là 401 (Unauthorized) và request này chưa từng được thử lại
-    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
-      
-      // Bỏ qua nếu lỗi 401 đến từ chính api đăng nhập hoặc api refresh (để tránh vòng lặp vô hạn)
-      if (originalRequest.url?.includes('/auth/login') || originalRequest.url?.includes('/auth/refresh')) {
-        return Promise.reject(error);
-      }
-
-      // Nếu đang trong quá trình refresh token, đưa request hiện tại vào hàng chờ (Chống mất dữ liệu form)
-      if (isRefreshing) {
-        return new Promise(function(resolve, reject) {
-          failedQueue.push({ resolve, reject });
-        }).then(token => {
-          if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-          }
-          return axiosClient(originalRequest);
-        }).catch(err => {
-          return Promise.reject(err);
-        });
-      }
-
-      // Bật cờ retry và cờ refreshing
-      originalRequest._retry = true;
-      isRefreshing = true;
-
-      const refreshToken = tokenService.getRefreshToken();
-      
-      // Nếu không có refresh token (Chưa từng lưu), đẩy về login
-      if (!refreshToken) {
-        tokenService.clearAll();
-        window.location.href = '/login';
-        return Promise.reject(error);
-      }
-
-      try {
-        // Gửi request lấy token mới (Sử dụng axios thuần để không chạy lại interceptor của axiosClient)
-        const refreshResponse = await axios.post(`${axiosClient.defaults.baseURL}/auth/refresh`, {
-          refreshToken
-        });
-
-        const newAccessToken = refreshResponse.data.accessToken;
-        const newRefreshToken = refreshResponse.data.refreshToken; // Đề phòng Backend cấp đổi refresh token mới
-
-        // Cập nhật lại kho lưu trữ (AC 1)
-        tokenService.setAccessToken(newAccessToken);
-        if (newRefreshToken) {
-          tokenService.setRefreshToken(newRefreshToken);
-        }
-
-        // Cập nhật Authorization Header cho request gốc
-        if (originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-        }
-        
-        // Giải phóng hàng đợi: Gọi lại toàn bộ các request bị treo trước đó với Token mới
-        processQueue(null, newAccessToken);
-        
-        // Gửi lại request gốc bị lỗi
-        return axiosClient(originalRequest);
-        
-      } catch (refreshError: any) {
-        // Nếu Refresh Token cũng hết hạn hoặc bị thu hồi (Lỗi từ khối catch)
-        processQueue(refreshError, null);
-        tokenService.clearAll();
-        // Điều hướng mượt mà về trang đăng nhập mà không reload lại tài nguyên cục bộ
-        window.location.href = '/login';
-        return Promise.reject(refreshError);
-      } finally {
-        // Luôn trả cờ refreshing về false sau khi xong
-        isRefreshing = false;
-      }
+    const originalRequest = error.config as RetryRequestConfig | undefined;
+    if (
+      error.response?.status !== 401
+      || !originalRequest
+      || originalRequest._retry
+      || isAuthRequest(originalRequest.url)
+    ) {
+      return Promise.reject(error);
     }
 
-    return Promise.reject(error);
-  }
+    if (isRefreshing) {
+      return new Promise<string>((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      }).then((accessToken) => {
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        return axiosClient(originalRequest);
+      });
+    }
+
+    originalRequest._retry = true;
+    isRefreshing = true;
+    const refreshToken = tokenService.getRefreshToken();
+    if (!refreshToken) {
+      isRefreshing = false;
+      processQueue(error);
+      redirectToLogin();
+      return Promise.reject(error);
+    }
+
+    try {
+      const refreshResponse = await axios.post<unknown>(
+        `${axiosClient.defaults.baseURL}/auth/refresh`,
+        { refreshToken },
+        { headers: { 'Content-Type': 'application/json' }, timeout: 15000 },
+      );
+      if (!isTokenResponse(refreshResponse.data)) {
+        throw new Error('Backend trả về dữ liệu refresh token không đúng hợp đồng API.');
+      }
+
+      const { accessToken, refreshToken: rotatedRefreshToken, user } = refreshResponse.data;
+      if (!tokenService.saveTokens(accessToken, rotatedRefreshToken) || !tokenService.setUserData(user)) {
+        throw new Error('Không thể lưu phiên đăng nhập mới.');
+      }
+
+      isRefreshing = false;
+      processQueue(null, accessToken);
+      originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+      return await axiosClient(originalRequest);
+    } catch (refreshError: unknown) {
+      processQueue(refreshError);
+      redirectToLogin();
+      return Promise.reject(refreshError);
+    } finally {
+      isRefreshing = false;
+    }
+  },
 );
 
 export default axiosClient;

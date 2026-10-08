@@ -1,76 +1,54 @@
-import React, { useState } from "react";
-import { NavLink } from "react-router-dom";
-import { ROLES } from "../../constants/roles";
-import { tokenService } from "../../services/token.service";
+import { useState, type FC } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { ROLES, ROLE_NAMES, type Role } from '../../constants/roles';
+import { authService } from '../../services/auth.service';
+import { tokenService } from '../../services/token.service';
 import {
   getVisibleMenuItems,
-  normalizeRole,
   type SidebarMenuItem,
-} from "../../utils/sidebarAccess";
+} from '../../utils/sidebarAccess';
 
 const menuItems: SidebarMenuItem[] = [
   {
-    label: "Tổng quan",
-    to: "/dashboard",
-    icon: "⌂",
-    roles: [
-      ROLES.ADMIN,
-      ROLES.HR_MANAGER,
-      ROLES.RECRUITER,
-      ROLES.HIRING_MANAGER,
-      ROLES.INTERVIEWER,
-      ROLES.APPROVER,
-    ],
+    label: 'Bảng điều khiển',
+    to: '/dashboard',
+    icon: '📊',
+    roles: Object.values(ROLES),
   },
   {
-    label: "Quản lý ứng viên",
-    to: "/candidates",
-    icon: "👥",
-    roles: [
-      ROLES.ADMIN,
-      ROLES.HR_MANAGER,
-      ROLES.RECRUITER,
-      ROLES.HIRING_MANAGER,
-    ],
-  },
-  {
-    label: "Lịch phỏng vấn",
-    to: "/interviews",
-    icon: "📅",
-    roles: [
-      ROLES.ADMIN,
-      ROLES.HR_MANAGER,
-      ROLES.INTERVIEWER,
-      ROLES.HIRING_MANAGER,
-    ],
-  },
-  {
-    label: "Pipeline tuyển dụng",
-    to: "/pipeline",
-    icon: "📈",
-    roles: [
-      ROLES.ADMIN,
-      ROLES.HR_MANAGER,
-      ROLES.RECRUITER,
-      ROLES.HIRING_MANAGER,
-    ],
-  },
-  {
-    label: "Báo cáo",
-    to: "/reports",
-    icon: "📊",
-    roles: [ROLES.ADMIN, ROLES.HR_MANAGER],
-  },
-  {
-    label: "Quản trị người dùng",
-    to: "/users",
-    icon: "🛡️",
+    label: 'Quản lý tài khoản',
+    to: '/users',
+    icon: '👥',
     roles: [ROLES.ADMIN],
   },
   {
-    label: "Đổi mật khẩu",
-    to: "/change-password",
-    icon: "🔐",
+    label: 'Đăng tuyển dụng',
+    to: '/jobs',
+    icon: '📝',
+    roles: [ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER],
+  },
+  {
+    label: 'Quản lý CV / Ứng viên',
+    to: '/candidates',
+    icon: '📄',
+    roles: [ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER, ROLES.HIRING_MANAGER],
+  },
+  {
+    label: 'Lịch phỏng vấn',
+    to: '/interviews',
+    icon: '📅',
+    roles: [
+      ROLES.ADMIN,
+      ROLES.HR_MANAGER,
+      ROLES.RECRUITER,
+      ROLES.HIRING_MANAGER,
+      ROLES.INTERVIEWER,
+    ],
+  },
+  {
+    label: 'Hồ sơ cá nhân',
+    to: '/profile',
+    icon: '👤',
     roles: [
       ROLES.ADMIN,
       ROLES.HR_MANAGER,
@@ -82,122 +60,116 @@ const menuItems: SidebarMenuItem[] = [
   },
 ];
 
-const getDisplayName = (
-  roles?: string[] | null,
-  email?: string | null,
-): string => {
-  if (email) {
-    const localPart = email.split("@")[0]?.trim();
-    if (localPart) {
-      return localPart;
-    }
-  }
+const isRole = (role: string): role is Role => Object.hasOwn(ROLE_NAMES, role);
 
-  const firstRole = roles?.[0];
-  switch (normalizeRole(firstRole)) {
-    case normalizeRole(ROLES.ADMIN):
-      return "Quản trị viên";
-    case normalizeRole(ROLES.HR_MANAGER):
-      return "HR Manager";
-    case normalizeRole(ROLES.RECRUITER):
-      return "Recruiter";
-    case normalizeRole(ROLES.HIRING_MANAGER):
-      return "Hiring Manager";
-    case normalizeRole(ROLES.INTERVIEWER):
-      return "Interviewer";
-    case normalizeRole(ROLES.APPROVER):
-      return "Approver";
-    default:
-      return "Nhân sự";
-  }
-};
-
-export const Sidebar: React.FC = () => {
+const Sidebar: FC = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const navigate = useNavigate();
   const user = tokenService.getUserData();
-  const userRoles =
-    user?.roles && user.roles.length > 0
-      ? user.roles
-      : user?.role
-        ? [user.role]
-        : [];
+  const userRoles = user?.roles ?? [];
   const visibleMenu = getVisibleMenuItems(menuItems, userRoles);
-  const displayName = getDisplayName(userRoles, user?.email);
-  const roleLabel =
-    userRoles.length > 0
-      ? userRoles.map((role) => role.toUpperCase()).join(", ")
-      : "USER";
+  const displayName = user?.fullName || user?.email || 'Người dùng';
+  const roleLabel = userRoles.length > 0
+    ? userRoles.map((role) => isRole(role) ? ROLE_NAMES[role] : role).join(', ')
+    : 'Khách';
+
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+    } catch (error: unknown) {
+      console.error('Logout API failed', error);
+    } finally {
+      tokenService.clearAll();
+      navigate('/login');
+    }
+  };
 
   return (
     <>
       <div className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur-sm md:hidden">
         <div className="flex items-center justify-between px-4 py-3">
           <div>
-            <p className="text-sm font-semibold text-slate-800">
-              Smart Recruitment
-            </p>
+            <p className="text-sm font-semibold text-slate-800">Smart Recruitment</p>
             <p className="text-[11px] text-slate-500">{displayName}</p>
           </div>
           <button
             type="button"
-            onClick={() => setIsOpen((prev) => !prev)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-lg text-slate-700"
+            onClick={() => setIsOpen((open) => !open)}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-lg text-slate-700 hover:bg-slate-100"
             aria-label="Toggle menu"
+            aria-expanded={isOpen}
           >
             ☰
           </button>
         </div>
       </div>
 
+      {isOpen && (
+        <button
+          type="button"
+          className="fixed inset-0 z-30 bg-black/50 md:hidden"
+          aria-label="Close menu"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+
       <aside
         className={[
-          "h-full w-full border-r border-slate-200 bg-slate-50 transition-all duration-200",
-          isOpen ? "block" : "hidden md:block",
-          "md:w-72 md:min-w-[18rem]",
-        ].join(" ")}
+          'fixed left-0 top-0 z-40 flex h-screen w-72 flex-col bg-slate-900 text-white shadow-xl transition-transform',
+          isOpen ? 'translate-x-0' : '-translate-x-full',
+          'md:static md:translate-x-0 md:flex-shrink-0',
+        ].join(' ')}
       >
-        <div className="flex h-full flex-col overflow-hidden">
-          <div className="border-b border-slate-200 bg-white px-4 py-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-lg font-bold text-white shadow-sm">
-                {displayName.charAt(0).toUpperCase()}
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-slate-800">
-                  {displayName}
-                </p>
-                <p className="truncate text-xs text-slate-500">{roleLabel}</p>
-              </div>
+        <div className="flex h-16 shrink-0 items-center justify-center border-b border-slate-800 bg-slate-950 px-4">
+          <span className="truncate bg-gradient-to-r from-blue-400 to-teal-300 bg-clip-text text-xl font-bold text-transparent">
+            Smart Recruitment
+          </span>
+        </div>
+
+        <div className="shrink-0 border-b border-slate-800 bg-slate-800/50 p-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-lg font-bold">
+              {displayName.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-slate-200">{displayName}</p>
+              <p className="mt-0.5 truncate text-xs font-semibold uppercase tracking-wider text-blue-400">
+                {roleLabel}
+              </p>
             </div>
           </div>
+        </div>
 
-          <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-            {visibleMenu.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-4 text-sm text-slate-500">
-                Không có menu nào được cấp quyền.
-              </div>
-            ) : (
-              visibleMenu.map((item) => (
+        <nav className="custom-scrollbar flex-1 overflow-y-auto py-4">
+          <ul className="space-y-1 px-3">
+            {visibleMenu.map((item) => (
+              <li key={item.to}>
                 <NavLink
-                  key={item.to}
                   to={item.to}
                   onClick={() => setIsOpen(false)}
-                  className={({ isActive }) =>
-                    [
-                      "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all",
-                      "truncate",
-                      isActive
-                        ? "bg-indigo-600 text-white shadow-sm"
-                        : "text-slate-700 hover:bg-white hover:text-indigo-600",
-                    ].join(" ")
-                  }
+                  className={({ isActive }) => [
+                    'flex items-center rounded-lg px-4 py-3 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'text-slate-400 hover:bg-slate-800 hover:text-white',
+                  ].join(' ')}
                 >
-                  <span className="text-base">{item.icon}</span>
-                  <span className="truncate">{item.label}</span>
+                  <span className="mr-3 text-xl">{item.icon}</span>
+                  <span>{item.label}</span>
                 </NavLink>
-              ))
-            )}
-          </nav>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        <div className="shrink-0 border-t border-slate-800 bg-slate-950 p-4">
+          <button
+            type="button"
+            className="w-full rounded-lg bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-red-600 hover:text-white"
+            onClick={handleLogout}
+          >
+            Đăng xuất
+          </button>
         </div>
       </aside>
     </>
