@@ -28,7 +28,7 @@ export const ResetPasswordForm: React.FC = () => {
 
     if (!isValidPassword(newPassword)) {
       setPasswordError(
-        "Mật khẩu mới phải có tối thiểu 8 ký tự, tối đa 72 ký tự, có chữ và số.",
+        "Mật khẩu mới phải có tối thiểu 8 ký tự, tối đa 72 byte UTF-8, có chữ và số.",
       );
       return false;
     }

@@ -1,19 +1,15 @@
-import { useEffect, useState, type ReactNode } from "react";
-import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  Navigate,
-} from "react-router-dom";
-import ProtectedRoute from "./components/routes/ProtectedRoute";
-import Sidebar from "./components/layout/Sidebar";
-import LoginPage from "./pages/Login/LoginPage";
-import ForgotPasswordPage from "./pages/ForgotPassword/ForgotPasswordPage";
-import ResetPasswordPage from "./pages/ResetPassword/ResetPasswordPage";
-import ChangePasswordPage from "./pages/ChangePassword/ChangePasswordPage";
-import UnauthorizedPage from "./pages/error/UnauthorizedPage";
-import axiosClient from "./utils/axiosClient";
-import { ROLES, type Role } from "./constants/roles";
+import { useEffect, useState, type ReactNode } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import LoginPage from './pages/Login/LoginPage';
+import ForgotPasswordPage from './pages/ForgotPassword/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPassword/ResetPasswordPage';
+import ChangePasswordPage from './pages/ChangePassword/ChangePasswordPage';
+import AccountListPage from './pages/AccountList/AccountListPage';
+import UnauthorizedPage from './pages/error/UnauthorizedPage';
+import ProtectedRoute from './components/routes/ProtectedRoute';
+import Sidebar from './components/layout/Sidebar';
+import { getHealth, type HealthResponse } from './services/healthService';
+import { ROLES, type Role } from './constants/roles';
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -29,50 +25,50 @@ const MainLayout = ({ children }: { children: ReactNode }) => (
 );
 
 function HealthCheck() {
-  const [status, setStatus] = useState<{
-    status: string;
-    backend_data: unknown;
-  } | null>(null);
+  const [status, setStatus] = useState<HealthResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    axiosClient
-      .get("/health")
+    let isCurrent = true;
+
+    getHealth()
       .then((response) => {
-        setStatus({ status: "connected", backend_data: response.data });
+        if (isCurrent) setStatus(response);
       })
       .catch((requestError: unknown) => {
-        setError(
-          requestError instanceof Error
+        if (isCurrent) {
+          setError(requestError instanceof Error
             ? requestError.message
-            : "Lỗi kết nối tới server/database",
-        );
+            : 'Lỗi kết nối tới server/database');
+        }
       });
+
+    return () => {
+      isCurrent = false;
+    };
   }, []);
 
   if (error) {
     return (
-      <div style={{ fontFamily: "monospace", padding: "20px", color: "red" }}>
-        {JSON.stringify({ status: "error", message: error, http_status: 500 }, null, 2)}
+      <div style={{ fontFamily: 'monospace', padding: '20px', color: 'red' }}>
+        {JSON.stringify({ status: 'error', message: error }, null, 2)}
       </div>
     );
   }
 
   if (!status) {
-    return <div style={{ fontFamily: "monospace", padding: "20px" }}>Checking connection...</div>;
+    return <div style={{ fontFamily: 'monospace', padding: '20px' }}>Checking connection...</div>;
   }
 
   return (
-    <div style={{ fontFamily: "monospace", padding: "20px", color: "green" }}>
-      {JSON.stringify({ ...status, http_status: 200 }, null, 2)}
+    <div style={{ fontFamily: 'monospace', padding: '20px', color: 'green' }}>
+      {JSON.stringify({ status: 'connected', backend_data: status }, null, 2)}
     </div>
   );
 }
 
 const PlaceholderPage = ({ title }: { title: string }) => (
-  <MainLayout>
-    <div className="rounded-lg bg-white p-8 text-2xl font-bold">{title}</div>
-  </MainLayout>
+  <div className="rounded-lg bg-white p-8 text-2xl font-bold">{title}</div>
 );
 
 function App() {
@@ -81,26 +77,24 @@ function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/health" element={<HealthCheck />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
-        <Route path="/health" element={<HealthCheck />} />
 
         <Route element={<ProtectedRoute allowedRoles={ALL_ROLES} />}>
-          <Route path="/dashboard" element={<PlaceholderPage title="Bảng điều khiển chung" />} />
-          <Route path="/profile" element={<PlaceholderPage title="Hồ sơ cá nhân" />} />
+          <Route path="/dashboard" element={<MainLayout><PlaceholderPage title="Bảng điều khiển chung" /></MainLayout>} />
+          <Route path="/profile" element={<MainLayout><PlaceholderPage title="Hồ sơ cá nhân" /></MainLayout>} />
           <Route
             path="/change-password"
-            element={
-              <MainLayout>
-                <ChangePasswordPage />
-              </MainLayout>
-            }
+            element={<MainLayout><ChangePasswordPage /></MainLayout>}
           />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={[ROLES.ADMIN]} />}>
-          <Route path="/users" element={<PlaceholderPage title="Trang Quản lý Tài khoản (Chỉ Admin)" />} />
+          <Route path="/users" element={<AccountListPage />} />
+          <Route path="/admin/users" element={<AccountListPage />} />
+          <Route path="/admin/dashboard" element={<AccountListPage />} />
         </Route>
 
         <Route
@@ -110,22 +104,17 @@ function App() {
             />
           }
         >
-          <Route path="/jobs" element={<PlaceholderPage title="Đăng Tuyển Dụng" />} />
+          <Route path="/jobs" element={<MainLayout><PlaceholderPage title="Đăng Tuyển Dụng" /></MainLayout>} />
         </Route>
 
         <Route
           element={
             <ProtectedRoute
-              allowedRoles={[
-                ROLES.ADMIN,
-                ROLES.HR_MANAGER,
-                ROLES.RECRUITER,
-                ROLES.HIRING_MANAGER,
-              ]}
+              allowedRoles={[ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER, ROLES.HIRING_MANAGER]}
             />
           }
         >
-          <Route path="/candidates" element={<PlaceholderPage title="Quản lý CV / Ứng viên" />} />
+          <Route path="/candidates" element={<MainLayout><PlaceholderPage title="Quản lý CV / Ứng viên" /></MainLayout>} />
         </Route>
 
         <Route
@@ -141,7 +130,7 @@ function App() {
             />
           }
         >
-          <Route path="/interviews" element={<PlaceholderPage title="Lịch phỏng vấn" />} />
+          <Route path="/interviews" element={<MainLayout><PlaceholderPage title="Lịch phỏng vấn" /></MainLayout>} />
         </Route>
 
         <Route

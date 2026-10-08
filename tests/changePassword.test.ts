@@ -45,4 +45,14 @@ describe("change password API contract", () => {
     await expect(authService.logout()).resolves.toBeUndefined();
     expect(postSpy).toHaveBeenCalledWith("/auth/logout");
   });
+
+  it("does not report success when the change-password request cannot reach the backend", async () => {
+    vi.spyOn(axiosClient, "post").mockRejectedValue({
+      isAxiosError: true,
+      request: {},
+    });
+
+    await expect(authService.changePassword("Current123", "NewPass123"))
+      .rejects.toThrow("CHANGE_PASSWORD_REQUEST_FAILED");
+  });
 });
