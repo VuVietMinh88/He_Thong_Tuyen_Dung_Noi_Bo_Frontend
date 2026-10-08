@@ -11,21 +11,21 @@ export class InvalidPermissionsResponseError extends Error {
   }
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
 export const permissionService = {
   async getCurrentPermissions(): Promise<CurrentPermissions> {
     const response = await axiosClient.get<unknown>('/auth/permissions');
     const data: unknown = response.data;
     if (
-      typeof data !== 'object'
-      || data === null
-      || !('permissions' in data)
+      !isRecord(data)
       || !Array.isArray(data.permissions)
-      || !data.permissions.every(
-        (permission) => typeof permission === 'string' && permission.trim().length > 0,
-      )
+      || !data.permissions.every((permission) => typeof permission === 'string' && permission.length > 0)
     ) {
       throw new InvalidPermissionsResponseError();
     }
-    return { permissions: [...new Set(data.permissions)] };
+
+    return { permissions: data.permissions };
   },
 };

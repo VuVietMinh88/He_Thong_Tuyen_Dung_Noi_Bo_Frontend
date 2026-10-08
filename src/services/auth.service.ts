@@ -84,7 +84,7 @@ export const authService = {
         password,
       });
 
-      const data = response.data;
+      const data: unknown = response.data;
       const user = isRecord(data) ? data.user : undefined;
       if (
         !isRecord(data)
@@ -120,29 +120,19 @@ export const authService = {
         },
       };
     } catch (error) {
-      if (error instanceof InvalidLoginResponseError) {
-        throw error;
-      }
+      if (error instanceof InvalidLoginResponseError) throw error;
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
-
-        if (status === 401) {
-          throw new Error("INVALID_CREDENTIALS");
-        }
-
+        if (status === 401) throw new Error('INVALID_CREDENTIALS');
         if (status === 400) {
-          const errorBody = error.response?.data;
+          const errorBody: unknown = error.response?.data;
           const fieldErrors = isRecord(errorBody) ? parseFieldErrors(errorBody.fieldErrors) : {};
           throw new LoginValidationError(fieldErrors);
         }
-
-        if (status === 429) {
-          throw new Error("TOO_MANY_REQUESTS");
-        }
+        if (status === 429) throw new Error('TOO_MANY_REQUESTS');
         if (!error.response) throw new Error('NETWORK_ERROR');
       }
-
-      throw new Error("LOGIN_REQUEST_FAILED");
+      throw new Error('LOGIN_REQUEST_FAILED');
     }
   },
 
