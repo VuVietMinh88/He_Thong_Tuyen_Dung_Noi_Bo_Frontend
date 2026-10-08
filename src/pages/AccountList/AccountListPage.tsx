@@ -51,7 +51,10 @@ export const AccountListPage: React.FC = () => {
   const [isUnlockModalOpen, setIsUnlockModalOpen] = useState<boolean>(false);
 
   // Notification toast state
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<{
+    message: string;
+    type: 'success' | 'error';
+  } | null>(null);
 
   // Debounce search keyword to avoid flooding API requests while typing
   const debouncedSearchKeyword = useDebounce(
@@ -59,8 +62,8 @@ export const AccountListPage: React.FC = () => {
     SEARCH_DEBOUNCE_DELAY_MS
   );
 
-  const showNotification = (message: string) => {
-    setToastMessage(message);
+  const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ message, type });
     setTimeout(() => {
       setToastMessage(null);
     }, 3500);
@@ -170,7 +173,7 @@ export const AccountListPage: React.FC = () => {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Lỗi khi thực hiện khóa tài khoản.';
-      showNotification(message);
+      showNotification(message, 'error');
       throw error;
     }
   };
@@ -197,7 +200,7 @@ export const AccountListPage: React.FC = () => {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Lỗi khi mở khóa tài khoản.';
-      showNotification(message);
+      showNotification(message, 'error');
       throw error;
     }
   };
@@ -306,9 +309,16 @@ export const AccountListPage: React.FC = () => {
         <div className="p-6 space-y-6 max-w-7xl mx-auto">
           {/* Toast Notification */}
           {toastMessage && (
-            <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 shadow-sm transition-all animate-bounce-short">
-              <span>✓</span>
-              <span>{toastMessage}</span>
+            <div
+              role={toastMessage.type === 'error' ? 'alert' : 'status'}
+              className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium shadow-sm transition-all animate-bounce-short ${
+                toastMessage.type === 'error'
+                  ? 'border-rose-200 bg-rose-50 text-rose-800'
+                  : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              }`}
+            >
+              <span>{toastMessage.type === 'error' ? '⚠️' : '✓'}</span>
+              <span>{toastMessage.message}</span>
             </div>
           )}
 

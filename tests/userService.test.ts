@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AxiosError, AxiosHeaders } from 'axios';
 import { userService } from '../src/services/userService';
+import axiosClient from '../src/utils/axiosClient';
 
 const createLocalStorageMock = () => {
   const store = new Map<string, string>();
@@ -23,10 +25,13 @@ describe('userService API Service (TKNHTTDNB1-150)', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
   it('returns paginated mock results when backend endpoint is not reachable', async () => {
+    vi.spyOn(axiosClient, 'get').mockRejectedValueOnce(new AxiosError('Network Error'));
+
     const result = await userService.getUsers({
       search: 'An',
       page: 1,
@@ -73,5 +78,27 @@ describe('userService API Service (TKNHTTDNB1-150)', () => {
     expect(emptyResult.users.length).toBe(0);
     expect(emptyResult.totalItems).toBe(0);
     expect(emptyResult.totalPages).toBe(1);
+  });
+
+  it('does not report a lock as successful when the API is unavailable', async () => {
+    vi.spyOn(axiosClient, 'patch').mockRejectedValueOnce(new AxiosError('Network Error'));
+
+    await expect(userService.lockUser('ACC-002', 'Nhân sự nghỉ việc')).rejects.toThrow(
+      'Không thể kết nối Backend. Vui lòng kiểm tra mạng và thử lại.'
+    );
+  });
+
+  it('does not report an unlock as successful when the API returns 404', async () => {
+    const error = new AxiosError('Not Found');
+    error.response = {
+      status: 404,
+      statusText: 'Not Found',
+      headers: new AxiosHeaders(),
+      config: { headers: new AxiosHeaders() },
+      data: {},
+    };
+    vi.spyOn(axiosClient, 'patch').mockRejectedValueOnce(error);
+
+    await expect(userService.unlockUser('ACC-002')).rejects.toThrow('Not Found');
   });
 });
