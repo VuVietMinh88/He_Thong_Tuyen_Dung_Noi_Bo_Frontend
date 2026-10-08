@@ -6,8 +6,13 @@ import ForgotPasswordPage from './pages/ForgotPassword/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPassword/ResetPasswordPage';
 import ChangePasswordPage from './pages/ChangePassword/ChangePasswordPage';
 import AccountListPage from './pages/AccountList/AccountListPage';
+import ProfilePage from './pages/Profile/ProfilePage';
+import RecruitmentPage from './pages/Recruitment/RecruitmentPage';
+import RecruitmentAdminPage from './pages/Recruitment/RecruitmentAdminPage';
 import UnauthorizedPage from './pages/error/UnauthorizedPage';
 import ProtectedRoute from './components/routes/ProtectedRoute';
+import PermissionProvider from './components/routes/PermissionProvider';
+import SessionDraftRestorer from './components/routes/SessionDraftRestorer';
 import Sidebar from './components/layout/Sidebar';
 import { getHealth, type HealthResponse } from './services/healthService';
 import { ROLES, type Role } from './constants/roles';
@@ -69,14 +74,21 @@ function HealthCheck() {
 }
 
 const PlaceholderPage = ({ title }: { title: string }) => (
-  <div className="rounded-lg bg-white p-8 text-2xl font-bold">{title}</div>
+  <section className="rounded-lg bg-white p-8">
+    <h1 className="text-2xl font-bold">{title}</h1>
+    <p className="mt-3 text-sm text-slate-600">
+      Giao diện chức năng này chưa được tích hợp với API Backend.
+    </p>
+  </section>
 );
 
 function App() {
   return (
     <ToastProvider>
       <Router>
-        <Routes>
+        <PermissionProvider>
+          <SessionDraftRestorer />
+          <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/health" element={<HealthCheck />} />
@@ -86,33 +98,42 @@ function App() {
 
           <Route element={<ProtectedRoute allowedRoles={ALL_ROLES} />}>
             <Route path="/dashboard" element={<MainLayout><PlaceholderPage title="Bảng điều khiển chung" /></MainLayout>} />
-            <Route path="/profile" element={<MainLayout><PlaceholderPage title="Hồ sơ cá nhân" /></MainLayout>} />
-            <Route
-              path="/change-password"
-              element={<MainLayout><ChangePasswordPage /></MainLayout>}
-            />
+            <Route path="/admin/dashboard" element={<MainLayout><PlaceholderPage title="Bảng điều khiển quản trị" /></MainLayout>} />
           </Route>
 
-          <Route element={<ProtectedRoute allowedRoles={[ROLES.ADMIN]} />}>
+          <Route element={<ProtectedRoute requiredPermissions={['SELF_PROFILE_READ']} />}>
+            <Route path="/profile" element={<MainLayout><ProfilePage /></MainLayout>} />
+          </Route>
+          <Route element={<ProtectedRoute requiredPermissions={['SELF_SECURITY_WRITE']} />}>
+            <Route path="/change-password" element={<MainLayout><ChangePasswordPage /></MainLayout>} />
+          </Route>
+
+          <Route element={<ProtectedRoute requiredPermissions={['USER_ADMIN_READ_ALL']} />}>
             <Route path="/users" element={<AccountListPage />} />
             <Route path="/admin/users" element={<AccountListPage />} />
-            <Route path="/admin/dashboard" element={<AccountListPage />} />
           </Route>
 
           <Route
             element={
               <ProtectedRoute
-                allowedRoles={[ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER]}
+                requiredPermissions={['REQUISITIONS_READ_ALL', 'REQUISITIONS_READ_SCOPED']}
               />
             }
           >
-            <Route path="/jobs" element={<MainLayout><PlaceholderPage title="Đăng tuyển dụng" /></MainLayout>} />
+            <Route path="/jobs" element={<MainLayout><RecruitmentPage /></MainLayout>} />
+          </Route>
+
+          <Route element={<ProtectedRoute requiredPermissions={['ORGANIZATION_READ_ALL']} />}>
+            <Route path="/settings/positions" element={<MainLayout><RecruitmentPage initialTab="positions" /></MainLayout>} />
+            <Route path="/settings/competency-frameworks" element={<MainLayout><RecruitmentAdminPage mode="frameworks" /></MainLayout>} />
+            <Route path="/settings/interview-questions" element={<MainLayout><RecruitmentAdminPage mode="questions" /></MainLayout>} />
+            <Route path="/settings/recruitment-catalogs" element={<MainLayout><RecruitmentAdminPage mode="catalogs" /></MainLayout>} />
           </Route>
 
           <Route
             element={
               <ProtectedRoute
-                allowedRoles={[ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER, ROLES.HIRING_MANAGER]}
+                requiredPermissions={['CANDIDATES_READ_ALL', 'CANDIDATES_READ_SCOPED']}
               />
             }
           >
@@ -122,13 +143,7 @@ function App() {
           <Route
             element={
               <ProtectedRoute
-                allowedRoles={[
-                  ROLES.ADMIN,
-                  ROLES.HR_MANAGER,
-                  ROLES.RECRUITER,
-                  ROLES.HIRING_MANAGER,
-                  ROLES.INTERVIEWER,
-                ]}
+                requiredPermissions={['INTERVIEWS_READ_ALL', 'INTERVIEWS_READ_SCOPED']}
               />
             }
           >
@@ -143,7 +158,8 @@ function App() {
               </div>
             }
           />
-        </Routes>
+          </Routes>
+        </PermissionProvider>
       </Router>
     </ToastProvider>
   );

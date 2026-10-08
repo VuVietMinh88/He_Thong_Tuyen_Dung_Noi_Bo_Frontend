@@ -47,10 +47,12 @@ const LockAccountFormContent: React.FC<LockAccountFormContentProps> = ({
           currentUser.email.toLowerCase() === account.email.toLowerCase()))
   );
 
-  // Kiểm tra nhân sự có đang phụ trách vị trí tuyển dụng / headcount nào không (AC2)
+  // AccountView currently has no assignment fields, so missing assignment data is unknown.
   const assignedJobsList = account.assignedJobs || [];
   const activeJobsCount = account.activeJobsCount ?? assignedJobsList.length;
   const hasActiveJobs = activeJobsCount > 0;
+  const hasAssignmentData = account.activeJobsCount !== undefined || account.assignedJobs !== undefined;
+  const requiresHandoverConfirmation = hasActiveJobs || !hasAssignmentData;
 
   // Xử lý chọn nhanh lý do mẫu
   const handleSelectQuickReason = (quickReason: string) => {
@@ -86,7 +88,7 @@ const LockAccountFormContent: React.FC<LockAccountFormContentProps> = ({
     }
 
     // AC2: Nếu có vị trí tuyển dụng phụ trách, yêu cầu xác nhận đã nắm thông tin bàn giao
-    if (hasActiveJobs && !hasConfirmedHandover) {
+    if (requiresHandoverConfirmation && !hasConfirmedHandover) {
       setErrorMessage(
         'Vui lòng xác nhận đã kiểm tra và nắm thông tin bàn giao các vị trí tuyển dụng trước khi khóa.'
       );
@@ -144,16 +146,20 @@ const LockAccountFormContent: React.FC<LockAccountFormContentProps> = ({
       )}
 
       {/* AC2: Cảnh báo bàn giao Headcount & Vị trí tuyển dụng phụ trách */}
-      {hasActiveJobs && (
+      {requiresHandoverConfirmation && (
         <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50/90 p-4 text-amber-900 shadow-xs">
           <div className="flex items-start gap-3">
             <span className="text-lg leading-none">⚠️</span>
             <div className="flex-1">
               <h3 className="text-xs font-bold uppercase tracking-wide text-amber-800">
-                Cảnh báo bàn giao vị trí tuyển dụng ({activeJobsCount} vị trí)
+                {hasActiveJobs
+                  ? `Cảnh báo bàn giao vị trí tuyển dụng (${activeJobsCount} vị trí)`
+                  : 'Cần rà soát bàn giao trước khi khóa'}
               </h3>
               <p className="mt-1 text-xs text-amber-800 leading-relaxed">
-                Nhân sự này hiện đang trực tiếp phụ trách các chiến dịch tuyển dụng và headcount. Việc khóa tài khoản sẽ tạm dừng khả năng phản hồi ứng viên và phân công lịch phỏng vấn:
+                {hasActiveJobs
+                  ? 'Nhân sự này hiện đang trực tiếp phụ trách các chiến dịch tuyển dụng và headcount. Việc khóa tài khoản sẽ tạm dừng khả năng phản hồi ứng viên và phân công lịch phỏng vấn:'
+                  : 'Backend hiện không cung cấp danh sách vị trí đang phụ trách trong API tài khoản. Vui lòng kiểm tra và bàn giao công việc liên quan trước khi tiếp tục.'}
               </p>
 
               {/* Danh sách các vị trí tuyển dụng phụ trách */}
@@ -186,7 +192,7 @@ const LockAccountFormContent: React.FC<LockAccountFormContentProps> = ({
                   className="mt-0.5 h-4 w-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
                 />
                 <span>
-                  Tôi xác nhận đã kiểm tra và chuẩn bị kế hoạch bàn giao các vị trí tuyển dụng này.
+                  Tôi xác nhận đã kiểm tra công việc và chuẩn bị bàn giao nếu có vị trí tuyển dụng đang phụ trách.
                 </span>
               </label>
             </div>
@@ -330,6 +336,8 @@ export const LockAccountModal: React.FC<LockAccountModalProps> = ({
   return (
     <div
       role="dialog"
+      data-session-draft-id={account.id}
+      data-session-draft-type="lock-account"
       aria-modal="true"
       aria-labelledby="lock-account-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-xs transition-opacity animate-fade-in"

@@ -5,6 +5,7 @@ import axios, {
 } from 'axios';
 import type { LoginResponse } from '../types/auth';
 import { tokenService } from '../services/token.service';
+import { captureSessionExpiryDraft } from '../services/sessionDraft.service';
 
 type RetryRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
@@ -55,6 +56,7 @@ const axiosClient = axios.create({
 });
 
 let isRefreshing = false;
+let isRedirectingToLogin = false;
 let failedQueue: Array<{
   resolve: (token: string) => void;
   reject: (reason: unknown) => void;
@@ -70,10 +72,13 @@ const processQueue = (error: unknown | null, token?: string): void => {
 };
 
 const redirectToLogin = (): void => {
+  if (isRedirectingToLogin) return;
+  isRedirectingToLogin = true;
+  const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  captureSessionExpiryDraft(returnTo);
   tokenService.clearAll();
   if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-    window.alert('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!');
-    window.location.href = '/login';
+    window.location.href = '/login?sessionExpired=1';
   }
 };
 
@@ -110,15 +115,24 @@ axiosClient.interceptors.response.use(
     }
 
     if (
+      status === 401
+      && originalRequest?._retry
+      && !isAuthRequest(originalRequest.url)
+    ) {
+      redirectToLogin();
+      return Promise.reject(error);
+    }
+
+    if (
       status !== 401
       || !originalRequest
-      || originalRequest._retry
       || isAuthRequest(originalRequest.url)
     ) {
       return Promise.reject(error);
     }
 
     if (isRefreshing) {
+      originalRequest._retry = true;
       return new Promise<string>((resolve, reject) => {
         failedQueue.push({ resolve, reject });
       }).then((accessToken) => {

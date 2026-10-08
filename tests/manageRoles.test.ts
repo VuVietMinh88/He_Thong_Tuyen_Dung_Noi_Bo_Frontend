@@ -179,9 +179,17 @@ describe('Manage User Roles & Security Rules (TKNHTTDNB1-152 / S1-09)', () => {
         roles: newRoles,
       });
 
-      const response = await userService.updateUserRoles(otherUserAccount.id, newRoles);
+      const response = await userService.updateUserRoles(
+        otherUserAccount.id,
+        otherUserAccount.roles ?? [otherUserAccount.role],
+        newRoles,
+      );
 
-      expect(spy).toHaveBeenCalledWith(otherUserAccount.id, newRoles);
+      expect(spy).toHaveBeenCalledWith(
+        otherUserAccount.id,
+        otherUserAccount.roles,
+        newRoles,
+      );
       expect(response.id).toBe(otherUserAccount.id);
       expect(response.roles).toEqual(newRoles);
     });

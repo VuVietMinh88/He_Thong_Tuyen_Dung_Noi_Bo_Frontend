@@ -1,12 +1,26 @@
-export type AccountRole = 'ADMIN' | 'RECRUITER' | 'HIRING_MANAGER' | 'INTERVIEWER' | 'CANDIDATE';
+export type AccountRole =
+  | 'ADMIN'
+  | 'HR_MANAGER'
+  | 'RECRUITER'
+  | 'HIRING_MANAGER'
+  | 'INTERVIEWER'
+  | 'APPROVER';
 
-export type AccountStatus = 'ACTIVE' | 'LOCKED';
+export type AccountStatus =
+  | 'ACTIVE'
+  | 'TEMPORARILY_LOCKED'
+  | 'PENDING_ACTIVATION'
+  | 'DISABLED'
+  | 'ADMINISTRATIVELY_LOCKED';
 
 export interface UserAccount {
   id: string;
   fullName: string;
   email: string;
   department: string;
+  departmentId?: string | null;
+  phone?: string | null;
+  displayTitle?: string | null;
   role: AccountRole;
   roles?: AccountRole[];
   status: AccountStatus;
@@ -32,42 +46,33 @@ export interface AccountFilterParams {
 
 export const ROLE_DISPLAY_NAMES: Record<AccountRole, string> = {
   ADMIN: 'Quản trị viên (Admin)',
+  HR_MANAGER: 'Quản lý nhân sự (HR Manager)',
   RECRUITER: 'Chuyên viên tuyển dụng (Recruiter)',
   HIRING_MANAGER: 'Quản lý tuyển dụng (Hiring Manager)',
   INTERVIEWER: 'Người phỏng vấn (Interviewer)',
-  CANDIDATE: 'Ứng viên (Candidate)',
+  APPROVER: 'Người phê duyệt (Approver)',
 };
 
 export const ROLE_DESCRIPTIONS: Record<AccountRole, string> = {
   ADMIN: 'Toàn quyền cấu hình hệ thống, quản lý tài khoản và phân quyền người dùng.',
+  HR_MANAGER: 'Quản lý hoạt động nhân sự và quy trình tuyển dụng.',
   RECRUITER: 'Đăng tin tuyển dụng, quản lý hồ sơ ứng viên và điều phối quy trình tuyển dụng.',
   HIRING_MANAGER: 'Tạo và duyệt yêu cầu tuyển dụng, tham gia đánh giá chuyên môn ứng viên.',
   INTERVIEWER: 'Tham gia các buổi phỏng vấn và gửi phiếu đánh giá phỏng vấn ứng viên.',
-  CANDIDATE: 'Ứng viên nội bộ, xem danh sách việc làm và theo dõi trạng thái ứng tuyển.',
+  APPROVER: 'Phê duyệt các yêu cầu tuyển dụng theo phân quyền.',
 };
 
 export const STATUS_DISPLAY_NAMES: Record<AccountStatus, string> = {
   ACTIVE: 'Hoạt động',
-  LOCKED: 'Đã khóa',
+  TEMPORARILY_LOCKED: 'Tạm khóa',
+  PENDING_ACTIVATION: 'Chờ kích hoạt',
+  DISABLED: 'Vô hiệu hóa',
+  ADMINISTRATIVELY_LOCKED: 'Quản trị viên khóa',
 };
 
 export interface EditAccountFormData {
   fullName: string;
-  department: string;
-  role: AccountRole;
-  status: AccountStatus;
 }
-
-export const SYSTEM_DEPARTMENTS: string[] = [
-  'Phòng Kỹ thuật & Công nghệ',
-  'Phòng Tuyển dụng & Đào tạo',
-  'Phòng Quản lý Sản phẩm',
-  'Phòng Thiết kế UI/UX',
-  'Phòng Tài chính - Kế toán',
-  'Phòng Kinh doanh & Marketing',
-  'Phòng Vận hành & IT',
-  'Phòng Chăm sóc Khách hàng',
-];
 
 export interface GetUsersParams {
   search?: string;

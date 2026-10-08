@@ -14,7 +14,7 @@ const computeButtonState = (
   isSelf = false,
   isLoading = false
 ): ButtonState => {
-  const isLocked = account.status === 'LOCKED';
+  const isLocked = account.status === 'ADMINISTRATIVELY_LOCKED';
 
   if (isLocked) {
     return {
@@ -58,7 +58,7 @@ describe('ToggleStatusButton Component Logic (TKNHTTDNB1-161 / Story 19)', () =>
     email: 'cuong.vu@smartrecruitment.vn',
     department: 'Phòng Quản lý Sản phẩm',
     role: 'HIRING_MANAGER',
-    status: 'LOCKED',
+    status: 'ADMINISTRATIVELY_LOCKED',
     createdAt: '2025-03-12',
     lockReason: 'Nghỉ việc chuyển công tác',
   };
@@ -103,7 +103,7 @@ describe('ToggleStatusButton Component Logic (TKNHTTDNB1-161 / Story 19)', () =>
       const onRequestLock = vi.fn();
       const onRequestUnlock = vi.fn();
 
-      if (lockedAccount.status === 'LOCKED') {
+      if (lockedAccount.status === 'ADMINISTRATIVELY_LOCKED') {
         onRequestUnlock(lockedAccount);
       } else {
         onRequestLock(lockedAccount);

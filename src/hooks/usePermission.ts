@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { ROLES, type Role } from '../constants/roles';
+import { useContext } from 'react';
+import { PermissionContext } from '../context/PermissionContext';
 import { tokenService } from '../services/token.service';
 
 export type PermissionAction =
@@ -20,6 +20,8 @@ export type PermissionResource =
   | 'salary_band'
   | 'interview'
   | 'user'
+  | 'profile'
+  | 'security'
   | 'setting'
   | string;
 
@@ -28,136 +30,92 @@ export type PermissionDefinition = {
   resource: PermissionResource;
 };
 
-export type PermissionMatrix = Partial<
-  Record<Role, Partial<Record<string, string[]>>>
->;
+type CurrentPermissions = readonly string[] | string | null | undefined;
 
-export const normalizeRole = (role?: string | null): string =>
-  typeof role === 'string'
-    ? role.trim().toUpperCase().replace(/^ROLE_/, '')
-    : '';
+const permissionsFor = (action: string, resource: string): string[] => {
+  const normalizedAction = action.trim().toLowerCase();
+  const normalizedResource = resource.trim().toLowerCase().replace(/-/g, '_');
+  const isRead = normalizedAction === 'view' || normalizedAction === 'read';
 
-const isRole = (role: string): role is Role => Object.hasOwn(ROLES, role);
-
-const permissionMatrix: PermissionMatrix = {
-  [ROLES.ADMIN]: {
-    '*': ['*'],
-  },
-  [ROLES.HR_MANAGER]: {
-    headcount: ['view', 'approve', 'manage'],
-    salary_band: ['view', 'edit', 'update'],
-    recruitment: ['view', 'create', 'edit', 'approve'],
-    candidate: ['view', 'create', 'edit', 'delete'],
-    interview: ['view', 'create', 'edit', 'manage'],
-    user: ['view', 'edit'],
-  },
-  [ROLES.RECRUITER]: {
-    recruitment: ['view', 'create', 'edit'],
-    candidate: ['view', 'create', 'edit'],
-    interview: ['view', 'create', 'edit'],
-    headcount: ['view'],
-  },
-  [ROLES.HIRING_MANAGER]: {
-    headcount: ['view', 'create', 'edit', 'approve'],
-    recruitment: ['view', 'create', 'edit', 'approve'],
-    candidate: ['view', 'edit'],
-    interview: ['view', 'create', 'edit'],
-  },
-  [ROLES.INTERVIEWER]: {
-    interview: ['view', 'edit'],
-    candidate: ['view'],
-  },
-  [ROLES.APPROVER]: {
-    headcount: ['view', 'approve'],
-    recruitment: ['view', 'approve'],
-    candidate: ['view'],
-  },
-};
-
-const getCurrentRoles = (): string[] => {
-  if (!tokenService.getAccessToken()) return [];
-  return tokenService.getUserData()?.roles ?? [];
-};
-
-export const getCurrentRole = (): string | null =>
-  getCurrentRoles()[0] ?? null;
-
-type CurrentRoles = readonly string[] | string | null | undefined;
-
-const resolveRoles = (currentRoles?: CurrentRoles): string[] => {
-  if (currentRoles === undefined || currentRoles === null) {
-    return getCurrentRoles();
+  if (normalizedResource === 'user' || normalizedResource === 'users') {
+    return [isRead ? 'USER_ADMIN_READ_ALL' : 'USER_ADMIN_WRITE_ALL'];
   }
-  return typeof currentRoles === 'string' ? [currentRoles] : [...currentRoles];
+  if (normalizedResource === 'profile' || normalizedResource === 'self_profile') {
+    return [isRead ? 'SELF_PROFILE_READ' : 'SELF_PROFILE_WRITE'];
+  }
+  if (normalizedResource === 'security' || normalizedResource === 'password') {
+    return ['SELF_SECURITY_WRITE'];
+  }
+
+  const module = {
+    candidate: 'CANDIDATES',
+    candidates: 'CANDIDATES',
+    job: 'JOB_POSTINGS',
+    jobs: 'JOB_POSTINGS',
+    job_posting: 'JOB_POSTINGS',
+    recruitment: 'REQUISITIONS',
+    headcount: 'REQUISITIONS',
+    interview: 'INTERVIEWS',
+    interviews: 'INTERVIEWS',
+    evaluation: 'EVALUATIONS',
+    offer: 'OFFERS',
+    notification: 'NOTIFICATIONS',
+    report: 'REPORTS',
+    organization: 'ORGANIZATION',
+    salary_band: 'SALARY_RANGES',
+    salary_ranges: 'SALARY_RANGES',
+  }[normalizedResource];
+
+  if (!module) return [];
+  const operation = isRead ? 'READ' : 'WRITE';
+  return [`${module}_${operation}_ALL`, `${module}_${operation}_SCOPED`];
 };
 
-export const hasRole = (
-  allowedRoles: readonly string[] = [],
-  currentRoles?: CurrentRoles,
+export const hasPermission = (
+  permission: PermissionDefinition | string,
+  resourceOrPermissions?: string | CurrentPermissions,
+  currentPermissions?: CurrentPermissions,
 ): boolean => {
-  if (!allowedRoles.length) return false;
-  const normalizedAllowedRoles = allowedRoles.map(normalizeRole);
-  return resolveRoles(currentRoles).some((role) =>
-    normalizedAllowedRoles.includes(normalizeRole(role)),
-  );
+  const requiredPermissions = typeof permission === 'string'
+    ? resourceOrPermissions === undefined || typeof resourceOrPermissions !== 'string'
+      ? [permission]
+      : permissionsFor(permission, resourceOrPermissions)
+    : permissionsFor(permission.action, permission.resource);
+
+  const granted = typeof permission === 'string'
+    && resourceOrPermissions !== undefined
+    && typeof resourceOrPermissions !== 'string'
+    ? resourceOrPermissions
+    : currentPermissions;
+  const permissionSet = typeof granted === 'string'
+    ? [granted]
+    : [...(granted ?? [])];
+
+  return requiredPermissions.some((required) => permissionSet.includes(required));
 };
 
 export const can = (
   action: string,
   resource: string,
-  currentRoles?: CurrentRoles,
-): boolean => {
-  const normalizedResource = resource.toLowerCase().replace(/-/g, '_');
-  const normalizedAction = action.trim().toLowerCase();
-
-  return resolveRoles(currentRoles).some((role) => {
-    const normalizedRole = normalizeRole(role);
-    if (!isRole(normalizedRole)) return false;
-    const allowedPermissions = permissionMatrix[normalizedRole];
-    if (!allowedPermissions) return false;
-
-    const rolePermissions =
-      allowedPermissions[resource]
-      ?? allowedPermissions[normalizedResource]
-      ?? allowedPermissions['*'];
-    return rolePermissions?.some(
-      (permission) =>
-        permission === '*' || permission.toLowerCase() === normalizedAction,
-    ) ?? false;
-  });
-};
-
-export const hasPermission = (
-  permission: PermissionDefinition | string,
-  resource?: string,
-  currentRoles?: CurrentRoles,
-): boolean => {
-  if (typeof permission === 'string') {
-    return can(permission, resource ?? '*', currentRoles);
-  }
-
-  return can(permission.action, permission.resource, currentRoles);
-};
+  currentPermissions?: CurrentPermissions,
+): boolean => hasPermission(action, resource, currentPermissions);
 
 export const usePermission = () => {
-  const [roles, setRoles] = useState<string[]>(getCurrentRoles);
-
-  useEffect(() => {
-    const updateRoles = () => setRoles(getCurrentRoles());
-
-    updateRoles();
-    window.addEventListener('storage', updateRoles);
-    return () => window.removeEventListener('storage', updateRoles);
-  }, []);
+  const context = useContext(PermissionContext);
+  if (!context) {
+    throw new Error('usePermission phải được sử dụng bên trong PermissionProvider.');
+  }
 
   return {
-    role: roles[0] ?? null,
-    roles,
-    hasRole: (allowedRoles: readonly string[]) => hasRole(allowedRoles, roles),
-    can: (action: string, resource: string) => can(action, resource, roles),
-    hasPermission: (permission: PermissionDefinition | string, permissionResource?: string) =>
-      hasPermission(permission, permissionResource, roles),
-    isAuthenticated: Boolean(tokenService.getAccessToken() && roles.length),
+    ...context,
+    can: (action: string, resource: string) => can(action, resource, context.permissions),
+    hasPermission: (permission: PermissionDefinition | string, resource?: string) =>
+      typeof permission === 'string'
+        ? resource
+          ? can(permission, resource, context.permissions)
+          : hasPermission(permission, undefined, context.permissions)
+        : hasPermission(permission, undefined, context.permissions),
+    isAuthenticated: Boolean(tokenService.getAccessToken()),
   };
 };
 

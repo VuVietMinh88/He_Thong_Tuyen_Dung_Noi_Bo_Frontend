@@ -31,16 +31,18 @@ export const ToggleStatusButton: React.FC<ToggleStatusButtonProps> = ({
   size = 'sm',
   className = '',
 }) => {
-  const isLocked = account.status === 'LOCKED';
+  const isAdministrativeLock = account.status === 'ADMINISTRATIVELY_LOCKED';
+  const isActive = account.status === 'ACTIVE';
+  const canToggle = isActive || isAdministrativeLock;
 
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
 
-    if (isLoading || (isSelf && !isLocked)) {
+    if (isLoading || !canToggle || (isSelf && isActive)) {
       return;
     }
 
-    if (isLocked) {
+    if (isAdministrativeLock) {
       // Khi bấm "Mở khóa": Kích hoạt dialog xác nhận mở khóa
       onRequestUnlock(account);
     } else {
@@ -54,10 +56,13 @@ export const ToggleStatusButton: React.FC<ToggleStatusButtonProps> = ({
     if (isLoading) {
       return 'Đang xử lý yêu cầu...';
     }
-    if (isSelf && !isLocked) {
+    if (!canToggle) {
+      return 'Trạng thái này không thể thay đổi bằng thao tác khóa quản trị';
+    }
+    if (isSelf && isActive) {
       return 'Quy tắc bảo mật: Không thể tự khóa tài khoản quản trị của chính mình';
     }
-    return isLocked
+    return isAdministrativeLock
       ? `Mở khóa tài khoản cho ${account.fullName}`
       : `Khóa tài khoản ${account.fullName} (yêu cầu nhập lý do)`;
   };
@@ -68,7 +73,7 @@ export const ToggleStatusButton: React.FC<ToggleStatusButtonProps> = ({
       : 'px-2.5 py-1.5 text-xs gap-1.5 rounded-lg';
 
   // Khi tài khoản đang BỊ KHÓA -> Hiển thị nút Mở khóa (Xanh / Emerald)
-  if (isLocked) {
+  if (isAdministrativeLock) {
     return (
       <button
         type="button"
@@ -133,7 +138,7 @@ export const ToggleStatusButton: React.FC<ToggleStatusButtonProps> = ({
   }
 
   // Khi tài khoản đang HOẠT ĐỘNG -> Hiển thị nút Khóa (Đỏ / Rose)
-  const isLockDisabled = isSelf || isLoading;
+  const isLockDisabled = isSelf || isLoading || !isActive;
 
   return (
     <button

@@ -10,13 +10,7 @@ interface ManageRolesModalProps {
   onSaveRoles: (userId: string, newRoles: AccountRole[]) => Promise<void> | void;
 }
 
-const AVAILABLE_ROLES: AccountRole[] = [
-  'ADMIN',
-  'RECRUITER',
-  'HIRING_MANAGER',
-  'INTERVIEWER',
-  'CANDIDATE',
-];
+const AVAILABLE_ROLES = Object.keys(ROLE_DISPLAY_NAMES) as AccountRole[];
 
 interface FormContentProps {
   account: UserAccount;
@@ -110,14 +104,16 @@ const ManageRolesFormContent: React.FC<FormContentProps> = ({
     switch (role) {
       case 'ADMIN':
         return 'bg-purple-100 text-purple-700 border-purple-200';
+      case 'HR_MANAGER':
+        return 'bg-cyan-100 text-cyan-700 border-cyan-200';
       case 'RECRUITER':
         return 'bg-blue-100 text-blue-700 border-blue-200';
       case 'HIRING_MANAGER':
         return 'bg-amber-100 text-amber-700 border-amber-200';
       case 'INTERVIEWER':
         return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-      case 'CANDIDATE':
-        return 'bg-slate-100 text-slate-700 border-slate-200';
+      case 'APPROVER':
+        return 'bg-orange-100 text-orange-700 border-orange-200';
       default:
         return 'bg-slate-100 text-slate-700 border-slate-200';
     }
@@ -282,6 +278,8 @@ export const ManageRolesModal: React.FC<ManageRolesModalProps> = ({
   return (
     <div
       role="dialog"
+      data-session-draft-id={account.id}
+      data-session-draft-type="manage-roles"
       aria-modal="true"
       aria-labelledby="manage-roles-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-xs transition-opacity animate-fade-in"

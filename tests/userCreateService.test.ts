@@ -1,6 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { CreateAccountError, userService } from '../src/services/user.service';
+import { CreateAccountError, userService, type CreateAccountInput } from '../src/services/user.service';
 
 const { postMock } = vi.hoisted(() => ({ postMock: vi.fn() }));
 
@@ -8,11 +8,10 @@ vi.mock('../src/utils/axiosClient', () => ({
   default: { post: postMock },
 }));
 
-const validInput = {
+const validInput: CreateAccountInput = {
   fullName: 'Nguyễn An',
   email: 'an@example.com',
-  department: 'Phòng Nhân sự',
-  role: 'RECRUITER' as const,
+  roles: ['RECRUITER'],
 };
 
 beforeEach(() => {
@@ -20,11 +19,22 @@ beforeEach(() => {
 });
 
 describe('userService.createAccount', () => {
-  it('sends the account fields to the users endpoint', async () => {
-    postMock.mockResolvedValue({ data: {} });
+  it('sends backend CreateAccountRequest fields to POST /accounts', async () => {
+    const createdAccount = {
+      id: '6440c8d7-7624-42a2-823d-94dbc60a2f24',
+      email: 'an@example.com',
+      fullName: 'Nguyễn An',
+      roles: ['RECRUITER'],
+      status: 'PENDING_ACTIVATION',
+    };
+    postMock.mockResolvedValue({ data: createdAccount });
 
-    await expect(userService.createAccount(validInput)).resolves.toBeUndefined();
-    expect(postMock).toHaveBeenCalledWith('/users', validInput);
+    await expect(userService.createAccount(validInput)).resolves.toEqual(createdAccount);
+    expect(postMock).toHaveBeenCalledWith('/accounts', {
+      fullName: 'Nguyễn An',
+      email: 'an@example.com',
+      roles: ['RECRUITER'],
+    });
   });
 
   it('maps HTTP conflict to a clear Vietnamese duplicate-email error', async () => {

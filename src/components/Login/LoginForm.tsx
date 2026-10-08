@@ -1,11 +1,15 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   authService,
   InvalidLoginResponseError,
   LoginValidationError,
 } from '../../services/auth.service';
 import { tokenService } from '../../services/token.service';
+import {
+  clearSessionExpiryReturnTo,
+  getSessionExpiryReturnTo,
+} from '../../services/sessionDraft.service';
 import {
   MAX_LOGIN_ATTEMPTS,
   clearSuccessfulLoginState,
@@ -14,16 +18,9 @@ import {
   registerFailedLoginAttempt,
 } from '../../utils/loginState';
 
-const getRoleRedirectPath = (roles: string[]): string => {
-  const normalizedRoles = roles.map((role) => role.trim().toUpperCase().replace(/^ROLE_/, ''));
-  if (normalizedRoles.includes('ADMIN')) return '/admin/dashboard';
-  if (normalizedRoles.includes('HR_MANAGER')) return '/hr/dashboard';
-  if (normalizedRoles.includes('INTERVIEWER')) return '/interviewer/dashboard';
-  return '/dashboard';
-};
-
 export const LoginForm = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState(() => localStorage.getItem('rememberedEmail') ?? '');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(() => Boolean(localStorage.getItem('rememberedEmail')));
@@ -83,7 +80,15 @@ export const LoginForm = () => {
       setLockVersion((version) => version + 1);
       if (rememberMe) localStorage.setItem('rememberedEmail', normalizedEmail);
       else localStorage.removeItem('rememberedEmail');
-      navigate(getRoleRedirectPath(response.user.roles));
+      window.dispatchEvent(new Event('auth:changed'));
+      const routeFromState = (location.state as { from?: { pathname?: unknown; search?: unknown; hash?: unknown } } | null)?.from;
+      const fromPath = typeof routeFromState?.pathname === 'string'
+        && routeFromState.pathname.startsWith('/')
+        ? `${routeFromState.pathname}${typeof routeFromState.search === 'string' ? routeFromState.search : ''}${typeof routeFromState.hash === 'string' ? routeFromState.hash : ''}`
+        : null;
+      const returnTo = getSessionExpiryReturnTo(response.user.id);
+      clearSessionExpiryReturnTo();
+      navigate(returnTo ?? fromPath ?? '/dashboard', { replace: true });
     } catch (error) {
       if (error instanceof InvalidLoginResponseError) {
         tokenService.clearAll();
@@ -129,6 +134,11 @@ export const LoginForm = () => {
   return (
     <div className="w-full max-w-md rounded-3xl border border-gray-100 bg-white p-10 shadow-2xl sm:p-12">
       <div className="mb-8 text-center">
+        {new URLSearchParams(location.search).get('sessionExpired') === '1' && (
+          <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-900" role="status">
+            Phiên đăng nhập đã hết hạn. Đăng nhập lại để tiếp tục; dữ liệu biểu mẫu không nhạy cảm sẽ được khôi phục nếu có thể.
+          </p>
+        )}
         <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-full bg-indigo-50">
           <span className="text-3xl" aria-hidden="true">🔐</span>
         </div>
