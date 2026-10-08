@@ -58,11 +58,18 @@ describe('tokenService', () => {
   });
 
   it('stores typed user data without accepting malformed objects', () => {
-    expect(tokenService.setUserData({ id: 'u1', email: 'user@example.com', role: 'HR_MANAGER' })).toBe(true);
+    const user = {
+      id: 'u1',
+      email: 'user@example.com',
+      fullName: 'Example User',
+      roles: ['HR_MANAGER'],
+    };
+    expect(tokenService.setUserData(user)).toBe(true);
     expect(tokenService.getUserData()).toEqual({
       id: 'u1',
       email: 'user@example.com',
-      role: 'HR_MANAGER',
+      fullName: 'Example User',
+      roles: ['HR_MANAGER'],
     });
     expect(tokenService.setUserData(null)).toBe(false);
   });

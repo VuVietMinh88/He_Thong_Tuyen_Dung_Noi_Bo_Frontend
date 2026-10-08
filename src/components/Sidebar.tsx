@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { tokenService } from "../services/token.service";
 
@@ -11,6 +11,14 @@ type MenuItem = {
 
 const normalizeRole = (value?: string | null): string =>
   (value ?? "").trim().toLowerCase();
+
+const normalizeRoles = (roles: string[]): string[] =>
+  roles.map((role) => {
+    const normalized = normalizeRole(role).replace(/^role_/, "");
+    if (normalized === "hr_manager") return "hr";
+    if (normalized === "hiring_manager") return "manager";
+    return normalized;
+  });
 
 const menuItems: MenuItem[] = [
   {
@@ -109,15 +117,15 @@ export const Sidebar: React.FC = () => {
 
   const user = tokenService.getUserData();
   // Fallback về 'admin' nếu người dùng chưa đăng nhập khi truy cập trang quản trị để không bị ẩn toàn bộ menu
-  const currentRole = normalizeRole(user?.role || 'admin');
+  const currentRoles = normalizeRoles(user?.roles ?? ['admin']);
 
-  const visibleMenu = useMemo(
-    () => menuItems.filter((item) => canAccessMenu(item.roles, currentRole)),
-    [currentRole],
+  const visibleMenu = menuItems.filter((item) =>
+    currentRoles.some((role) => canAccessMenu(item.roles, role)),
   );
 
-  const displayName = getDisplayName(user?.role || 'admin', user?.email || 'admin@smartrecruitment.vn');
-  const roleLabel = (user?.role || 'ADMIN').toUpperCase();
+  const primaryRole = currentRoles[0] ?? 'admin';
+  const displayName = getDisplayName(primaryRole, user?.email || 'admin@smartrecruitment.vn');
+  const roleLabel = currentRoles.map((role) => role.toUpperCase()).join(', ');
 
   return (
     <>
