@@ -26,7 +26,7 @@ export async function getJson(path: string, timeoutMs = 10000): Promise<unknown>
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const response = await fetch(
-      `${baseUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`,
+      `${baseUrl}/${path.replace(/^\/+/, '')}`,
       { method: 'GET', headers: { Accept: 'application/json' }, signal: controller.signal },
     )
     if (!response.ok) {

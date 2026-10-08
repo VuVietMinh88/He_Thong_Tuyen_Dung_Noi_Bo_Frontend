@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { authService } from "../../services/auth.service";
+import { authService, InvalidLoginResponseError } from "../../services/auth.service";
 import { tokenService } from "../../services/token.service";
 import {
   MAX_LOGIN_ATTEMPTS,
@@ -11,10 +11,12 @@ import {
 } from "../../utils/loginState";
 
 const getRoleRedirectPath = (role?: string): string => {
-  switch ((role ?? "").toLowerCase()) {
+  const normalizedRole = (role ?? "").trim().toLowerCase().replace(/^role_/, '');
+  switch (normalizedRole) {
     case "admin":
       return "/admin/dashboard";
     case "hr":
+    case "hr_manager":
       return "/hr/dashboard";
     case "interviewer":
       return "/interviewer/dashboard";
@@ -122,6 +124,14 @@ export const LoginForm: React.FC = () => {
       const data = await authService.login(normalizedEmail, password);
       handleLoginSuccess(data.accessToken, data.user, data.refreshToken);
     } catch (error) {
+      if (error instanceof InvalidLoginResponseError) {
+        if ('clearAll' in tokenService) (tokenService as any).clearAll();
+        else if ('clearTokens' in tokenService) (tokenService as any).clearTokens();
+        setSubmitError('Thông tin xác thực từ máy chủ không hợp lệ. Vui lòng thử lại sau.');
+        setIsLoading(false);
+        return;
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : "LOGIN_REQUEST_FAILED";
 
@@ -138,6 +148,11 @@ export const LoginForm: React.FC = () => {
 
         setSubmitError(getGenericLoginErrorMessage());
         return;
+      }
+
+      if (errorMessage === "TOO_MANY_REQUESTS") {
+          setSubmitError("Bạn đã thử quá nhiều lần. Vui lòng thử lại sau.");
+          return;
       }
 
       setSubmitError("Không thể đăng nhập lúc này. Vui lòng thử lại sau.");
@@ -160,7 +175,7 @@ export const LoginForm: React.FC = () => {
         </p>
       </div>
 
-      {isLocked && (
+      {isLocked ? (
         <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-5 rounded-2xl mb-6 text-center shadow-sm">
           <p className="font-semibold text-lg mb-1">
             Tài khoản bị khóa tạm thời!
@@ -173,7 +188,7 @@ export const LoginForm: React.FC = () => {
             {formatTimeLeft()}
           </p>
         </div>
-      )}
+      ) : null}
 
       {submitError && !isLocked && (
         <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -181,6 +196,7 @@ export const LoginForm: React.FC = () => {
         </div>
       )}
 
+      {!isLocked && (
       <form onSubmit={onSubmit} className="space-y-5" noValidate>
         <div>
           <label
@@ -318,6 +334,7 @@ mp            </span>
           )}
         </button>
       </form>
+      )}
     </div>
   );
 };

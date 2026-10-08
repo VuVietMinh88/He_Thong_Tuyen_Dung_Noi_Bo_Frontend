@@ -1,18 +1,29 @@
-import type { AccountRole, AccountStatus, UserAccount } from '../../types/account';
+import type { AccountRole, UserAccount } from '../../types/account';
+import { tokenService } from '../../services/token.service';
+import { ToggleStatusButton } from './ToggleStatusButton';
 
 interface AccountTableProps {
   accounts: UserAccount[];
+  isLoading?: boolean;
   onEditAccount: (account: UserAccount) => void;
-  onToggleStatus: (account: UserAccount) => void;
+  onManageRoles?: (account: UserAccount) => void;
+  onRequestLock?: (account: UserAccount) => void;
+  onRequestUnlock?: (account: UserAccount) => void;
+  onToggleStatus?: (account: UserAccount) => void;
   onResetFilters?: () => void;
 }
 
 export const AccountTable: React.FC<AccountTableProps> = ({
   accounts,
+  isLoading = false,
   onEditAccount,
+  onManageRoles,
+  onRequestLock,
+  onRequestUnlock,
   onToggleStatus,
   onResetFilters,
 }) => {
+  const currentUser = tokenService.getUserData();
   // Render badge for role with distinctive semantic styling
   const renderRoleBadge = (role: AccountRole) => {
     switch (role) {
@@ -39,23 +50,30 @@ export const AccountTable: React.FC<AccountTableProps> = ({
         );
       case 'INTERVIEWER':
         return (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
             Interviewer
           </span>
         );
+      case 'CANDIDATE':
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-inset ring-slate-400/20">
+            <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+            Ứng viên
+          </span>
+        );
       default:
         return (
-          <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-800">
+          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-800">
             {role}
           </span>
         );
     }
   };
 
-  // Render status badge (Active / Locked)
-  const renderStatusBadge = (status: AccountStatus) => {
-    if (status === 'ACTIVE') {
+  // Render status badge (Active / Locked - User Story S1-10)
+  const renderStatusBadge = (account: UserAccount) => {
+    if (account.status === 'ACTIVE') {
       return (
         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
           <span className="relative flex h-2 w-2">
@@ -68,10 +86,24 @@ export const AccountTable: React.FC<AccountTableProps> = ({
     }
 
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 ring-1 ring-inset ring-rose-600/20">
-        <span className="h-2 w-2 rounded-full bg-rose-500" />
-        Đã khóa
-      </span>
+      <div className="flex flex-col items-start gap-1">
+        <span
+          className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 ring-1 ring-inset ring-rose-600/20"
+          title={account.lockReason ? `Lý do khóa: ${account.lockReason}` : 'Tài khoản đã bị khóa'}
+        >
+          <span className="h-2 w-2 rounded-full bg-rose-500" />
+          <span>Đã khóa</span>
+          <span className="text-[11px]">🔒</span>
+        </span>
+        {account.lockReason && (
+          <span
+            className="max-w-[150px] truncate text-[11px] text-slate-500 italic"
+            title={account.lockReason}
+          >
+            "{account.lockReason}"
+          </span>
+        )}
+      </div>
     );
   };
 
@@ -83,6 +115,60 @@ export const AccountTable: React.FC<AccountTableProps> = ({
     }
     return (name.slice(0, 2) || 'TK').toUpperCase();
   };
+
+  if (isLoading) {
+    return (
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm text-slate-600">
+            <thead className="border-b border-slate-200 bg-slate-50/75 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <tr>
+                <th className="px-6 py-4">Họ tên</th>
+                <th className="px-6 py-4">Email</th>
+                <th className="px-6 py-4">Phòng ban</th>
+                <th className="px-6 py-4">Vai trò</th>
+                <th className="px-6 py-4">Trạng thái</th>
+                <th className="px-6 py-4 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white animate-pulse">
+              {[1, 2, 3, 4, 5].map((skeletonIndex) => (
+                <tr key={`skeleton-${skeletonIndex}`}>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-slate-200" />
+                      <div className="space-y-1.5">
+                        <div className="h-3.5 w-32 rounded bg-slate-200" />
+                        <div className="h-2.5 w-16 rounded bg-slate-100" />
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-3.5 w-40 rounded bg-slate-200" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-5 w-28 rounded-lg bg-slate-100" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-5 w-20 rounded-full bg-slate-100" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-5 w-24 rounded-full bg-slate-100" />
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <div className="h-7 w-12 rounded-lg bg-slate-100" />
+                      <div className="h-7 w-14 rounded-lg bg-slate-100" />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
 
   if (accounts.length === 0) {
     return (
@@ -138,16 +224,23 @@ export const AccountTable: React.FC<AccountTableProps> = ({
           <tbody className="divide-y divide-slate-100 bg-white">
             {accounts.map((account) => {
               const isLocked = account.status === 'LOCKED';
+              const isSelf = Boolean(
+                currentUser &&
+                  (currentUser.id === account.id ||
+                    (currentUser.email &&
+                      currentUser.email.toLowerCase() === account.email.toLowerCase()))
+              );
+              const activeJobsCount = account.activeJobsCount ?? (account.assignedJobs?.length || 0);
 
               return (
                 <tr
                   key={account.id}
                   className={[
                     "transition hover:bg-slate-50/80",
-                    isLocked ? "bg-slate-50/30" : "",
+                    isLocked ? "bg-slate-50/40" : "",
                   ].join(" ")}
                 >
-                  {/* Họ tên column with Avatar */}
+                  {/* Họ tên column with Avatar and Headcount warning tag */}
                   <td className="whitespace-nowrap px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className={[
@@ -159,11 +252,28 @@ export const AccountTable: React.FC<AccountTableProps> = ({
                         {getAvatarInitials(account.fullName)}
                       </div>
                       <div className="min-w-0">
-                        <div className="font-semibold text-slate-900 truncate">
-                          {account.fullName}
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-900 truncate">
+                            {account.fullName}
+                          </span>
+                          {isSelf && (
+                            <span className="rounded-md bg-indigo-50 px-1.5 py-0.2 text-[10px] font-bold text-indigo-700 border border-indigo-200">
+                              Tôi
+                            </span>
+                          )}
                         </div>
-                        <div className="text-xs text-slate-400 font-mono">
-                          {account.id}
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-slate-400 font-mono">
+                            {account.id}
+                          </span>
+                          {activeJobsCount > 0 && (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 border border-amber-200 shadow-2xs"
+                              title={`Đang phụ trách ${activeJobsCount} vị trí tuyển dụng: ${(account.assignedJobs || []).join(', ')}`}
+                            >
+                              🎯 {activeJobsCount} vị trí
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -186,19 +296,41 @@ export const AccountTable: React.FC<AccountTableProps> = ({
                     </span>
                   </td>
 
-                  {/* Vai trò column */}
-                  <td className="whitespace-nowrap px-6 py-4">
-                    {renderRoleBadge(account.role)}
+                  {/* Vai trò column (hỗ trợ hiển thị nhiều vai trò) */}
+                  <td className="px-6 py-4">
+                    <div className="flex flex-wrap items-center gap-1.5 max-w-xs">
+                      {(account.roles && account.roles.length > 0
+                        ? account.roles
+                        : [account.role]
+                      ).map((roleItem) => (
+                        <span key={roleItem}>{renderRoleBadge(roleItem)}</span>
+                      ))}
+                    </div>
                   </td>
 
-                  {/* Trạng thái column */}
+                  {/* Trạng thái column (User Story S1-10) */}
                   <td className="whitespace-nowrap px-6 py-4">
-                    {renderStatusBadge(account.status)}
+                    {renderStatusBadge(account)}
                   </td>
 
-                  {/* Thao tác column: Sửa, Khóa / Mở khóa */}
+                  {/* Thao tác column: Phân quyền, Sửa, Khóa / Mở khóa */}
                   <td className="whitespace-nowrap px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
+                      {/* Phân quyền vai trò button (User Story S1-09 / TKNHTTDNB1-152) */}
+                      {onManageRoles && (
+                        <button
+                          type="button"
+                          onClick={() => onManageRoles(account)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50/60 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 hover:border-indigo-300 shadow-xs"
+                          title="Gán và quản lý vai trò người dùng"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                          </svg>
+                          <span>Phân quyền</span>
+                        </button>
+                      )}
+
                       {/* Sửa button */}
                       <button
                         type="button"
@@ -212,34 +344,17 @@ export const AccountTable: React.FC<AccountTableProps> = ({
                         <span>Sửa</span>
                       </button>
 
-                      {/* Khóa / Mở khóa button */}
-                      <button
-                        type="button"
-                        onClick={() => onToggleStatus(account)}
-                        className={[
-                          "inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition shadow-sm",
-                          isLocked
-                            ? "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                            : "border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100",
-                        ].join(" ")}
-                        title={isLocked ? "Mở khóa tài khoản này" : "Khóa tài khoản này"}
-                      >
-                        {isLocked ? (
-                          <>
-                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                            </svg>
-                            <span>Mở khóa</span>
-                          </>
-                        ) : (
-                          <>
-                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                            </svg>
-                            <span>Khóa</span>
-                          </>
-                        )}
-                      </button>
+                      {/* Nút Khóa / Mở khóa tài khoản (Story 19 / TKNHTTDNB1-161) */}
+                      <ToggleStatusButton
+                        account={account}
+                        isSelf={isSelf}
+                        onRequestLock={(target) =>
+                          onRequestLock ? onRequestLock(target) : onToggleStatus?.(target)
+                        }
+                        onRequestUnlock={(target) =>
+                          onRequestUnlock ? onRequestUnlock(target) : onToggleStatus?.(target)
+                        }
+                      />
                     </div>
                   </td>
                 </tr>

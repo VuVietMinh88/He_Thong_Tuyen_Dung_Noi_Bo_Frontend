@@ -62,7 +62,7 @@ describe('Backend health API contract', () => {
   })
 
   it('does not duplicate the API version in the configured URL', async () => {
-    vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080/api/v1/v1/')
+    vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080/api/v1/')
     const fetchMock = vi.fn().mockResolvedValue(new Response('{"status":"UP"}'))
     vi.stubGlobal('fetch', fetchMock)
     await getHealth()

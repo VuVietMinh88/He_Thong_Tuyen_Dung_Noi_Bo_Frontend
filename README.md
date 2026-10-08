@@ -23,12 +23,15 @@ Biến `VITE_*` được đưa vào client, không đặt secret.
 `src/services/user.service.ts` gọi API tạo tài khoản và ánh xạ lỗi email trùng thành thông báo tiếng Việt.
 `src/components/AccountList/CreateAccountModal.tsx` validate form, khóa nút khi gửi và hiển thị thông báo sau khi tạo tài khoản.
 `src/utils/axiosClient.ts` dùng base URL `/api/v1` và đính kèm access token cho các request cần xác thực, ngoại trừ request đăng nhập.
+`src/services/auth.service.ts` gọi `POST /auth/login`, xác thực response `accessToken` và thông tin người dùng.
+`src/utils/axiosClient.ts` dùng chung base URL `/api/v1` và gửi access token dưới dạng Bearer cho các request cần xác thực.
+`src/App.tsx` hiển thị trạng thái health check chờ/thành công/lỗi; các dashboard hiện là route giao diện tạm thời.
 
 Nếu có lỗi kết nối: kiểm tra Backend/PostgreSQL, URL, port và origin CORS. Trình duyệt không luôn phân biệt được lỗi mạng với lỗi CORS; xem Network/Console để xác định.
 
 ## Kiểm tra
 
-- `npm test`: Vitest kiểm tra URL/health và các contract đăng nhập, tạo tài khoản, bao gồm trường hợp email trùng.
+- `npm test`: Vitest kiểm tra URL/health, lỗi HTTP/network/timeout/JSON/configuration, contract login/accessToken và tạo tài khoản/email trùng bằng mock.
 - `npm run build`: TypeScript và Vite production build.
 - `npm run lint`: Oxlint.
 - `npm run preview`: mặc định origin khác dev; nếu kiểm tra API qua preview cần cấu hình Backend cho origin đó.

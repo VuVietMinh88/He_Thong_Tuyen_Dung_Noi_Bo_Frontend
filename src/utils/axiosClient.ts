@@ -5,14 +5,17 @@ import { tokenService } from '../services/token.service';
  * Cấu hình axios client cơ bản để dùng chung cho toàn bộ dự án.
  */
 const normalizeApiBaseUrl = (baseUrl?: string): string => {
-  const trimmed = (baseUrl ?? '').trim().replace(/\/+$/, '');
+  const trimmed = (baseUrl ?? 'http://localhost:8080/api/v1').trim();
   if (!trimmed) return 'http://localhost:8080/api/v1';
-  if (/\/api\/v1(?:\/v1)+$/i.test(trimmed)) {
-    return trimmed.replace(/(?:\/v1)+$/i, '/v1');
+
+  const withoutTrailingSlash = trimmed.replace(/\/+$/, '');
+  if (/\/api\/v1(?:\/v1)+$/i.test(withoutTrailingSlash)) {
+    return withoutTrailingSlash.replace(/(?:\/v1)+$/i, '/v1');
   }
-  if (trimmed.endsWith('/api/v1')) return trimmed;
-  if (trimmed.endsWith('/api')) return `${trimmed}/v1`;
-  return trimmed;
+  if (withoutTrailingSlash.endsWith('/api/v1')) return withoutTrailingSlash;
+  if (withoutTrailingSlash.endsWith('/api')) return `${withoutTrailingSlash}/v1`;
+
+  return withoutTrailingSlash;
 };
 
 const axiosClient = axios.create({
@@ -101,7 +104,8 @@ axiosClient.interceptors.response.use(
       
       // Nếu không có refresh token (Chưa từng lưu), đẩy về login
       if (!refreshToken) {
-        tokenService.clearAll();
+        if ('clearAll' in tokenService) (tokenService as any).clearAll();
+        else if ('clearTokens' in tokenService) (tokenService as any).clearTokens();
         window.location.href = '/login';
         return Promise.reject(error);
       }
@@ -135,7 +139,8 @@ axiosClient.interceptors.response.use(
       } catch (refreshError: any) {
         // Nếu Refresh Token cũng hết hạn hoặc bị thu hồi (Lỗi từ khối catch)
         processQueue(refreshError, null);
-        tokenService.clearAll();
+        if ('clearAll' in tokenService) (tokenService as any).clearAll();
+        else if ('clearTokens' in tokenService) (tokenService as any).clearTokens();
         // Điều hướng mượt mà về trang đăng nhập mà không reload lại tài nguyên cục bộ
         window.location.href = '/login';
         return Promise.reject(refreshError);
