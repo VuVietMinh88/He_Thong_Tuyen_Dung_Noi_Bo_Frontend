@@ -2,6 +2,14 @@ import axios from "axios";
 import axiosClient from "../utils/axiosClient";
 import type { LoginResponse } from "../types/auth";
 
+type ApiFieldErrorMap = Record<string, string[] | string | undefined>;
+
+type BackendErrorPayload = {
+  code?: string;
+  fieldErrors?: ApiFieldErrorMap;
+  message?: string;
+};
+
 export class InvalidLoginResponseError extends Error {
   constructor() {
     super('Backend trả về dữ liệu đăng nhập không đúng hợp đồng API.');
@@ -41,6 +49,29 @@ const parseFieldErrors = (value: unknown): Record<string, string[]> => {
     }
   });
   return fieldErrors;
+};
+
+const extractFieldErrorMessage = (fieldErrors: unknown): string | null => {
+  if (!isRecord(fieldErrors)) return null;
+
+  for (const value of Object.values(fieldErrors)) {
+    if (Array.isArray(value)) {
+      const message = value.find(
+        (item): item is string =>
+          typeof item === "string" && item.trim().length > 0,
+      );
+
+      if (message) {
+        return message;
+      }
+    }
+
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return null;
 };
 
 /**
@@ -128,28 +159,27 @@ export const authService = {
       });
     } catch (error) {
       if (axios.isAxiosError(error)) {
+        const payload = error.response?.data as BackendErrorPayload | undefined;
+        const code = payload?.code;
         const status = error.response?.status;
-        const isNetworkOrNotFound = !error.response || status === 404 || status === 502 || status === 503;
-        if (isNetworkOrNotFound) {
-          // Mockup: Accept if token is valid mock token format (length > 10)
-          await new Promise(resolve => setTimeout(resolve, 800));
-          if (token.length > 10) {
-            return;
+        if (code === 'RESET_TOKEN_INVALID' || (status !== undefined && [401, 404, 410].includes(status))) {
+          throw new Error("INVALID_OR_EXPIRED_TOKEN");
+        }
+
+        if (code === 'VALIDATION_ERROR' || status === 400) {
+          if (code !== 'VALIDATION_ERROR') {
+            throw new Error("INVALID_OR_EXPIRED_TOKEN");
           }
-          throw new Error("INVALID_OR_EXPIRED_TOKEN");
-        }
+          const validationError = new Error("PASSWORD_INVALID");
+          const fieldErrorMessage = extractFieldErrorMessage(
+            payload?.fieldErrors,
+          );
 
-        if (
-          status === 400 ||
-          status === 401 ||
-          status === 404 ||
-          status === 410
-        ) {
-          throw new Error("INVALID_OR_EXPIRED_TOKEN");
-        }
+          if (fieldErrorMessage) {
+            Object.assign(validationError, { fieldMessage: fieldErrorMessage });
+          }
 
-        if (status === 422) {
-          throw new Error("PASSWORD_INVALID");
+          throw validationError;
         }
       }
 

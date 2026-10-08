@@ -108,4 +108,43 @@ describe('Login API contract', () => {
       email: 'user@company.com',
     });
   });
+
+  it('maps the backend reset-token error code to an expired-link error', async () => {
+    postMock.mockRejectedValue({
+      isAxiosError: true,
+      response: {
+        status: 400,
+        data: { code: 'RESET_TOKEN_INVALID' },
+      },
+    });
+
+    await expect(authService.resetPassword('invalid-token', 'NewPass123'))
+      .rejects.toThrow('INVALID_OR_EXPIRED_TOKEN');
+  });
+
+  it('maps backend reset-password validation errors without mock success', async () => {
+    postMock.mockRejectedValue({
+      isAxiosError: true,
+      response: {
+        status: 400,
+        data: {
+          code: 'VALIDATION_ERROR',
+          fieldErrors: { newPassword: ['Mật khẩu cần có chữ và số'] },
+        },
+      },
+    });
+
+    await expect(authService.resetPassword('A'.repeat(43), 'bad'))
+      .rejects.toMatchObject({
+        message: 'PASSWORD_INVALID',
+        fieldMessage: 'Mật khẩu cần có chữ và số',
+      });
+  });
+
+  it('reports reset-password network failures instead of returning mock success', async () => {
+    postMock.mockRejectedValue({ isAxiosError: true, request: {} });
+
+    await expect(authService.resetPassword('A'.repeat(43), 'NewPass123'))
+      .rejects.toThrow('RESET_PASSWORD_REQUEST_FAILED');
+  });
 });
