@@ -9,6 +9,9 @@ const normalizeApiBaseUrl = (baseUrl?: string): string => {
   if (!trimmed) return 'http://localhost:8080/api/v1';
 
   const withoutTrailingSlash = trimmed.replace(/\/+$/, '');
+  if (/\/api\/v1(?:\/v1)+$/i.test(withoutTrailingSlash)) {
+    return withoutTrailingSlash.replace(/(?:\/v1)+$/i, '/v1');
+  }
   if (withoutTrailingSlash.endsWith('/api/v1')) return withoutTrailingSlash;
   if (withoutTrailingSlash.endsWith('/api')) return `${withoutTrailingSlash}/v1`;
 
@@ -44,16 +47,10 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
 // AC 2: Request Interceptor - Tự động đính kèm Access Token vào Header
 axiosClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    if ('removeInvalidStoredTokens' in tokenService) {
-      (tokenService as any).removeInvalidStoredTokens();
-    }
+    tokenService.removeInvalidStoredTokens();
     const isLoginRequest = /(?:^|\/)auth\/login\/?$/i.test(config.url ?? '');
     if (isLoginRequest) {
-      if (config.headers && typeof config.headers.delete === 'function') {
-        config.headers.delete('Authorization');
-      } else if (config.headers) {
-        delete config.headers['Authorization'];
-      }
+      config.headers.delete('Authorization');
       return config;
     }
 

@@ -135,7 +135,7 @@ export const userService = {
   ): Promise<{ id: string; roles: AccountRole[] }> => {
     try {
       // NOTE: Because the backend API accepts one role per PUT request: PUT /accounts/{id}/roles/{role}
-      // and we don't have a bulk replace endpoint in the backend docs, 
+      // and we don't have a bulk replace endpoint in the backend docs,
       // we'll attempt to add the provided roles sequentially.
       // (For a complete implementation, you'd fetch current roles and DELETE the missing ones too).
       for (const role of roles) {
@@ -186,4 +186,3 @@ export const userService = {
 };
 
 export default userService;
-

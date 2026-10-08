@@ -4,143 +4,115 @@ const ACCESS_TOKEN_KEY = 'accessToken';
 const REFRESH_TOKEN_KEY = 'refreshToken';
 const USER_DATA_KEY = 'userData';
 
-export interface TokenUserData {
-  id?: string;
-  email?: string;
-  role?: string;
+type StoredUser = {
+  id: string;
+  email: string;
+  role: string;
   [key: string]: unknown;
-}
+};
 
 const isValidToken = (token: unknown): token is string =>
   typeof token === 'string'
   && token.trim().length > 0
   && token.trim().toLowerCase() !== 'undefined';
 
-const clearPersistedTokens = (): void => {
-  try {
-    window.localStorage.removeItem(ACCESS_TOKEN_KEY);
-    window.localStorage.removeItem(REFRESH_TOKEN_KEY);
-  } catch {
-    // Storage can be unavailable in restricted browser contexts.
-  }
-};
-
 const isInvalidStoredToken = (token: string | null): boolean =>
-  token !== null && (!isValidToken(token) || token.trim().toLowerCase() === 'undefined');
+  token !== null && !isValidToken(token);
 
-const isTokenUserData = (value: unknown): value is TokenUserData =>
+const isStoredUser = (value: unknown): value is StoredUser =>
   typeof value === 'object'
   && value !== null
   && !Array.isArray(value)
-  && (!('id' in value) || typeof value.id === 'string')
-  && (!('email' in value) || typeof value.email === 'string')
-  && (!('role' in value) || typeof value.role === 'string');
+  && 'id' in value
+  && typeof value.id === 'string'
+  && 'email' in value
+  && typeof value.email === 'string'
+  && 'role' in value
+  && typeof value.role === 'string';
+
+const clearPersistedTokens = (): void => {
+  window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+  window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+};
 
 export const tokenService = {
   getToken(): string | null {
-    try {
-      const token = window.localStorage.getItem(ACCESS_TOKEN_KEY);
-      if (isInvalidStoredToken(token)) {
-        clearPersistedTokens();
-        return null;
-      }
-      return token;
-    } catch {
+    const token = window.localStorage.getItem(ACCESS_TOKEN_KEY);
+    if (isInvalidStoredToken(token)) {
+      clearPersistedTokens();
       return null;
     }
+    return token;
   },
 
   getAccessToken(): string | null {
     return this.getToken();
   },
 
+  setAccessToken(token: unknown): boolean {
+    if (!isValidToken(token)) {
+      clearPersistedTokens();
+      return false;
+    }
+    window.localStorage.setItem(ACCESS_TOKEN_KEY, token.trim());
+    return window.localStorage.getItem(ACCESS_TOKEN_KEY) === token.trim();
+  },
+
+  setToken(token: unknown): boolean {
+    return this.setAccessToken(token);
+  },
+
   removeAccessToken(): void {
     window.localStorage.removeItem(ACCESS_TOKEN_KEY);
   },
 
+  removeToken(): void {
+    this.clearTokens();
+  },
+
   getRefreshToken(): string | null {
-    try {
-      const token = window.localStorage.getItem(REFRESH_TOKEN_KEY);
-      if (isInvalidStoredToken(token)) {
-        window.localStorage.removeItem(REFRESH_TOKEN_KEY);
-        return null;
-      }
-      return token;
-    } catch {
+    const token = window.localStorage.getItem(REFRESH_TOKEN_KEY);
+    if (isInvalidStoredToken(token)) {
+      window.localStorage.removeItem(REFRESH_TOKEN_KEY);
       return null;
     }
+    return token;
+  },
+
+  setRefreshToken(token: unknown): boolean {
+    if (token === null || token === undefined || token === '') {
+      window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+      return true;
+    }
+    if (!isValidToken(token)) {
+      window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+      return false;
+    }
+    window.localStorage.setItem(REFRESH_TOKEN_KEY, token.trim());
+    return window.localStorage.getItem(REFRESH_TOKEN_KEY) === token.trim();
   },
 
   removeRefreshToken(): void {
     window.localStorage.removeItem(REFRESH_TOKEN_KEY);
   },
 
-  setAccessToken(accessToken: unknown): boolean {
-    if (!isValidToken(accessToken)) {
-      clearPersistedTokens();
-      return false;
-    }
+  getUserData(): User | null {
+    const serializedUser = window.localStorage.getItem(USER_DATA_KEY);
+    if (!serializedUser) return null;
 
     try {
-      window.localStorage.setItem(ACCESS_TOKEN_KEY, (accessToken as string).trim());
-      const saved = window.localStorage.getItem(ACCESS_TOKEN_KEY) === (accessToken as string).trim();
-      if (!saved) window.localStorage.removeItem(ACCESS_TOKEN_KEY);
-      return saved;
-    } catch {
-      clearPersistedTokens();
-      return false;
-    }
-  },
-
-  setRefreshToken(refreshToken: unknown): boolean {
-    if (refreshToken === null || refreshToken === undefined || refreshToken === '') {
-      try {
-        window.localStorage.removeItem(REFRESH_TOKEN_KEY);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-
-    if (!isValidToken(refreshToken)) {
-      try {
-        window.localStorage.removeItem(REFRESH_TOKEN_KEY);
-      } catch {
-        return false;
-      }
-      return false;
-    }
-
-    try {
-      window.localStorage.setItem(REFRESH_TOKEN_KEY, (refreshToken as string).trim());
-      return window.localStorage.getItem(REFRESH_TOKEN_KEY) === (refreshToken as string).trim();
-    } catch {
-      return false;
+      const user: unknown = JSON.parse(serializedUser);
+      return isStoredUser(user) ? user as User : null;
+    } catch (error) {
+      console.error('Lỗi khi parse dữ liệu User từ localStorage:', error);
+      return null;
     }
   },
 
   setUserData(user: unknown): boolean {
-    if (!isTokenUserData(user)) return false;
-
-    try {
-      const serializedUser = JSON.stringify(user);
-      window.localStorage.setItem(USER_DATA_KEY, serializedUser);
-      return window.localStorage.getItem(USER_DATA_KEY) === serializedUser;
-    } catch {
-      return false;
-    }
-  },
-
-  getUserData(): User | null {
-    try {
-      const serializedUser = window.localStorage.getItem(USER_DATA_KEY);
-      if (!serializedUser) return null;
-
-      const user: unknown = JSON.parse(serializedUser);
-      return isTokenUserData(user) ? (user as unknown as User) : null;
-    } catch {
-      return null;
-    }
+    if (!isStoredUser(user)) return false;
+    window.localStorage.setItem(USER_DATA_KEY, JSON.stringify(user));
+    return true;
   },
 
   removeUserData(): void {
@@ -148,65 +120,32 @@ export const tokenService = {
   },
 
   saveTokens(accessToken: unknown, refreshToken?: unknown): boolean {
-    if (
-      !isValidToken(accessToken)
-      || (refreshToken !== undefined && refreshToken !== null && !isValidToken(refreshToken))
-    ) {
+    if (!isValidToken(accessToken)
+      || (refreshToken !== undefined && refreshToken !== null && !isValidToken(refreshToken))) {
       clearPersistedTokens();
       return false;
     }
-
-    try {
-      window.localStorage.setItem(ACCESS_TOKEN_KEY, (accessToken as string).trim());
-      if (isValidToken(refreshToken)) {
-        window.localStorage.setItem(REFRESH_TOKEN_KEY, (refreshToken as string).trim());
-      } else {
-        window.localStorage.removeItem(REFRESH_TOKEN_KEY);
-      }
-      const saved = window.localStorage.getItem(ACCESS_TOKEN_KEY) === (accessToken as string).trim();
-      if (!saved) clearPersistedTokens();
-      return saved;
-    } catch {
-      clearPersistedTokens();
-      return false;
-    }
-  },
-
-  setToken(accessToken: unknown): boolean {
-    return this.saveTokens(accessToken);
-  },
-
-  removeToken(): void {
-    this.clearTokens();
+    this.setAccessToken(accessToken);
+    this.setRefreshToken(refreshToken);
+    return true;
   },
 
   removeInvalidStoredTokens(): void {
-    try {
-      const accessToken = window.localStorage.getItem(ACCESS_TOKEN_KEY);
-      const refreshToken = window.localStorage.getItem(REFRESH_TOKEN_KEY);
-      const legacyToken = window.localStorage.getItem('token');
-
-      if (isInvalidStoredToken(accessToken) || isInvalidStoredToken(refreshToken)) {
-        clearPersistedTokens();
-      }
-      if (isInvalidStoredToken(legacyToken)) {
-        window.localStorage.removeItem('token');
-      }
-    } catch {
-      // Storage can be unavailable in restricted browser contexts.
+    if (isInvalidStoredToken(window.localStorage.getItem(ACCESS_TOKEN_KEY))
+      || isInvalidStoredToken(window.localStorage.getItem(REFRESH_TOKEN_KEY))) {
+      clearPersistedTokens();
+    }
+    if (isInvalidStoredToken(window.localStorage.getItem('token'))) {
+      window.localStorage.removeItem('token');
     }
   },
 
   clearTokens(): void {
     clearPersistedTokens();
-    try {
-      window.localStorage.removeItem(USER_DATA_KEY);
-    } catch {
-      // Storage can be unavailable in restricted browser contexts.
-    }
+    window.localStorage.removeItem(USER_DATA_KEY);
   },
 
   clearAll(): void {
     this.clearTokens();
-  }
+  },
 };

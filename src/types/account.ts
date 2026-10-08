@@ -83,5 +83,3 @@ export interface GetUsersResponse {
   totalPages: number;
   currentPage: number;
 }
-
-

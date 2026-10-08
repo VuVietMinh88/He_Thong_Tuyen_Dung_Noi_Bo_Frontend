@@ -131,7 +131,7 @@ export const LoginForm: React.FC = () => {
         setIsLoading(false);
         return;
       }
-      
+
       const errorMessage =
         error instanceof Error ? error.message : "LOGIN_REQUEST_FAILED";
 
@@ -149,7 +149,7 @@ export const LoginForm: React.FC = () => {
         setSubmitError(getGenericLoginErrorMessage());
         return;
       }
-      
+
       if (errorMessage === "TOO_MANY_REQUESTS") {
           setSubmitError("Bạn đã thử quá nhiều lần. Vui lòng thử lại sau.");
           return;
@@ -328,7 +328,7 @@ export const LoginForm: React.FC = () => {
                 ></path>
               </svg>
               Đang xác thực...
-            </span>
+mp            </span>
           ) : (
             "Đăng nhập hệ thống"
           )}

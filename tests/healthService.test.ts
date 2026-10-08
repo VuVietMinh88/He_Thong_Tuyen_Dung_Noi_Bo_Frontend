@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getJson } from '../src/services/api'
 import { getHealth } from '../src/services/healthService'
 
-beforeEach(() => vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080/api'))
+beforeEach(() => vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080/api/v1'))
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
@@ -61,7 +61,7 @@ describe('Backend health API contract', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/api/v1/health')
   })
 
-  it('does not append the API version twice when it is already configured', async () => {
+  it('does not duplicate the API version in the configured URL', async () => {
     vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080/api/v1/')
     const fetchMock = vi.fn().mockResolvedValue(new Response('{"status":"UP"}'))
     vi.stubGlobal('fetch', fetchMock)
