@@ -4,8 +4,19 @@ import { tokenService } from '../services/token.service';
 /**
  * Cấu hình axios client cơ bản để dùng chung cho toàn bộ dự án.
  */
+const normalizeApiBaseUrl = (baseUrl?: string): string => {
+  const trimmed = (baseUrl ?? '').trim().replace(/\/+$/, '');
+  if (!trimmed) return 'http://localhost:8080/api/v1';
+  if (/\/api\/v1(?:\/v1)+$/i.test(trimmed)) {
+    return trimmed.replace(/(?:\/v1)+$/i, '/v1');
+  }
+  if (trimmed.endsWith('/api/v1')) return trimmed;
+  if (trimmed.endsWith('/api')) return `${trimmed}/v1`;
+  return trimmed;
+};
+
 const axiosClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api',
+  baseURL: normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL),
   headers: {
     'Content-Type': 'application/json',
   },
@@ -33,6 +44,13 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
 // AC 2: Request Interceptor - Tự động đính kèm Access Token vào Header
 axiosClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    tokenService.removeInvalidStoredTokens();
+    const isLoginRequest = /(?:^|\/)auth\/login\/?$/i.test(config.url ?? '');
+    if (isLoginRequest) {
+      config.headers.delete('Authorization');
+      return config;
+    }
+
     const token = tokenService.getAccessToken();
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;

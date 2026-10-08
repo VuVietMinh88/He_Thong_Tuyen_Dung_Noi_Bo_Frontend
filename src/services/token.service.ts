@@ -14,10 +14,19 @@ const USER_DATA_KEY = 'userData';
 export const tokenService = {
   // --- Quản lý Access Token ---
   getAccessToken: (): string | null => {
-    return localStorage.getItem(ACCESS_TOKEN_KEY);
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+    if (!token || token.trim().toLowerCase() === 'undefined') {
+      localStorage.removeItem(ACCESS_TOKEN_KEY);
+      return null;
+    }
+    return token;
   },
   setAccessToken: (token: string): void => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, token);
+    if (!token.trim() || token.trim().toLowerCase() === 'undefined') {
+      localStorage.removeItem(ACCESS_TOKEN_KEY);
+      return;
+    }
+    localStorage.setItem(ACCESS_TOKEN_KEY, token.trim());
   },
   removeAccessToken: (): void => {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
@@ -25,10 +34,19 @@ export const tokenService = {
 
   // --- Quản lý Refresh Token ---
   getRefreshToken: (): string | null => {
-    return localStorage.getItem(REFRESH_TOKEN_KEY);
+    const token = localStorage.getItem(REFRESH_TOKEN_KEY);
+    if (!token || token.trim().toLowerCase() === 'undefined') {
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+      return null;
+    }
+    return token;
   },
   setRefreshToken: (token: string): void => {
-    localStorage.setItem(REFRESH_TOKEN_KEY, token);
+    if (!token.trim() || token.trim().toLowerCase() === 'undefined') {
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+      return;
+    }
+    localStorage.setItem(REFRESH_TOKEN_KEY, token.trim());
   },
   removeRefreshToken: (): void => {
     localStorage.removeItem(REFRESH_TOKEN_KEY);
@@ -59,6 +77,19 @@ export const tokenService = {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(REFRESH_TOKEN_KEY);
     localStorage.removeItem(USER_DATA_KEY);
-  }
+  },
+  removeInvalidStoredTokens: (): void => {
+    const accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+    if (
+      accessToken?.trim().toLowerCase() === 'undefined'
+      || refreshToken?.trim().toLowerCase() === 'undefined'
+    ) {
+      tokenService.clearAll();
+    }
+    const legacyToken = localStorage.getItem('token');
+    if (legacyToken?.trim().toLowerCase() === 'undefined') {
+      localStorage.removeItem('token');
+    }
+  },
 };
-
