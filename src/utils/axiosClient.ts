@@ -77,6 +77,12 @@ const redirectToLogin = (): void => {
   }
 };
 
+const redirectToUnauthorized = (): void => {
+  if (typeof window !== 'undefined' && window.location.pathname !== '/unauthorized') {
+    window.location.href = '/unauthorized';
+  }
+};
+
 axiosClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     tokenService.removeInvalidStoredTokens();
@@ -96,8 +102,15 @@ axiosClient.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as RetryRequestConfig | undefined;
+    const status = error.response?.status;
+
+    if (status === 403 && originalRequest && !isAuthRequest(originalRequest.url)) {
+      redirectToUnauthorized();
+      return Promise.reject(error);
+    }
+
     if (
-      error.response?.status !== 401
+      status !== 401
       || !originalRequest
       || originalRequest._retry
       || isAuthRequest(originalRequest.url)
@@ -139,7 +152,6 @@ axiosClient.interceptors.response.use(
         throw new Error('Không thể lưu phiên đăng nhập mới.');
       }
 
-      isRefreshing = false;
       processQueue(null, accessToken);
       originalRequest.headers.Authorization = `Bearer ${accessToken}`;
       return await axiosClient(originalRequest);

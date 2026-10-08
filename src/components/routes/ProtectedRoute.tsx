@@ -1,38 +1,29 @@
-import React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import type { Role } from '../../constants/roles';
-import { ROLES } from '../../constants/roles';
-
+import { ROLES, type Role } from '../../constants/roles';
 import { tokenService } from '../../services/token.service';
 
 interface ProtectedRouteProps {
   allowedRoles: Role[];
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
-  const location = useLocation();
-  
-  const token = tokenService.getAccessToken();
-  const userData = tokenService.getUserData();
-  const roles =
-    userData?.roles.filter(
-      (role): role is Role => Object.hasOwn(ROLES, role),
-    ) ?? [];
+const isRole = (role: string): role is Role => Object.hasOwn(ROLES, role);
 
-  // 1. Nếu chưa đăng nhập -> Đẩy về trang Login, lưu lại state `from` để quay lại sau khi đăng nhập thành công
-  if (!token) {
+const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
+  const location = useLocation();
+  const accessToken = tokenService.getAccessToken();
+  const userRoles = tokenService.getUserData()?.roles ?? [];
+
+  if (!accessToken) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // 2. Đã đăng nhập và có quyền hợp lệ -> Render giao diện tuyến đường con (Outlet)
-  const hasAllowedRole = roles.some((role) => allowedRoles.includes(role));
-  
-  if (hasAllowedRole) {
-    return <Outlet />;
-  }
+  const hasAllowedRole = userRoles.some(
+    (role) => isRole(role) && allowedRoles.includes(role),
+  );
 
-  // 3. Đã đăng nhập nhưng không đủ quyền -> Đẩy ra trang 403 (Unauthorized)
-  return <Navigate to="/unauthorized" replace />;
+  return hasAllowedRole
+    ? <Outlet />
+    : <Navigate to="/unauthorized" replace />;
 };
 
 export default ProtectedRoute;
