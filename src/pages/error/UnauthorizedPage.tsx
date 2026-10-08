@@ -1,33 +1,52 @@
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const UnauthorizedPage: React.FC = () => {
+const UnauthorizedPage = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 px-4 text-center">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 border border-gray-200">
-        <div className="flex justify-center mb-4">
-          <div className="bg-red-100 p-4 rounded-full">
-            <svg className="w-12 h-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
+    <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-10 text-slate-800">
+      <section className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-8 shadow-lg shadow-slate-200/80 sm:p-10">
+        <div className="mb-6 flex items-center justify-center">
+          <div
+            className="flex h-20 w-20 items-center justify-center rounded-full bg-red-50 text-4xl font-bold text-red-500 shadow-inner shadow-red-100"
+            aria-hidden="true"
+          >
+            403
           </div>
         </div>
-        <h1 className="text-5xl font-bold text-gray-800 mb-2">403</h1>
-        <h2 className="text-2xl font-semibold text-gray-800 mb-2">Truy Cập Bị Từ Chối</h2>
-        <p className="text-gray-600 mb-6">
-          Xin lỗi, bạn không có quyền truy cập vào chức năng này. Vui lòng liên hệ với Quản trị hệ thống nếu bạn nghĩ đây là một sự nhầm lẫn.
-        </p>
-        <button
-          onClick={() => navigate('/')}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-md transition duration-200 shadow-md flex items-center justify-center"
-        >
-          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-          Quay lại trang chủ an toàn
-        </button>
-      </div>
-    </div>
+
+        <div className="text-center">
+          <p className="mb-2 text-sm font-semibold uppercase tracking-[0.2em] text-red-500">
+            Truy cập bị từ chối
+          </p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+            Không đủ quyền hạn
+          </h1>
+          <p className="mt-4 text-base leading-7 text-slate-600">
+            Tài khoản hiện tại chưa được cấp quyền để truy cập chức năng hoặc trang này.
+            Vui lòng quay lại hoặc liên hệ quản trị viên nếu bạn cho rằng đây là lỗi.
+          </p>
+        </div>
+
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+          >
+            Quay lại trang trước
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard', { replace: true })}
+            className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200"
+          >
+            Về bảng điều khiển
+          </button>
+        </div>
+      </section>
+    </main>
   );
 };
 
