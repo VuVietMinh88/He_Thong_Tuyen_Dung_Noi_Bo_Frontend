@@ -100,10 +100,13 @@ describe('Login API contract', () => {
   });
 
   it('does not report a password reset request as successful when the API fails', async () => {
-    const apiError = new Error('Request failed with status code 503');
-    postMock.mockRejectedValue(apiError);
+    postMock.mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 503, data: {} },
+    });
 
-    await expect(authService.requestPasswordReset('user@company.com')).rejects.toBe(apiError);
+    await expect(authService.requestPasswordReset('user@company.com'))
+      .rejects.toThrow('SERVER_UNAVAILABLE');
     expect(postMock).toHaveBeenCalledWith('/auth/forgot-password', {
       email: 'user@company.com',
     });

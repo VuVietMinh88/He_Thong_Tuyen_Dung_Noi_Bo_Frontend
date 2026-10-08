@@ -6,6 +6,13 @@ import ResetPasswordPage from './pages/ResetPassword/ResetPasswordPage';
 import ChangePasswordPage from './pages/ChangePassword/ChangePasswordPage';
 import AccountListPage from './pages/AccountList/AccountListPage';
 import { getHealth, type HealthResponse } from './services/healthService';
+import { tokenService } from './services/token.service';
+
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const hasAccessToken = Boolean(tokenService.getAccessToken());
+
+  return hasAccessToken ? <>{children}</> : <Navigate to="/login" replace />;
+};
 
 function HealthCheck() {
   const [status, setStatus] = useState<HealthResponse | null>(null);
@@ -59,7 +66,14 @@ function App() {
         <Route path="/health" element={<HealthCheck />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/change-password" element={<ChangePasswordPage />} />
+        <Route
+          path="/change-password"
+          element={
+            <ProtectedRoute>
+              <ChangePasswordPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/users" element={<AccountListPage />} />
         <Route path="/admin/users" element={<AccountListPage />} />
         <Route path="/admin/dashboard" element={<AccountListPage />} />

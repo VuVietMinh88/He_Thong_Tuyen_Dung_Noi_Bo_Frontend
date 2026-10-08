@@ -2,11 +2,11 @@ import axios from "axios";
 import axiosClient from "../utils/axiosClient";
 import type { LoginResponse } from "../types/auth";
 
-type ApiFieldErrorMap = Record<string, string[] | string | undefined>;
+type ApiFieldErrors = Record<string, string[] | string | undefined>;
 
 type BackendErrorPayload = {
   code?: string;
-  fieldErrors?: ApiFieldErrorMap;
+  fieldErrors?: ApiFieldErrors;
   message?: string;
 };
 
@@ -57,8 +57,7 @@ const extractFieldErrorMessage = (fieldErrors: unknown): string | null => {
   for (const value of Object.values(fieldErrors)) {
     if (Array.isArray(value)) {
       const message = value.find(
-        (item): item is string =>
-          typeof item === "string" && item.trim().length > 0,
+        (item): item is string => typeof item === "string" && item.trim().length > 0,
       );
 
       if (message) {
@@ -148,7 +147,41 @@ export const authService = {
   },
 
   requestPasswordReset: async (email: string): Promise<void> => {
-    await axiosClient.post("/auth/forgot-password", { email });
+    try {
+      const response = await axiosClient.post("/auth/forgot-password", { email });
+
+      if (response.status >= 200 && response.status < 300) {
+        return;
+      }
+
+      throw new Error("PASSWORD_RESET_REQUEST_FAILED");
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const payload = error.response?.data as BackendErrorPayload | undefined;
+        const code = payload?.code;
+
+        if (code === "EMAIL_INVALID" || code === "VALIDATION_ERROR") {
+          throw new Error("EMAIL_INVALID");
+        }
+
+        if (error.response?.status === 429) {
+          throw new Error("RATE_LIMITED");
+        }
+
+        if (
+          error.response?.status === 500 ||
+          error.response?.status === 503
+        ) {
+          throw new Error("SERVER_UNAVAILABLE");
+        }
+      }
+
+      if (error instanceof Error && error.message === "PASSWORD_RESET_REQUEST_FAILED") {
+        throw error;
+      }
+
+      throw new Error("NETWORK_ERROR");
+    }
   },
 
   resetPassword: async (token: string, newPassword: string): Promise<void> => {
@@ -171,9 +204,7 @@ export const authService = {
             throw new Error("INVALID_OR_EXPIRED_TOKEN");
           }
           const validationError = new Error("PASSWORD_INVALID");
-          const fieldErrorMessage = extractFieldErrorMessage(
-            payload?.fieldErrors,
-          );
+          const fieldErrorMessage = extractFieldErrorMessage(payload?.fieldErrors);
 
           if (fieldErrorMessage) {
             Object.assign(validationError, { fieldMessage: fieldErrorMessage });
@@ -198,24 +229,30 @@ export const authService = {
       });
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        const status = error.response?.status;
-        const isNetworkOrNotFound = !error.response || status === 404 || status === 502 || status === 503;
-        if (isNetworkOrNotFound) {
-          // Mockup: Simulate successful change password
-          await new Promise(resolve => setTimeout(resolve, 800));
-          return;
-        }
+        const payload = error.response?.data as BackendErrorPayload | undefined;
+        const code = payload?.code;
 
-        if (status === 400 || status === 401) {
+        if (code === "CURRENT_PASSWORD_INCORRECT") {
           throw new Error("INVALID_CURRENT_PASSWORD");
         }
 
-        if (status === 422) {
-          throw new Error("PASSWORD_INVALID");
+        if (code === "VALIDATION_ERROR") {
+          const validationError = new Error("PASSWORD_INVALID");
+          const fieldErrorMessage = extractFieldErrorMessage(payload?.fieldErrors);
+
+          if (fieldErrorMessage) {
+            Object.assign(validationError, { fieldMessage: fieldErrorMessage });
+          }
+
+          throw validationError;
         }
       }
 
       throw new Error("CHANGE_PASSWORD_REQUEST_FAILED");
     }
+  },
+
+  logout: async (): Promise<void> => {
+    await axiosClient.post("/auth/logout");
   },
 };
