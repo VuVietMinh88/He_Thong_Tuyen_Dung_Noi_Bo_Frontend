@@ -1,139 +1,152 @@
-import { useState } from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
-import ToastProvider from './components/notifications/ToastProvider'
-import { useToast } from './components/notifications/useToast'
-import ProtectedRoute from './components/routes/ProtectedRoute'
-import { ROLES } from './constants/roles'
-import UnauthorizedPage from './pages/error/UnauthorizedPage'
-import { getHealth } from './services/healthService'
+import { useEffect, useState, type ReactNode } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import ToastProvider from './components/notifications/ToastProvider';
+import LoginPage from './pages/Login/LoginPage';
+import ForgotPasswordPage from './pages/ForgotPassword/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPassword/ResetPasswordPage';
+import ChangePasswordPage from './pages/ChangePassword/ChangePasswordPage';
+import AccountListPage from './pages/AccountList/AccountListPage';
+import UnauthorizedPage from './pages/error/UnauthorizedPage';
+import ProtectedRoute from './components/routes/ProtectedRoute';
+import Sidebar from './components/layout/Sidebar';
+import { getHealth, type HealthResponse } from './services/healthService';
+import { ROLES, type Role } from './constants/roles';
 
-function HomePage() {
-  const [pending, setPending] = useState(false)
-  const [message, setMessage] = useState('Chưa kiểm tra kết nối Backend.')
-  const { notify } = useToast()
+const ALL_ROLES = Object.values(ROLES) as Role[];
 
-  async function checkConnection() {
-    setPending(true)
-    setMessage('Đang kiểm tra kết nối...')
-    try {
-      const health = await getHealth()
-      const successMessage = `Kết nối Backend thành công: ${health.status}.`
-      setMessage(successMessage)
-      notify(successMessage, 'success')
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Không kiểm tra được kết nối.'
-      setMessage(errorMessage)
-      notify(errorMessage, 'error')
-    } finally {
-      setPending(false)
-    }
+const MainLayout = ({ children }: { children: ReactNode }) => (
+  <div className="flex h-screen bg-gray-100">
+    <Sidebar />
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-6">
+        {children}
+      </main>
+    </div>
+  </div>
+);
+
+function HealthCheck() {
+  const [status, setStatus] = useState<HealthResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    getHealth()
+      .then((response) => {
+        if (isCurrent) setStatus(response);
+      })
+      .catch((requestError: unknown) => {
+        if (isCurrent) {
+          setError(requestError instanceof Error
+            ? requestError.message
+            : 'Lỗi kết nối tới server/database');
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
+
+  if (error) {
+    return (
+      <div style={{ fontFamily: 'monospace', padding: '20px', color: 'red' }}>
+        {JSON.stringify({ status: 'error', message: error }, null, 2)}
+      </div>
+    );
+  }
+
+  if (!status) {
+    return <div style={{ fontFamily: 'monospace', padding: '20px' }}>Checking connection...</div>;
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-10 text-slate-800">
-      <h1 className="text-3xl font-bold">Hệ thống tuyển dụng nội bộ</h1>
-      <p className="mt-2 text-slate-600">Frontend — K3S4_N3</p>
-
-      <div className="mt-6 flex flex-wrap gap-3">
-        <button type="button" disabled={pending} onClick={() => void checkConnection()} className="rounded-lg bg-slate-900 px-4 py-2 text-white disabled:opacity-60">
-          {pending ? 'Đang kiểm tra...' : 'Kiểm tra kết nối Backend'}
-        </button>
-
-        <button type="button" onClick={() => window.location.assign('/login')} className="rounded-lg border border-slate-300 px-4 py-2 text-slate-700">
-          Đi đến trang đăng nhập demo
-        </button>
-      </div>
-
-      <p role="status" aria-live="polite" className="mt-4 rounded-lg bg-slate-100 px-4 py-3 text-sm">
-        {message}
-      </p>
-    </main>
-  )
+    <div style={{ fontFamily: 'monospace', padding: '20px', color: 'green' }}>
+      {JSON.stringify({ status: 'connected', backend_data: status }, null, 2)}
+    </div>
+  );
 }
 
-function LoginPage() {
-  const navigate = useNavigate()
-  const { notify } = useToast()
-  const [role, setRole] = useState('RECRUITER')
-
-  const handleLogin = () => {
-    localStorage.setItem('access_token', 'demo-access-token')
-    localStorage.setItem('refresh_token', 'demo-refresh-token')
-    localStorage.setItem('user_role', role)
-    notify('Đăng nhập demo thành công.', 'success')
-    navigate('/dashboard')
-  }
-
-  return (
-    <main className="mx-auto flex min-h-screen max-w-md items-center justify-center px-4 py-10">
-      <section className="w-full rounded-2xl border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/60">
-        <h1 className="text-2xl font-bold text-slate-900">Đăng nhập demo</h1>
-        <p className="mt-2 text-sm text-slate-600">Chọn vai trò để test luồng 401/403.</p>
-
-        <label className="mt-6 block text-sm font-medium text-slate-700">
-          Vai trò
-          <select value={role} onChange={(event) => setRole(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none ring-0 focus:border-slate-500">
-            <option value="CANDIDATE">CANDIDATE</option>
-            <option value="RECRUITER">RECRUITER</option>
-            <option value="HEAD_OF_DEPARTMENT">HEAD_OF_DEPARTMENT</option>
-            <option value="HR_MANAGER">HR_MANAGER</option>
-            <option value="SYSTEM_ADMIN">SYSTEM_ADMIN</option>
-          </select>
-        </label>
-
-        <button type="button" onClick={handleLogin} className="mt-6 w-full rounded-lg bg-slate-900 px-4 py-3 font-medium text-white hover:bg-slate-700">
-          Đăng nhập
-        </button>
-      </section>
-    </main>
-  )
-}
-
-function DashboardPage() {
-  const navigate = useNavigate()
-  const role = localStorage.getItem('user_role') ?? 'CANDIDATE'
-
-  return (
-    <main className="mx-auto max-w-3xl px-4 py-10">
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Dashboard</p>
-        <h1 className="mt-3 text-3xl font-bold text-slate-900">Xin chào</h1>
-        <p className="mt-2 text-slate-600">
-          Vai trò hiện tại: <span className="font-semibold text-slate-900">{role}</span>
-        </p>
-
-        <div className="mt-6 flex flex-wrap gap-3">
-          <button type="button" onClick={() => navigate('/unauthorized')} className="rounded-lg bg-red-500 px-4 py-2 font-medium text-white hover:bg-red-600">
-            Test 403
-          </button>
-
-          <button type="button" onClick={() => navigate('/')} className="rounded-lg border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-50">
-            Về trang chủ
-          </button>
-        </div>
-      </div>
-    </main>
-  )
-}
+const PlaceholderPage = ({ title }: { title: string }) => (
+  <div className="rounded-lg bg-white p-8 text-2xl font-bold">{title}</div>
+);
 
 function App() {
   return (
     <ToastProvider>
-      <BrowserRouter>
+      <Router>
         <Routes>
-          <Route path="/" element={<HomePage />} />
+          <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/health" element={<HealthCheck />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-          <Route element={<ProtectedRoute allowedRoles={[ROLES.RECRUITER, ROLES.HR_MANAGER, ROLES.SYSTEM_ADMIN]} />}>
-            <Route path="/dashboard" element={<DashboardPage />} />
+          <Route element={<ProtectedRoute allowedRoles={ALL_ROLES} />}>
+            <Route path="/dashboard" element={<MainLayout><PlaceholderPage title="Bảng điều khiển chung" /></MainLayout>} />
+            <Route path="/profile" element={<MainLayout><PlaceholderPage title="Hồ sơ cá nhân" /></MainLayout>} />
+            <Route
+              path="/change-password"
+              element={<MainLayout><ChangePasswordPage /></MainLayout>}
+            />
           </Route>
 
-          <Route path="/unauthorized" element={<UnauthorizedPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route element={<ProtectedRoute allowedRoles={[ROLES.ADMIN]} />}>
+            <Route path="/users" element={<AccountListPage />} />
+            <Route path="/admin/users" element={<AccountListPage />} />
+            <Route path="/admin/dashboard" element={<AccountListPage />} />
+          </Route>
+
+          <Route
+            element={
+              <ProtectedRoute
+                allowedRoles={[ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER]}
+              />
+            }
+          >
+            <Route path="/jobs" element={<MainLayout><PlaceholderPage title="Đăng tuyển dụng" /></MainLayout>} />
+          </Route>
+
+          <Route
+            element={
+              <ProtectedRoute
+                allowedRoles={[ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER, ROLES.HIRING_MANAGER]}
+              />
+            }
+          >
+            <Route path="/candidates" element={<MainLayout><PlaceholderPage title="Quản lý CV / Ứng viên" /></MainLayout>} />
+          </Route>
+
+          <Route
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  ROLES.ADMIN,
+                  ROLES.HR_MANAGER,
+                  ROLES.RECRUITER,
+                  ROLES.HIRING_MANAGER,
+                  ROLES.INTERVIEWER,
+                ]}
+              />
+            }
+          >
+            <Route path="/interviews" element={<MainLayout><PlaceholderPage title="Lịch phỏng vấn" /></MainLayout>} />
+          </Route>
+
+          <Route
+            path="*"
+            element={
+              <div className="flex h-screen items-center justify-center text-2xl">
+                404 - Không tìm thấy trang
+              </div>
+            }
+          />
         </Routes>
-      </BrowserRouter>
+      </Router>
     </ToastProvider>
-  )
+  );
 }
 
-export default App
+export default App;

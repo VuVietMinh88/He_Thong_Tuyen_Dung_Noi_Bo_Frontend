@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../components/notifications/useToast';
 
-const UnauthorizedPage: React.FC = () => {
+const UnauthorizedPage = () => {
   const navigate = useNavigate();
   const { notify } = useToast();
   const notified = useRef(false);
@@ -17,7 +17,10 @@ const UnauthorizedPage: React.FC = () => {
     <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-10 text-slate-800">
       <section className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-8 shadow-lg shadow-slate-200/80 sm:p-10">
         <div className="mb-6 flex items-center justify-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-red-50 text-4xl font-bold text-red-500 shadow-inner shadow-red-100">
+          <div
+            className="flex h-20 w-20 items-center justify-center rounded-full bg-red-50 text-4xl font-bold text-red-500 shadow-inner shadow-red-100"
+            aria-hidden="true"
+          >
             403
           </div>
         </div>
@@ -46,10 +49,10 @@ const UnauthorizedPage: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/dashboard', { replace: true })}
             className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200"
           >
-            Về trang tổng quan
+            Về bảng điều khiển
           </button>
         </div>
       </section>

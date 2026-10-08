@@ -8,14 +8,25 @@ export class ApiError extends Error {
   }
 }
 
+const normalizeApiBaseUrl = (configuredBaseUrl?: string): string => {
+  const baseUrl = (configuredBaseUrl ?? '').trim().replace(/\/+$/, '');
+  if (!baseUrl) return '';
+  if (/\/api\/v1(?:\/v1)+$/i.test(baseUrl)) {
+    return baseUrl.replace(/(?:\/v1)+$/i, '/v1');
+  }
+  if (/\/api\/v1$/i.test(baseUrl)) return baseUrl;
+  if (/\/api$/i.test(baseUrl)) return `${baseUrl}/v1`;
+  return baseUrl;
+};
+
 export async function getJson(path: string, timeoutMs = 10000): Promise<unknown> {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
+  const baseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL)
   if (!baseUrl) throw new ApiError('Chưa cấu hình VITE_API_BASE_URL.')
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const response = await fetch(
-      `${baseUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`,
+      `${baseUrl}/${path.replace(/^\/+/, '')}`,
       { method: 'GET', headers: { Accept: 'application/json' }, signal: controller.signal },
     )
     if (!response.ok) {

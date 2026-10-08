@@ -1,24 +1,29 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import type { Role } from '../../constants/roles';
+import { ROLES, type Role } from '../../constants/roles';
+import { tokenService } from '../../services/token.service';
 
 interface ProtectedRouteProps {
   allowedRoles: Role[];
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
+const isRole = (role: string): role is Role => Object.hasOwn(ROLES, role);
+
+const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
   const location = useLocation();
-  const token = localStorage.getItem('access_token');
-  const userRole = localStorage.getItem('user_role') as Role | null;
+  const accessToken = tokenService.getAccessToken();
+  const userRoles = tokenService.getUserData()?.roles ?? [];
 
-  if (!token) {
-    return <Navigate to="/login" replace state={{ from: location }} />;
+  if (!accessToken) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (userRole && allowedRoles.includes(userRole)) {
-    return <Outlet />;
-  }
+  const hasAllowedRole = userRoles.some(
+    (role) => isRole(role) && allowedRoles.includes(role),
+  );
 
-  return <Navigate to="/unauthorized" replace />;
+  return hasAllowedRole
+    ? <Outlet />
+    : <Navigate to="/unauthorized" replace />;
 };
 
 export default ProtectedRoute;
