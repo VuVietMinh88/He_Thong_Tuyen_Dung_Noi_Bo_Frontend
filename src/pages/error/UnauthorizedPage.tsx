@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import BackToHome from '../../components/navigation/BackToHome';
 import { useToast } from '../../components/notifications/useToast';
 
-const UnauthorizedPage: React.FC = () => {
+const UnauthorizedPage = () => {
   const { notify } = useToast();
   const notified = useRef(false);
 
@@ -16,7 +16,10 @@ const UnauthorizedPage: React.FC = () => {
     <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-10 text-slate-800">
       <section className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-8 shadow-lg shadow-slate-200/80 sm:p-10">
         <div className="mb-6 flex items-center justify-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-red-50 text-4xl font-bold text-red-500 shadow-inner shadow-red-100">
+          <div
+            className="flex h-20 w-20 items-center justify-center rounded-full bg-red-50 text-4xl font-bold text-red-500 shadow-inner shadow-red-100"
+            aria-hidden="true"
+          >
             403
           </div>
         </div>
