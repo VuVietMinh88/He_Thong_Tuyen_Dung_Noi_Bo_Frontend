@@ -1,9 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import BackToHome from '../../components/navigation/BackToHome';
 import { useToast } from '../../components/notifications/useToast';
 
 const UnauthorizedPage = () => {
-  const navigate = useNavigate();
   const { notify } = useToast();
   const notified = useRef(false);
 
@@ -38,23 +37,7 @@ const UnauthorizedPage = () => {
           </p>
         </div>
 
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
-          >
-            Quay lại trang trước
-          </button>
-
-          <button
-            type="button"
-            onClick={() => navigate('/dashboard', { replace: true })}
-            className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200"
-          >
-            Về bảng điều khiển
-          </button>
-        </div>
+        <BackToHome />
       </section>
     </main>
   );

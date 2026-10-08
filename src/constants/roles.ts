@@ -11,6 +11,15 @@ export type RoleKey = keyof typeof ROLES;
 export type RoleValue = (typeof ROLES)[RoleKey];
 export type Role = RoleValue;
 
+export const DASHBOARD_ROLES = [
+  ROLES.ADMIN,
+  ROLES.HR_MANAGER,
+  ROLES.RECRUITER,
+  ROLES.HIRING_MANAGER,
+  ROLES.INTERVIEWER,
+  ROLES.APPROVER,
+] as const satisfies readonly Role[];
+
 export const ROLE_NAMES: Record<Role, string> = {
   ADMIN: 'Quản trị hệ thống',
   HR_MANAGER: 'Trưởng phòng nhân sự',

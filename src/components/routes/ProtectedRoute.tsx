@@ -3,7 +3,7 @@ import { ROLES, type Role } from '../../constants/roles';
 import { tokenService } from '../../services/token.service';
 
 interface ProtectedRouteProps {
-  allowedRoles: Role[];
+  allowedRoles: readonly Role[];
 }
 
 const isRole = (role: string): role is Role => Object.hasOwn(ROLES, role);
