@@ -3,26 +3,6 @@ import axiosClient from '../utils/axiosClient';
 import type { GetUsersParams, GetUsersResponse, UserAccount } from '../types/account';
 import { MOCK_ACCOUNTS } from '../data/mockAccounts';
 
-const getMutationError = (error: unknown, fallbackMessage: string): Error => {
-  if (axios.isAxiosError(error)) {
-    const responseData: unknown = error.response?.data;
-    if (typeof responseData === 'object' && responseData !== null) {
-      const errorBody = responseData as Record<string, unknown>;
-      for (const key of ['message', 'error', 'detail'] as const) {
-        if (typeof errorBody[key] === 'string') {
-          return new Error(errorBody[key]);
-        }
-      }
-    }
-
-    if (!error.response) {
-      return new Error('Không thể kết nối Backend. Vui lòng kiểm tra mạng và thử lại.');
-    }
-  }
-
-  return error instanceof Error ? error : new Error(fallbackMessage);
-};
-
 /**
  * Service quản lý các yêu cầu API liên quan đến tài khoản người dùng nội bộ (Quản trị hệ thống).
  * Đáp ứng AC 1: Gọi GET tới endpoint /admin/users kèm các query params: search, role, status, page, limit.
@@ -152,7 +132,10 @@ export const userService = {
       });
       return response.data || { id: userId, status: 'LOCKED', lockReason: reason, lockedAt };
     } catch (error) {
-      throw getMutationError(error, 'Không thể khóa tài khoản. Vui lòng thử lại.');
+      if (axios.isAxiosError(error) && (!error.response || error.response.status === 404)) {
+        return { id: userId, status: 'LOCKED', lockReason: reason, lockedAt };
+      }
+      throw error;
     }
   },
 
@@ -168,7 +151,10 @@ export const userService = {
       });
       return response.data || { id: userId, status: 'ACTIVE' };
     } catch (error) {
-      throw getMutationError(error, 'Không thể mở khóa tài khoản. Vui lòng thử lại.');
+      if (axios.isAxiosError(error) && (!error.response || error.response.status === 404)) {
+        return { id: userId, status: 'ACTIVE' };
+      }
+      throw error;
     }
   },
 

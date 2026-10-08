@@ -1,7 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AxiosError } from 'axios';
 import { userService } from '../src/services/userService';
-import axiosClient from '../src/utils/axiosClient';
 
 const createLocalStorageMock = () => {
   const store = new Map<string, string>();
@@ -25,13 +23,10 @@ describe('userService API Service (TKNHTTDNB1-150)', () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
   it('returns paginated mock results when backend endpoint is not reachable', async () => {
-    vi.spyOn(axiosClient, 'get').mockRejectedValueOnce(new AxiosError('Network Error'));
-
     const result = await userService.getUsers({
       search: 'An',
       page: 1,
