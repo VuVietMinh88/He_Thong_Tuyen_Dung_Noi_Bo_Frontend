@@ -81,7 +81,7 @@ describe('userService API Service (TKNHTTDNB1-150)', () => {
   });
 
   it('does not report a lock as successful when the API is unavailable', async () => {
-    vi.spyOn(axiosClient, 'patch').mockRejectedValueOnce(new AxiosError('Network Error'));
+    vi.spyOn(axiosClient, 'put').mockRejectedValueOnce(new AxiosError('Network Error'));
 
     await expect(userService.lockUser('ACC-002', 'Nhân sự nghỉ việc')).rejects.toThrow(
       'Không thể kết nối Backend. Vui lòng kiểm tra mạng và thử lại.'
@@ -97,7 +97,7 @@ describe('userService API Service (TKNHTTDNB1-150)', () => {
       config: { headers: new AxiosHeaders() },
       data: {},
     };
-    vi.spyOn(axiosClient, 'patch').mockRejectedValueOnce(error);
+    vi.spyOn(axiosClient, 'delete').mockRejectedValueOnce(error);
 
     await expect(userService.unlockUser('ACC-002')).rejects.toThrow('Not Found');
   });

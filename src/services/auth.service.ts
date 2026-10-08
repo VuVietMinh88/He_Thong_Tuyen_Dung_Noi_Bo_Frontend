@@ -51,15 +51,23 @@ export const authService = {
       return {
         accessToken: data.accessToken,
         ...(typeof data.refreshToken === 'string' ? { refreshToken: data.refreshToken } : {}),
-        tokenType: data.tokenType,
-        expiresIn: data.expiresIn,
-        refreshExpiresAt: data.refreshExpiresAt,
+        ...(typeof data.tokenType === 'string' ? { tokenType: data.tokenType } : {}),
+        ...(typeof data.expiresIn === 'number' ? { expiresIn: data.expiresIn } : {}),
+        ...(typeof data.refreshExpiresAt === 'string'
+          ? { refreshExpiresAt: data.refreshExpiresAt }
+          : {}),
         user: {
           id: user.id,
           email: user.email,
-          fullName: user.fullName as string,
-          role: Array.isArray(user.roles) ? user.roles[0] : (user.role as string || 'CANDIDATE'),
-          roles: user.roles as string[],
+          ...(typeof user.fullName === 'string' ? { fullName: user.fullName } : {}),
+          role: Array.isArray(user.roles) && typeof user.roles[0] === 'string'
+            ? user.roles[0]
+            : typeof user.role === 'string'
+              ? user.role
+              : 'CANDIDATE',
+          ...(Array.isArray(user.roles) && user.roles.every((role) => typeof role === 'string')
+            ? { roles: user.roles }
+            : {}),
         },
       };
     } catch (error) {

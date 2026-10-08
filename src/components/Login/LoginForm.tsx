@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { authService, InvalidLoginResponseError } from "../../services/auth.service";
 import { tokenService } from "../../services/token.service";
-import { AxiosError } from "axios";
 import {
   MAX_LOGIN_ATTEMPTS,
   clearSuccessfulLoginState,
