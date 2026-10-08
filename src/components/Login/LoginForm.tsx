@@ -1,334 +1,229 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { authService } from "../../services/auth.service";
-import { tokenService } from "../../services/token.service";
-import type { User } from "../../types/auth";
+import { useEffect, useState, type FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import {
+  authService,
+  InvalidLoginResponseError,
+  LoginValidationError,
+} from '../../services/auth.service';
+import { tokenService } from '../../services/token.service';
 import {
   MAX_LOGIN_ATTEMPTS,
   clearSuccessfulLoginState,
   getGenericLoginErrorMessage,
   getLockStatus,
   registerFailedLoginAttempt,
-} from "../../utils/loginState";
+} from '../../utils/loginState';
 
-const getRoleRedirectPath = (): string => "/dashboard";
+const getRoleRedirectPath = (roles: string[]): string => {
+  const normalizedRoles = roles.map((role) => role.trim().toUpperCase().replace(/^ROLE_/, ''));
+  if (normalizedRoles.includes('ADMIN')) return '/admin/dashboard';
+  if (normalizedRoles.includes('HR_MANAGER')) return '/hr/dashboard';
+  if (normalizedRoles.includes('INTERVIEWER')) return '/interviewer/dashboard';
+  return '/dashboard';
+};
 
-export const LoginForm: React.FC = () => {
+export const LoginForm = () => {
   const navigate = useNavigate();
-
-  const [email, setEmail] = useState<string>(
-    () => localStorage.getItem("rememberedEmail") ?? "",
-  );
-  const [password, setPassword] = useState<string>("");
-  const [rememberMe, setRememberMe] = useState<boolean>(() =>
-    Boolean(localStorage.getItem("rememberedEmail")),
-  );
-  const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [emailError, setEmailError] = useState<string>("");
-  const [passwordError, setPasswordError] = useState<string>("");
-  const [submitError, setSubmitError] = useState<string>("");
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [lockVersion, setLockVersion] = useState<number>(0);
+  const [email, setEmail] = useState(() => localStorage.getItem('rememberedEmail') ?? '');
+  const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(() => Boolean(localStorage.getItem('rememberedEmail')));
+  const [showPassword, setShowPassword] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [submitError, setSubmitError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [lockVersion, setLockVersion] = useState(0);
   const [lockStatus, setLockStatus] = useState(() => getLockStatus(email));
 
   useEffect(() => {
-    const updateLockStatus = () => {
-      setLockStatus(getLockStatus(email.trim()));
-    };
-
+    const updateLockStatus = () => setLockStatus(getLockStatus(email.trim()));
     updateLockStatus();
-
     const intervalId = window.setInterval(updateLockStatus, 1000);
     return () => window.clearInterval(intervalId);
-  }, [lockVersion, email]);
+  }, [email, lockVersion]);
 
-  const isLocked = lockStatus.isLocked;
-  const lockTimeLeft = lockStatus.remainingSeconds;
-
-  const formatTimeLeft = () => {
-    const minutes = Math.floor(lockTimeLeft / 60);
-    const seconds = lockTimeLeft % 60;
-    return `${minutes} phút ${seconds} giây`;
-  };
-
-  const handleLoginSuccess = (
-    accessToken: string,
-    user: User,
-    refreshToken?: string,
-  ) => {
-    const normalizedEmail = email.trim();
-    clearSuccessfulLoginState(normalizedEmail);
-    setLockVersion((current) => current + 1);
-    
-    tokenService.setAccessToken(accessToken);
-    if (refreshToken) tokenService.setRefreshToken(refreshToken);
-    tokenService.setUserData(user);
-
-    if (rememberMe) {
-      localStorage.setItem("rememberedEmail", normalizedEmail);
-    } else {
-      localStorage.removeItem("rememberedEmail");
-    }
-
-    navigate(getRoleRedirectPath());
-  };
-
-  const onSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setEmailError('');
+    setPasswordError('');
+    setSubmitError('');
 
-    setEmailError("");
-    setPasswordError("");
-    setSubmitError("");
-
-    const normalizedEmail = email.trim();
+    const normalizedEmail = email.trim().toLowerCase();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    let valid = true;
+    let isValid = true;
 
     if (!normalizedEmail) {
-      setEmailError("Vui lòng nhập email công ty");
-      valid = false;
+      setEmailError('Vui lòng nhập email công ty');
+      isValid = false;
     } else if (!emailRegex.test(normalizedEmail)) {
-      setEmailError(
-        "Email không hợp lệ. Vui lòng nhập đúng định dạng (vd: ten@congty.com)",
-      );
-      valid = false;
+      setEmailError('Email không hợp lệ. Vui lòng nhập đúng định dạng (vd: ten@congty.com)');
+      isValid = false;
     }
-
     if (!password) {
-      setPasswordError("Vui lòng nhập mật khẩu");
-      valid = false;
+      setPasswordError('Vui lòng nhập mật khẩu');
+      isValid = false;
     } else if (password.length < 8) {
-      setPasswordError("Mật khẩu phải có độ dài tối thiểu từ 8 ký tự trở lên");
-      valid = false;
+      setPasswordError('Mật khẩu phải có độ dài tối thiểu từ 8 ký tự trở lên');
+      isValid = false;
     }
-
-    if (!valid || isLocked) {
-      return;
-    }
+    if (!isValid || lockStatus.isLocked) return;
 
     setIsLoading(true);
-
     try {
-      const data = await authService.login(normalizedEmail, password);
-      handleLoginSuccess(data.accessToken, data.user, data.refreshToken);
+      const response = await authService.login(normalizedEmail, password);
+      const tokensSaved = tokenService.saveTokens(response.accessToken, response.refreshToken);
+      const userSaved = tokensSaved && tokenService.setUserData(response.user);
+      if (!tokensSaved || !userSaved) {
+        tokenService.clearAll();
+        setSubmitError('Không thể lưu phiên đăng nhập trên thiết bị này. Vui lòng thử lại.');
+        return;
+      }
+
+      clearSuccessfulLoginState(normalizedEmail);
+      setLockVersion((version) => version + 1);
+      if (rememberMe) localStorage.setItem('rememberedEmail', normalizedEmail);
+      else localStorage.removeItem('rememberedEmail');
+      navigate(getRoleRedirectPath(response.user.roles));
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "LOGIN_REQUEST_FAILED";
-      const typedError = error as Error & {
-        fieldErrors?: Record<string, string[]>;
-      };
+      if (error instanceof InvalidLoginResponseError) {
+        tokenService.clearAll();
+        setSubmitError('Thông tin xác thực từ máy chủ không hợp lệ. Vui lòng thử lại sau.');
+        return;
+      }
 
-      if (errorMessage === "VALIDATION_ERROR") {
-        const emailFieldErrors = typedError.fieldErrors?.email ?? [];
-        const passwordFieldErrors = typedError.fieldErrors?.password ?? [];
+      if (error instanceof LoginValidationError) {
+        setEmailError(error.fieldErrors.email?.[0] ?? '');
+        setPasswordError(error.fieldErrors.password?.[0] ?? '');
+        setSubmitError('Dữ liệu đăng nhập không hợp lệ. Vui lòng kiểm tra lại.');
+        return;
+      }
 
-        if (emailFieldErrors[0]) {
-          setEmailError(emailFieldErrors[0]);
-        }
-
-        if (passwordFieldErrors[0]) {
-          setPasswordError(passwordFieldErrors[0]);
-        }
-
+      const errorMessage = error instanceof Error ? error.message : 'LOGIN_REQUEST_FAILED';
+      if (errorMessage === 'INVALID_CREDENTIALS') {
+        const lock = registerFailedLoginAttempt(normalizedEmail);
+        setLockVersion((version) => version + 1);
         setSubmitError(
-          "Dữ liệu đăng nhập không hợp lệ. Vui lòng kiểm tra lại.",
+          lock.isLocked
+            ? 'Tài khoản đã bị khóa tạm thời trong 15 phút. Vui lòng thử lại sau.'
+            : getGenericLoginErrorMessage(),
         );
         return;
       }
-
-      if (errorMessage === "INVALID_CREDENTIALS") {
-        const lockState = registerFailedLoginAttempt(normalizedEmail);
-        setLockVersion((current) => current + 1);
-
-        if (lockState.isLocked) {
-          setSubmitError(
-            "Tài khoản đã bị khóa tạm thời trong 15 phút. Vui lòng thử lại sau.",
-          );
-          return;
-        }
-
-        setSubmitError(getGenericLoginErrorMessage());
+      if (errorMessage === 'TOO_MANY_REQUESTS') {
+        setSubmitError('Bạn đã thử quá nhiều lần. Vui lòng thử lại sau.');
         return;
       }
-
-      setSubmitError("Không thể đăng nhập lúc này. Vui lòng thử lại sau.");
+      if (errorMessage === 'NETWORK_ERROR') {
+        setSubmitError('Không thể kết nối tới máy chủ. Vui lòng kiểm tra kết nối và thử lại.');
+        return;
+      }
+      setSubmitError('Không thể đăng nhập lúc này. Vui lòng thử lại sau.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const minutes = Math.floor(lockStatus.remainingSeconds / 60);
+  const seconds = lockStatus.remainingSeconds % 60;
+
   return (
-    <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-10 sm:p-12 border border-gray-100">
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-50 mb-4">
-          <span className="text-3xl">🔐</span>
+    <div className="w-full max-w-md rounded-3xl border border-gray-100 bg-white p-10 shadow-2xl sm:p-12">
+      <div className="mb-8 text-center">
+        <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-full bg-indigo-50">
+          <span className="text-3xl" aria-hidden="true">🔐</span>
         </div>
-        <h2 className="text-3xl font-bold text-gray-800 tracking-tight">
-          Đăng nhập hệ thống
-        </h2>
-        <p className="text-gray-500 mt-2 text-sm">
-          Vui lòng đăng nhập bằng tài khoản nội bộ
-        </p>
+        <h2 className="text-3xl font-bold tracking-tight text-gray-800">Đăng nhập hệ thống</h2>
+        <p className="mt-2 text-sm text-gray-500">Vui lòng đăng nhập bằng tài khoản nội bộ</p>
       </div>
 
-      {isLocked ? (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-5 rounded-2xl mb-6 text-center shadow-sm">
-          <p className="font-semibold text-lg mb-1">
-            Tài khoản bị khóa tạm thời!
-          </p>
-          <p className="text-sm opacity-90 mb-3">
-            Bạn đã nhập sai quá {MAX_LOGIN_ATTEMPTS} lần.
-          </p>
+      {lockStatus.isLocked ? (
+        <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-6 py-5 text-center text-red-700">
+          <p className="mb-1 text-lg font-semibold">Tài khoản bị khóa tạm thời!</p>
+          <p className="mb-3 text-sm">Bạn đã nhập sai quá {MAX_LOGIN_ATTEMPTS} lần.</p>
           <p className="text-sm">Vui lòng thử lại sau:</p>
-          <p className="text-2xl font-bold mt-1 text-red-600 animate-pulse">
-            {formatTimeLeft()}
-          </p>
+          <p className="mt-1 animate-pulse text-2xl font-bold text-red-600">{minutes} phút {seconds} giây</p>
         </div>
       ) : (
         <>
           {submitError && (
-            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {submitError}
             </div>
           )}
-
-          <form onSubmit={onSubmit} className="space-y-5" noValidate>
+          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
             <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-semibold text-gray-700 mb-2"
-              >
-                Email công ty
-              </label>
+              <label htmlFor="email" className="mb-2 block text-sm font-semibold text-gray-700">Email công ty</label>
               <input
-                type="email"
                 id="email"
-                className={`w-full px-4 py-3 bg-gray-50 border ${emailError ? "border-red-400 focus:ring-red-400" : "border-gray-200 focus:ring-indigo-500 focus:border-indigo-500"} rounded-xl focus:ring-2 transition-all outline-none text-gray-800 placeholder-gray-400`}
+                type="email"
+                autoComplete="username"
+                className={`w-full rounded-xl border bg-gray-50 px-4 py-3 text-gray-800 outline-none transition-all focus:ring-2 ${
+                  emailError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:border-indigo-500 focus:ring-indigo-500'
+                }`}
                 placeholder="nhansu@congty.com"
                 value={email}
                 onChange={(event) => {
                   setEmail(event.target.value);
-                  setEmailError("");
-                  setSubmitError("");
+                  setEmailError('');
+                  setSubmitError('');
                 }}
+                aria-invalid={Boolean(emailError)}
               />
-              {emailError && (
-                <p className="text-red-500 text-xs font-medium mt-2 flex items-center">
-                  <svg
-                    className="w-3.5 h-3.5 mr-1"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  {emailError}
-                </p>
-              )}
+              {emailError && <p className="mt-2 text-xs font-medium text-red-500">{emailError}</p>}
             </div>
 
             <div>
-              <label
-                htmlFor="password"
-                className="block text-sm font-semibold text-gray-700 mb-2"
-              >
-                Mật khẩu
-              </label>
+              <label htmlFor="password" className="mb-2 block text-sm font-semibold text-gray-700">Mật khẩu</label>
               <div className="relative">
                 <input
-                  type={showPassword ? "text" : "password"}
                   id="password"
-                  className={`w-full px-4 py-3 bg-gray-50 border ${passwordError ? "border-red-400 focus:ring-red-400" : "border-gray-200 focus:ring-indigo-500 focus:border-indigo-500"} rounded-xl focus:ring-2 transition-all outline-none text-gray-800 placeholder-gray-400 pr-12`}
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  className={`w-full rounded-xl border bg-gray-50 px-4 py-3 pr-16 text-gray-800 outline-none transition-all focus:ring-2 ${
+                    passwordError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:border-indigo-500 focus:ring-indigo-500'
+                  }`}
                   placeholder="Nhập mật khẩu của bạn (Tối thiểu 8 ký tự)"
                   value={password}
                   onChange={(event) => {
                     setPassword(event.target.value);
-                    setPasswordError("");
-                    setSubmitError("");
+                    setPasswordError('');
+                    setSubmitError('');
                   }}
+                  aria-invalid={Boolean(passwordError)}
                 />
                 <button
                   type="button"
-                  className="absolute inset-y-0 right-0 px-4 text-sm font-medium text-gray-500 hover:text-indigo-600 focus:outline-none"
-                  onClick={() => setShowPassword((current) => !current)}
-                  tabIndex={-1}
+                  className="absolute inset-y-0 right-0 px-4 text-sm font-medium text-gray-500 hover:text-indigo-600"
+                  onClick={() => setShowPassword((shown) => !shown)}
+                  aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
                 >
-                  {showPassword ? "Ẩn" : "Hiện"}
+                  {showPassword ? 'Ẩn' : 'Hiện'}
                 </button>
               </div>
-              {passwordError && (
-                <p className="text-red-500 text-xs font-medium mt-2 flex items-center">
-                  <svg
-                    className="w-3.5 h-3.5 mr-1 flex-shrink-0"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  {passwordError}
-                </p>
-              )}
+              {passwordError && <p className="mt-2 text-xs font-medium text-red-500">{passwordError}</p>}
             </div>
 
-            <div className="flex items-center justify-between text-sm pt-2">
-              <label className="flex items-center text-gray-600 cursor-pointer hover:text-gray-800 transition-colors">
+            <div className="flex items-center justify-between pt-2 text-sm">
+              <label className="flex cursor-pointer items-center text-gray-600">
                 <input
                   type="checkbox"
-                  className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 mr-2"
+                  className="mr-2 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                   checked={rememberMe}
                   onChange={(event) => setRememberMe(event.target.checked)}
                 />
-                Ghi nhớ phiên đăng nhập
+                Ghi nhớ email
               </label>
-              <a
-                href="#"
-                className="font-semibold text-indigo-600 hover:text-indigo-500 transition-colors"
-                onClick={(event) => event.preventDefault()}
-              >
+              <Link to="/forgot-password" className="font-semibold text-indigo-600 hover:text-indigo-500">
                 Quên mật khẩu?
-              </a>
+              </Link>
             </div>
 
             <button
               type="submit"
-              className="w-full mt-2 py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
-              disabled={isLoading || isLocked}
+              className="mt-2 w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3.5 font-semibold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:from-blue-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-70 disabled:transform-none"
+              disabled={isLoading || lockStatus.isLocked}
             >
-              {isLoading ? (
-                <span className="flex items-center justify-center">
-                  <svg
-                    className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  Đang xác thực...
-                </span>
-              ) : (
-                "Đăng nhập hệ thống"
-              )}
+              {isLoading ? 'Đang xác thực...' : 'Đăng nhập hệ thống'}
             </button>
           </form>
         </>
