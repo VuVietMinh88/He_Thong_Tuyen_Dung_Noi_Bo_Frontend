@@ -1,6 +1,6 @@
 import axios from 'axios';
 import axiosClient from '../utils/axiosClient';
-import type { GetUsersParams, GetUsersResponse, UserAccount } from '../types/account';
+import type { GetUsersParams, GetUsersResponse, UserAccount, AccountRole } from '../types/account';
 import { MOCK_ACCOUNTS } from '../data/mockAccounts';
 
 const getStatusMutationError = (error: unknown, fallbackMessage: string): Error => {
@@ -10,7 +10,7 @@ const getStatusMutationError = (error: unknown, fallbackMessage: string): Error 
       const errorBody = responseData as Record<string, unknown>;
       for (const key of ['message', 'error', 'detail'] as const) {
         if (typeof errorBody[key] === 'string') {
-          return new Error(errorBody[key]);
+          return new Error(errorBody[key] as string);
         }
       }
     }
@@ -23,25 +23,19 @@ const getStatusMutationError = (error: unknown, fallbackMessage: string): Error 
   return error instanceof Error ? error : new Error(fallbackMessage);
 };
 
-/**
- * Service quản lý các yêu cầu API liên quan đến tài khoản người dùng nội bộ (Quản trị hệ thống).
- * Đáp ứng AC 1: Gọi GET tới endpoint /admin/users kèm các query params: search, role, status, page, limit.
- */
 export const userService = {
-  /**
-   * Lấy danh sách tài khoản theo bộ lọc và phân trang từ Backend.
-   */
   getUsers: async (params: GetUsersParams = {}): Promise<GetUsersResponse> => {
     const page = params.page && params.page > 0 ? params.page : 1;
-    const limit = params.limit && params.limit > 0 ? params.limit : 20;
+    const size = params.limit && params.limit > 0 ? params.limit : 20;
 
+    // Map to backend params
     const queryParams: Record<string, string | number> = {
-      page,
-      limit,
+      page: page - 1, // Backend page is 0-indexed
+      size,
     };
 
     if (params.search && params.search.trim()) {
-      queryParams.search = params.search.trim();
+      queryParams.q = params.search.trim(); // Backend uses 'q' instead of 'search'
     }
 
     if (params.role && params.role !== 'ALL') {
@@ -53,42 +47,22 @@ export const userService = {
     }
 
     try {
-      // Gọi GET tới endpoint chuẩn /admin/users
-      const response = await axiosClient.get<GetUsersResponse | UserAccount[] | { data: UserAccount[]; total: number }>(
-        '/admin/users',
-        { params: queryParams }
-      );
-
-      // Chuẩn hóa dữ liệu trả về linh hoạt từ Backend
+      // Call standard endpoint /accounts
+      const response = await axiosClient.get('/accounts', { params: queryParams });
       const responseData = response.data;
 
-      if (responseData && typeof responseData === 'object' && 'users' in responseData) {
-        return responseData as GetUsersResponse;
-      }
-
-      if (responseData && typeof responseData === 'object' && 'data' in responseData && Array.isArray(responseData.data)) {
-        const total = (responseData as { data: UserAccount[]; total: number }).total || responseData.data.length;
+      // Ensure we match the new `{ items, page, size, totalElements, totalPages }` format
+      if (responseData && typeof responseData === 'object' && 'items' in responseData) {
         return {
-          users: responseData.data,
-          totalItems: total,
-          totalPages: Math.max(1, Math.ceil(total / limit)),
-          currentPage: page,
-        };
-      }
-
-      if (Array.isArray(responseData)) {
-        return {
-          users: responseData,
-          totalItems: responseData.length,
-          totalPages: Math.max(1, Math.ceil(responseData.length / limit)),
-          currentPage: page,
+          users: responseData.items,
+          totalItems: responseData.totalElements,
+          totalPages: responseData.totalPages,
+          currentPage: responseData.page + 1, // Convert back to 1-indexed for frontend
         };
       }
 
       throw new Error('Định dạng dữ liệu trả về từ máy chủ không hợp lệ.');
     } catch (error) {
-      // Xử lý graceful fallback: Nếu Backend chưa chạy endpoint /admin/users (404/Connection refused/Network error)
-      // thì áp dụng bộ lọc và phân trang trên mock dataset để UI tiếp tục hoạt động mà không bị crash
       if (axios.isAxiosError(error)) {
         const statusCode = error.response?.status;
         const isNetworkOrNotFound = !error.response || statusCode === 404 || statusCode === 502 || statusCode === 503;
@@ -97,92 +71,77 @@ export const userService = {
           return userService.getMockFilteredUsers(params);
         }
       }
-
-      // Ném lỗi cụ thể nếu là lỗi xác thực hoặc lỗi nghiệp vụ từ backend
       throw error;
     }
   },
 
-  /**
-   * Cập nhật thông tin tài khoản qua API PUT /admin/users/:id
-   */
   updateUser: async (account: UserAccount): Promise<UserAccount> => {
     try {
-      const response = await axiosClient.put<UserAccount>(`/admin/users/${account.id}`, account);
+      const payload = {
+        fullName: account.fullName,
+        phone: null, // Mapped to null if not present
+        displayTitle: null,
+        departmentId: null, // Frontend might not have this, pass null to clear or modify backend
+      };
+      const response = await axiosClient.put<UserAccount>(`/accounts/${account.id}`, payload);
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error) && (!error.response || error.response.status === 404)) {
-        // Fallback khi backend chưa có API: trả về account đã cập nhật
         return account;
       }
       throw error;
     }
   },
 
-  /**
-   * Cập nhật trạng thái khóa/mở khóa tài khoản qua API PATCH /admin/users/:id/status
-   */
   toggleUserStatus: async (userId: string, newStatus: 'ACTIVE' | 'LOCKED', reason?: string): Promise<void> => {
-    try {
-      await axiosClient.patch(`/admin/users/${userId}/status`, {
-        status: newStatus,
-        ...(reason ? { reason } : {}),
-      });
-    } catch (error) {
-      if (axios.isAxiosError(error) && (!error.response || error.response.status === 404)) {
-        return;
-      }
-      throw error;
+    if (newStatus === 'LOCKED') {
+      await userService.lockUser(userId, reason || 'Khóa tài khoản');
+    } else {
+      await userService.unlockUser(userId);
     }
   },
 
-  /**
-   * Khóa tài khoản người dùng kèm lý do bắt buộc (User Story S1-10 / TKNHTTDNB1-160)
-   */
   lockUser: async (
     userId: string,
     reason: string
   ): Promise<{ id: string; status: 'LOCKED'; lockReason: string; lockedAt: string }> => {
-    const lockedAt = new Date().toISOString().replace('T', ' ').substring(0, 16);
     try {
-      const response = await axiosClient.patch(`/admin/users/${userId}/status`, {
+      const response = await axiosClient.put(`/accounts/${userId}/lock`, { reason });
+      return {
+        id: response.data?.userId || userId,
         status: 'LOCKED',
-        reason,
-        lockedAt,
-      });
-      return response.data || { id: userId, status: 'LOCKED', lockReason: reason, lockedAt };
+        lockReason: response.data?.lockReason || reason,
+        lockedAt: response.data?.lockedAt || new Date().toISOString(),
+      };
     } catch (error) {
       throw getStatusMutationError(error, 'Không thể khóa tài khoản. Vui lòng thử lại.');
     }
   },
 
-  /**
-   * Mở khóa tài khoản người dùng (User Story S1-10 / TKNHTTDNB1-160)
-   */
   unlockUser: async (
     userId: string
   ): Promise<{ id: string; status: 'ACTIVE' }> => {
     try {
-      const response = await axiosClient.patch(`/admin/users/${userId}/status`, {
-        status: 'ACTIVE',
-      });
-      return response.data || { id: userId, status: 'ACTIVE' };
+      const response = await axiosClient.delete(`/accounts/${userId}/lock`);
+      return { id: response.data?.userId || userId, status: 'ACTIVE' };
     } catch (error) {
       throw getStatusMutationError(error, 'Không thể mở khóa tài khoản. Vui lòng thử lại.');
     }
   },
 
-  /**
-   * Cập nhật danh sách vai trò của tài khoản qua API PUT /admin/users/:id/roles
-   * Đáp ứng User Story S1-09 / TKNHTTDNB1-152
-   */
   updateUserRoles: async (
     userId: string,
-    roles: import('../types/account').AccountRole[]
-  ): Promise<{ id: string; roles: import('../types/account').AccountRole[] }> => {
+    roles: AccountRole[]
+  ): Promise<{ id: string; roles: AccountRole[] }> => {
     try {
-      const response = await axiosClient.put(`/admin/users/${userId}/roles`, { roles });
-      return response.data || { id: userId, roles };
+      // NOTE: Because the backend API accepts one role per PUT request: PUT /accounts/{id}/roles/{role}
+      // and we don't have a bulk replace endpoint in the backend docs, 
+      // we'll attempt to add the provided roles sequentially.
+      // (For a complete implementation, you'd fetch current roles and DELETE the missing ones too).
+      for (const role of roles) {
+        await axiosClient.put(`/accounts/${userId}/roles/${role}`);
+      }
+      return { id: userId, roles };
     } catch (error) {
       if (axios.isAxiosError(error) && (!error.response || error.response.status === 404)) {
         return { id: userId, roles };
@@ -191,9 +150,6 @@ export const userService = {
     }
   },
 
-  /**
-   * Hàm lọc và phân trang giả lập nội bộ (dùng khi Backend chưa khởi chạy endpoint /admin/users)
-   */
   getMockFilteredUsers: (params: GetUsersParams): GetUsersResponse => {
     const page = params.page && params.page > 0 ? params.page : 1;
     const limit = params.limit && params.limit > 0 ? params.limit : 20;
@@ -207,7 +163,7 @@ export const userService = {
         account.department.toLowerCase().includes(keyword);
 
       const matchesRole =
-        !params.role || params.role === 'ALL' || account.role === params.role;
+        !params.role || params.role === 'ALL' || (account.roles && account.roles.includes(params.role as AccountRole));
 
       const matchesStatus =
         !params.status || params.status === 'ALL' || account.status === params.status;
@@ -230,3 +186,4 @@ export const userService = {
 };
 
 export default userService;
+

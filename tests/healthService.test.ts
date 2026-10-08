@@ -14,7 +14,7 @@ describe('Backend health API contract', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('{"status":"UP"}', { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
     await expect(getHealth()).resolves.toEqual({ status: 'UP' })
-    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8080/api/health',
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8080/api/v1/health',
       expect.objectContaining({ method: 'GET', headers: { Accept: 'application/json' } }))
   })
 
@@ -58,6 +58,14 @@ describe('Backend health API contract', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('{"status":"UP"}'))
     vi.stubGlobal('fetch', fetchMock)
     await getHealth()
-    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/api/health')
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/api/v1/health')
+  })
+
+  it('does not append the API version twice when it is already configured', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080/api/v1/')
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{"status":"UP"}'))
+    vi.stubGlobal('fetch', fetchMock)
+    await getHealth()
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/api/v1/health')
   })
 })

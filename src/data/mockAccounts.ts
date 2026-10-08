@@ -2,6 +2,29 @@ import type { UserAccount } from '../types/account';
 
 // Mock list of 32 internal system accounts to test 20 items per page pagination
 export const MOCK_ACCOUNTS: UserAccount[] = [
+  // Easy testing accounts
+  {
+    id: 'ACC-ADMIN',
+    fullName: 'Quản trị viên',
+    email: 'admin@admin.com',
+    department: 'Phòng Kỹ thuật & Công nghệ',
+    role: 'ADMIN',
+    roles: ['ADMIN'],
+    status: 'ACTIVE',
+    createdAt: '2026-01-01',
+    lastLogin: '2026-10-08 10:00',
+  },
+  {
+    id: 'ACC-RECRUITER',
+    fullName: 'Nhân viên tuyển dụng',
+    email: 'recruiter@admin.com',
+    department: 'Phòng Tuyển dụng & Đào tạo',
+    role: 'RECRUITER',
+    roles: ['RECRUITER'],
+    status: 'ACTIVE',
+    createdAt: '2026-01-01',
+    lastLogin: '2026-10-08 10:00',
+  },
   {
     id: 'ACC-001',
     fullName: 'Nguyễn Văn An',

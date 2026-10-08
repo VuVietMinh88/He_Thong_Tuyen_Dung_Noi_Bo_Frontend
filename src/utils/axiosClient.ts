@@ -4,8 +4,19 @@ import { tokenService } from '../services/token.service';
 /**
  * Cấu hình axios client cơ bản để dùng chung cho toàn bộ dự án.
  */
+const normalizeApiBaseUrl = (baseUrl?: string): string => {
+  const trimmed = (baseUrl ?? 'http://localhost:8080/api/v1').trim();
+  if (!trimmed) return 'http://localhost:8080/api/v1';
+
+  const withoutTrailingSlash = trimmed.replace(/\/+$/, '');
+  if (withoutTrailingSlash.endsWith('/api/v1')) return withoutTrailingSlash;
+  if (withoutTrailingSlash.endsWith('/api')) return `${withoutTrailingSlash}/v1`;
+
+  return withoutTrailingSlash;
+};
+
 const axiosClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api',
+  baseURL: normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL),
   headers: {
     'Content-Type': 'application/json',
   },
@@ -33,6 +44,19 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
 // AC 2: Request Interceptor - Tự động đính kèm Access Token vào Header
 axiosClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    if ('removeInvalidStoredTokens' in tokenService) {
+      (tokenService as any).removeInvalidStoredTokens();
+    }
+    const isLoginRequest = /(?:^|\/)auth\/login\/?$/i.test(config.url ?? '');
+    if (isLoginRequest) {
+      if (config.headers && typeof config.headers.delete === 'function') {
+        config.headers.delete('Authorization');
+      } else if (config.headers) {
+        delete config.headers['Authorization'];
+      }
+      return config;
+    }
+
     const token = tokenService.getAccessToken();
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -83,7 +107,8 @@ axiosClient.interceptors.response.use(
       
       // Nếu không có refresh token (Chưa từng lưu), đẩy về login
       if (!refreshToken) {
-        tokenService.clearAll();
+        if ('clearAll' in tokenService) (tokenService as any).clearAll();
+        else if ('clearTokens' in tokenService) (tokenService as any).clearTokens();
         window.location.href = '/login';
         return Promise.reject(error);
       }
@@ -117,7 +142,8 @@ axiosClient.interceptors.response.use(
       } catch (refreshError: any) {
         // Nếu Refresh Token cũng hết hạn hoặc bị thu hồi (Lỗi từ khối catch)
         processQueue(refreshError, null);
-        tokenService.clearAll();
+        if ('clearAll' in tokenService) (tokenService as any).clearAll();
+        else if ('clearTokens' in tokenService) (tokenService as any).clearTokens();
         // Điều hướng mượt mà về trang đăng nhập mà không reload lại tài nguyên cục bộ
         window.location.href = '/login';
         return Promise.reject(refreshError);
