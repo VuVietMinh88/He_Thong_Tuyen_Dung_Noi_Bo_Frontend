@@ -11,10 +11,14 @@ type RetryRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 const normalizeApiBaseUrl = (baseUrl?: string): string => {
   const trimmed = (baseUrl ?? '').trim().replace(/\/+$/, '');
   if (!trimmed) return 'http://localhost:8080/api/v1';
+
+  if (/\/api\/v1(?:\/v1)+$/i.test(trimmed)) {
+    return trimmed.replace(/(?:\/v1)+$/i, '/v1');
+  }
   if (/\/api\/v1$/i.test(trimmed)) return trimmed;
   if (/\/api$/i.test(trimmed)) return `${trimmed}/v1`;
-  if (/\/v1$/i.test(trimmed)) return trimmed;
-  return `${trimmed}/api/v1`;
+
+  return /\/v1$/i.test(trimmed) ? trimmed : `${trimmed}/api/v1`;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

@@ -22,10 +22,6 @@ const getRoleRedirectPath = (roles: string[]): string => {
   return '/dashboard';
 };
 
-const getFieldErrors = (error: unknown): Record<string, string[]> | null => {
-  return error instanceof LoginValidationError ? error.fieldErrors : null;
-};
-
 export const LoginForm = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState(() => localStorage.getItem('rememberedEmail') ?? '');
@@ -85,11 +81,8 @@ export const LoginForm = () => {
 
       clearSuccessfulLoginState(normalizedEmail);
       setLockVersion((version) => version + 1);
-      if (rememberMe) {
-        localStorage.setItem('rememberedEmail', normalizedEmail);
-      } else {
-        localStorage.removeItem('rememberedEmail');
-      }
+      if (rememberMe) localStorage.setItem('rememberedEmail', normalizedEmail);
+      else localStorage.removeItem('rememberedEmail');
       navigate(getRoleRedirectPath(response.user.roles));
     } catch (error) {
       if (error instanceof InvalidLoginResponseError) {
@@ -98,15 +91,14 @@ export const LoginForm = () => {
         return;
       }
 
-      const errorMessage = error instanceof Error ? error.message : 'LOGIN_REQUEST_FAILED';
-      const fieldErrors = getFieldErrors(error);
-      if (fieldErrors) {
-        setEmailError(fieldErrors.email?.[0] ?? '');
-        setPasswordError(fieldErrors.password?.[0] ?? '');
+      if (error instanceof LoginValidationError) {
+        setEmailError(error.fieldErrors.email?.[0] ?? '');
+        setPasswordError(error.fieldErrors.password?.[0] ?? '');
         setSubmitError('Dữ liệu đăng nhập không hợp lệ. Vui lòng kiểm tra lại.');
         return;
       }
 
+      const errorMessage = error instanceof Error ? error.message : 'LOGIN_REQUEST_FAILED';
       if (errorMessage === 'INVALID_CREDENTIALS') {
         const lock = registerFailedLoginAttempt(normalizedEmail);
         setLockVersion((version) => version + 1);
@@ -149,9 +141,7 @@ export const LoginForm = () => {
           <p className="mb-1 text-lg font-semibold">Tài khoản bị khóa tạm thời!</p>
           <p className="mb-3 text-sm">Bạn đã nhập sai quá {MAX_LOGIN_ATTEMPTS} lần.</p>
           <p className="text-sm">Vui lòng thử lại sau:</p>
-          <p className="mt-1 animate-pulse text-2xl font-bold text-red-600">
-            {minutes} phút {seconds} giây
-          </p>
+          <p className="mt-1 animate-pulse text-2xl font-bold text-red-600">{minutes} phút {seconds} giây</p>
         </div>
       ) : (
         <>
@@ -162,17 +152,13 @@ export const LoginForm = () => {
           )}
           <form onSubmit={handleSubmit} className="space-y-5" noValidate>
             <div>
-              <label htmlFor="email" className="mb-2 block text-sm font-semibold text-gray-700">
-                Email công ty
-              </label>
+              <label htmlFor="email" className="mb-2 block text-sm font-semibold text-gray-700">Email công ty</label>
               <input
                 id="email"
                 type="email"
                 autoComplete="username"
                 className={`w-full rounded-xl border bg-gray-50 px-4 py-3 text-gray-800 outline-none transition-all focus:ring-2 ${
-                  emailError
-                    ? 'border-red-400 focus:ring-red-400'
-                    : 'border-gray-200 focus:border-indigo-500 focus:ring-indigo-500'
+                  emailError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:border-indigo-500 focus:ring-indigo-500'
                 }`}
                 placeholder="nhansu@congty.com"
                 value={email}
@@ -182,24 +168,19 @@ export const LoginForm = () => {
                   setSubmitError('');
                 }}
                 aria-invalid={Boolean(emailError)}
-                aria-describedby={emailError ? 'email-error' : undefined}
               />
-              {emailError && <p id="email-error" className="mt-2 text-xs font-medium text-red-500">{emailError}</p>}
+              {emailError && <p className="mt-2 text-xs font-medium text-red-500">{emailError}</p>}
             </div>
 
             <div>
-              <label htmlFor="password" className="mb-2 block text-sm font-semibold text-gray-700">
-                Mật khẩu
-              </label>
+              <label htmlFor="password" className="mb-2 block text-sm font-semibold text-gray-700">Mật khẩu</label>
               <div className="relative">
                 <input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="current-password"
                   className={`w-full rounded-xl border bg-gray-50 px-4 py-3 pr-16 text-gray-800 outline-none transition-all focus:ring-2 ${
-                    passwordError
-                      ? 'border-red-400 focus:ring-red-400'
-                      : 'border-gray-200 focus:border-indigo-500 focus:ring-indigo-500'
+                    passwordError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:border-indigo-500 focus:ring-indigo-500'
                   }`}
                   placeholder="Nhập mật khẩu của bạn (Tối thiểu 8 ký tự)"
                   value={password}
@@ -209,7 +190,6 @@ export const LoginForm = () => {
                     setSubmitError('');
                   }}
                   aria-invalid={Boolean(passwordError)}
-                  aria-describedby={passwordError ? 'password-error' : undefined}
                 />
                 <button
                   type="button"
@@ -220,7 +200,7 @@ export const LoginForm = () => {
                   {showPassword ? 'Ẩn' : 'Hiện'}
                 </button>
               </div>
-              {passwordError && <p id="password-error" className="mt-2 text-xs font-medium text-red-500">{passwordError}</p>}
+              {passwordError && <p className="mt-2 text-xs font-medium text-red-500">{passwordError}</p>}
             </div>
 
             <div className="flex items-center justify-between pt-2 text-sm">

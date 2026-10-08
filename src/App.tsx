@@ -57,10 +57,10 @@ function App() {
         <Route path="/" element={<Navigate to="/login" replace />} />
 
         <Route path="/login" element={<LoginPage />} />
-        
+
         {/* Route phục vụ kiểm tra sức khỏe hệ thống (Ping/Health Check) */}
         <Route path="/health" element={<HealthCheck />} />
-        
+
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/change-password" element={<ChangePasswordPage />} />
@@ -72,9 +72,7 @@ function App() {
         {/* Các route tương lai sau khi đăng nhập thành công */}
         <Route
           path="/admin/dashboard"
-          element={
-            <main className="p-8 text-2xl font-bold">Admin Dashboard</main>
-          }
+          element={<AccountListPage />}
         />
         <Route
           path="/hr/dashboard"

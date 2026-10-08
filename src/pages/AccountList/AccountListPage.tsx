@@ -6,6 +6,7 @@ import AccountFilterBar from '../../components/AccountList/AccountFilterBar';
 import AccountTable from '../../components/AccountList/AccountTable';
 import AccountPaginationBar from '../../components/AccountList/AccountPaginationBar';
 import EditAccountModal from '../../components/AccountList/EditAccountModal';
+import CreateAccountModal from '../../components/AccountList/CreateAccountModal';
 import ManageRolesModal from '../../components/AccountList/ManageRolesModal';
 import LockAccountModal from '../../components/AccountList/LockAccountModal';
 import UnlockAccountModal from '../../components/AccountList/UnlockAccountModal';
@@ -39,6 +40,7 @@ export const AccountListPage: React.FC = () => {
   // Modal editing state
   const [editingAccount, setEditingAccount] = useState<UserAccount | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
 
   // Modal managing roles state (User Story S1-09 / TKNHTTDNB1-152)
   const [managingRolesAccount, setManagingRolesAccount] = useState<UserAccount | null>(null);
@@ -285,9 +287,19 @@ export const AccountListPage: React.FC = () => {
                 <span>/</span>
                 <span className="text-slate-800">Quản lý tài khoản</span>
               </nav>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-                Danh sách tài khoản nội bộ
-              </h1>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                  Danh sách tài khoản nội bộ
+                </h1>
+                <button
+                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                  onClick={() => setIsCreateModalOpen(true)}
+                  type="button"
+                >
+                  <span aria-hidden="true" className="text-lg leading-none">+</span>
+                  Tạo tài khoản
+                </button>
+              </div>
             </div>
 
             {/* Quick stats tags */}
@@ -374,6 +386,11 @@ export const AccountListPage: React.FC = () => {
         account={editingAccount}
         onClose={() => setIsEditModalOpen(false)}
         onSave={handleSaveAccount}
+      />
+      <CreateAccountModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={showNotification}
       />
 
       {/* Manage Roles Modal (User Story S1-09 / TKNHTTDNB1-152) */}
