@@ -17,12 +17,14 @@ const normalizeApiBaseUrl = (baseUrl?: string): string => {
   }
   if (/\/api\/v1$/i.test(trimmed)) return trimmed;
   if (/\/api$/i.test(trimmed)) return `${trimmed}/v1`;
-
   return /\/v1$/i.test(trimmed) ? trimmed : `${trimmed}/api/v1`;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((role) => typeof role === 'string' && role.length > 0);
 
 const isTokenResponse = (value: unknown): value is LoginResponse => {
   if (!isRecord(value) || !isRecord(value.user)) return false;
@@ -40,9 +42,8 @@ const isTokenResponse = (value: unknown): value is LoginResponse => {
     && typeof user.id === 'string'
     && typeof user.email === 'string'
     && typeof user.fullName === 'string'
-    && Array.isArray(user.roles)
-    && user.roles.length > 0
-    && user.roles.every((role) => typeof role === 'string' && role.length > 0);
+    && isStringArray(user.roles)
+    && user.roles.length > 0;
 };
 
 const isAuthRequest = (url?: string): boolean =>
