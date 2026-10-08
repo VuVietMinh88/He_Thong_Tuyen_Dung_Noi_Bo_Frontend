@@ -7,7 +7,9 @@ export const ROLES = {
   APPROVER: 'APPROVER',
 } as const;
 
-export type Role = keyof typeof ROLES;
+export type RoleKey = keyof typeof ROLES;
+export type RoleValue = (typeof ROLES)[RoleKey];
+export type Role = RoleValue;
 
 export const ROLE_NAMES: Record<Role, string> = {
   ADMIN: 'Quản trị hệ thống',
@@ -17,4 +19,3 @@ export const ROLE_NAMES: Record<Role, string> = {
   INTERVIEWER: 'Người phỏng vấn',
   APPROVER: 'Người phê duyệt',
 };
-

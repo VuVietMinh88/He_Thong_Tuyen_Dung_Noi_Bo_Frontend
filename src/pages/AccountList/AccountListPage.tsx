@@ -10,7 +10,7 @@ import CreateAccountModal from '../../components/AccountList/CreateAccountModal'
 import ManageRolesModal from '../../components/AccountList/ManageRolesModal';
 import LockAccountModal from '../../components/AccountList/LockAccountModal';
 import UnlockAccountModal from '../../components/AccountList/UnlockAccountModal';
-import Sidebar from '../../components/Sidebar';
+import Sidebar from '../../components/layout/Sidebar';
 
 const DEFAULT_PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_DELAY_MS = 350;

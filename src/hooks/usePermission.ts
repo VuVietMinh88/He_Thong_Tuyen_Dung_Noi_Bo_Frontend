@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ROLES, type Role } from '../constants/roles';
+import { tokenService } from '../services/token.service';
 
 export type PermissionAction =
   | 'view'
@@ -31,26 +32,23 @@ export type PermissionMatrix = Partial<
   Record<Role, Partial<Record<string, string[]>>>
 >;
 
-export const DEFAULT_ROLE_STORAGE_KEY = 'user_role';
-
 export const normalizeRole = (role?: string | null): string =>
-  typeof role === 'string' ? role.trim().toUpperCase() : '';
+  typeof role === 'string'
+    ? role.trim().toUpperCase().replace(/^ROLE_/, '')
+    : '';
+
+const isRole = (role: string): role is Role => Object.hasOwn(ROLES, role);
 
 const permissionMatrix: PermissionMatrix = {
-  [ROLES.SYSTEM_ADMIN]: {
+  [ROLES.ADMIN]: {
     '*': ['*'],
-  },
-  [ROLES.HEAD_OF_DEPARTMENT]: {
-    headcount: ['view', 'approve'],
-    candidate: ['view', 'update'],
-    recruitment: ['view', 'approve'],
-    salary_band: ['view'],
   },
   [ROLES.HR_MANAGER]: {
     headcount: ['view', 'approve', 'manage'],
     salary_band: ['view', 'edit', 'update'],
     recruitment: ['view', 'create', 'edit', 'approve'],
     candidate: ['view', 'create', 'edit', 'delete'],
+    interview: ['view', 'create', 'edit', 'manage'],
     user: ['view', 'edit'],
   },
   [ROLES.RECRUITER]: {
@@ -59,129 +57,107 @@ const permissionMatrix: PermissionMatrix = {
     interview: ['view', 'create', 'edit'],
     headcount: ['view'],
   },
+  [ROLES.HIRING_MANAGER]: {
+    headcount: ['view', 'create', 'edit', 'approve'],
+    recruitment: ['view', 'create', 'edit', 'approve'],
+    candidate: ['view', 'edit'],
+    interview: ['view', 'create', 'edit'],
+  },
   [ROLES.INTERVIEWER]: {
     interview: ['view', 'edit'],
     candidate: ['view'],
   },
-  [ROLES.EMPLOYEE]: {
-    candidate: ['view'],
-    recruitment: ['view'],
-    salary_band: ['view'],
-  },
-  [ROLES.CANDIDATE]: {
+  [ROLES.APPROVER]: {
+    headcount: ['view', 'approve'],
+    recruitment: ['view', 'approve'],
     candidate: ['view'],
   },
 };
 
-export const getCurrentRole = (
-  storageKey = DEFAULT_ROLE_STORAGE_KEY,
-): string | null => {
-  if (typeof window === 'undefined') {
-    return null;
+const getCurrentRoles = (): string[] => {
+  if (!tokenService.getAccessToken()) return [];
+  return tokenService.getUserData()?.roles ?? [];
+};
+
+export const getCurrentRole = (): string | null =>
+  getCurrentRoles()[0] ?? null;
+
+type CurrentRoles = readonly string[] | string | null | undefined;
+
+const resolveRoles = (currentRoles?: CurrentRoles): string[] => {
+  if (currentRoles === undefined || currentRoles === null) {
+    return getCurrentRoles();
   }
-
-  const fromLocalStorage = window.localStorage.getItem(storageKey);
-  if (fromLocalStorage) {
-    return fromLocalStorage;
-  }
-
-  const appState = (
-    window as Window & {
-      __APP_STATE__?: {
-        user?: {
-          role?: string;
-        };
-      };
-    }
-  ).__APP_STATE__;
-
-  return appState?.user?.role ?? null;
+  return typeof currentRoles === 'string' ? [currentRoles] : [...currentRoles];
 };
 
 export const hasRole = (
   allowedRoles: readonly string[] = [],
-  currentRole?: string | null,
+  currentRoles?: CurrentRoles,
 ): boolean => {
-  if (!allowedRoles.length) {
-    return false;
-  }
-
-  const normalizedCurrentRole = normalizeRole(currentRole ?? getCurrentRole());
-  if (!normalizedCurrentRole) {
-    return false;
-  }
-
-  return allowedRoles.some(
-    (allowedRole) => normalizeRole(allowedRole) === normalizedCurrentRole,
+  if (!allowedRoles.length) return false;
+  const normalizedAllowedRoles = allowedRoles.map(normalizeRole);
+  return resolveRoles(currentRoles).some((role) =>
+    normalizedAllowedRoles.includes(normalizeRole(role)),
   );
 };
 
 export const can = (
   action: string,
   resource: string,
-  currentRole?: string | null,
+  currentRoles?: CurrentRoles,
 ): boolean => {
-  const normalizedRole = normalizeRole(currentRole ?? getCurrentRole());
-  if (!normalizedRole) {
-    return false;
-  }
-
-  const allowedPermissions = permissionMatrix[normalizedRole as Role];
-  if (!allowedPermissions) {
-    return false;
-  }
-
-  const roleResourcePermissions =
-    allowedPermissions[resource] ??
-    allowedPermissions[resource.toLowerCase()] ??
-    allowedPermissions[resource.toLowerCase().replace(/-/g, '_')] ??
-    allowedPermissions['*'];
-
-  if (!roleResourcePermissions) {
-    return false;
-  }
-
+  const normalizedResource = resource.toLowerCase().replace(/-/g, '_');
   const normalizedAction = action.trim().toLowerCase();
-  return roleResourcePermissions.some(
-    (permission) => permission === '*' || permission.toLowerCase() === normalizedAction,
-  );
+
+  return resolveRoles(currentRoles).some((role) => {
+    const normalizedRole = normalizeRole(role);
+    if (!isRole(normalizedRole)) return false;
+    const allowedPermissions = permissionMatrix[normalizedRole];
+    if (!allowedPermissions) return false;
+
+    const rolePermissions =
+      allowedPermissions[resource]
+      ?? allowedPermissions[normalizedResource]
+      ?? allowedPermissions['*'];
+    return rolePermissions?.some(
+      (permission) =>
+        permission === '*' || permission.toLowerCase() === normalizedAction,
+    ) ?? false;
+  });
 };
 
 export const hasPermission = (
   permission: PermissionDefinition | string,
   resource?: string,
-  currentRole?: string | null,
+  currentRoles?: CurrentRoles,
 ): boolean => {
   if (typeof permission === 'string') {
-    return can(permission, resource ?? '*', currentRole);
+    return can(permission, resource ?? '*', currentRoles);
   }
 
-  return can(permission.action, permission.resource, currentRole);
+  return can(permission.action, permission.resource, currentRoles);
 };
 
-export const usePermission = (storageKey = DEFAULT_ROLE_STORAGE_KEY) => {
-  const [role, setRole] = useState<string | null>(() => getCurrentRole(storageKey));
+export const usePermission = () => {
+  const [roles, setRoles] = useState<string[]>(getCurrentRoles);
 
   useEffect(() => {
-    const updateRole = () => setRole(getCurrentRole(storageKey));
+    const updateRoles = () => setRoles(getCurrentRoles());
 
-    updateRole();
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('storage', updateRole);
-      return () => window.removeEventListener('storage', updateRole);
-    }
-
-    return undefined;
-  }, [storageKey]);
+    updateRoles();
+    window.addEventListener('storage', updateRoles);
+    return () => window.removeEventListener('storage', updateRoles);
+  }, []);
 
   return {
-    role,
-    hasRole: (allowedRoles: readonly string[]) => hasRole(allowedRoles, role),
-    can: (action: string, resource: string) => can(action, resource, role),
+    role: roles[0] ?? null,
+    roles,
+    hasRole: (allowedRoles: readonly string[]) => hasRole(allowedRoles, roles),
+    can: (action: string, resource: string) => can(action, resource, roles),
     hasPermission: (permission: PermissionDefinition | string, permissionResource?: string) =>
-      hasPermission(permission, permissionResource, role),
-    isAuthenticated: Boolean(role),
+      hasPermission(permission, permissionResource, roles),
+    isAuthenticated: Boolean(tokenService.getAccessToken() && roles.length),
   };
 };
 

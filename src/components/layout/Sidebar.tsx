@@ -1,50 +1,83 @@
-import React, { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { type Role, ROLE_NAMES } from '../../constants/roles';
-import { tokenService } from '../../services/token.service';
+import { useState, type FC } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { ROLES, ROLE_NAMES, type Role } from '../../constants/roles';
 import { authService } from '../../services/auth.service';
+import { tokenService } from '../../services/token.service';
+import {
+  getVisibleMenuItems,
+  type SidebarMenuItem,
+} from '../../utils/sidebarAccess';
 
-// --------------------------------------------------------
-// CẤU HÌNH MENU & QUYỀN TRUY CẬP (AC 1)
-// --------------------------------------------------------
-interface MenuItem {
-  title: string;
-  path: string;
-  icon: React.ReactNode;
-  allowedRoles: Role[]; 
-}
-
-const MENU_ITEMS: MenuItem[] = [
-  { title: 'Bảng điều khiển', path: '/dashboard', icon: '📊', allowedRoles: ['ADMIN', 'HR_MANAGER', 'RECRUITER', 'HIRING_MANAGER', 'INTERVIEWER', 'APPROVER'] },
-  { title: 'Quản lý tài khoản', path: '/users', icon: '👥', allowedRoles: ['ADMIN'] },
-  { title: 'Đăng tuyển dụng', path: '/jobs', icon: '📝', allowedRoles: ['ADMIN', 'HR_MANAGER', 'RECRUITER'] },
-  { title: 'Quản lý CV / Ứng viên', path: '/candidates', icon: '📄', allowedRoles: ['ADMIN', 'HR_MANAGER', 'RECRUITER', 'HIRING_MANAGER'] },
-  { title: 'Lịch phỏng vấn', path: '/interviews', icon: '📅', allowedRoles: ['ADMIN', 'HR_MANAGER', 'RECRUITER', 'INTERVIEWER', 'HIRING_MANAGER'] },
-  { title: 'Hồ sơ cá nhân', path: '/profile', icon: '👤', allowedRoles: ['ADMIN', 'HR_MANAGER', 'RECRUITER', 'INTERVIEWER', 'HIRING_MANAGER', 'APPROVER'] },
+const menuItems: SidebarMenuItem[] = [
+  {
+    label: 'Bảng điều khiển',
+    to: '/dashboard',
+    icon: '📊',
+    roles: Object.values(ROLES),
+  },
+  {
+    label: 'Quản lý tài khoản',
+    to: '/users',
+    icon: '👥',
+    roles: [ROLES.ADMIN],
+  },
+  {
+    label: 'Đăng tuyển dụng',
+    to: '/jobs',
+    icon: '📝',
+    roles: [ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER],
+  },
+  {
+    label: 'Quản lý CV / Ứng viên',
+    to: '/candidates',
+    icon: '📄',
+    roles: [ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER, ROLES.HIRING_MANAGER],
+  },
+  {
+    label: 'Lịch phỏng vấn',
+    to: '/interviews',
+    icon: '📅',
+    roles: [
+      ROLES.ADMIN,
+      ROLES.HR_MANAGER,
+      ROLES.RECRUITER,
+      ROLES.HIRING_MANAGER,
+      ROLES.INTERVIEWER,
+    ],
+  },
+  {
+    label: 'Hồ sơ cá nhân',
+    to: '/profile',
+    icon: '👤',
+    roles: [
+      ROLES.ADMIN,
+      ROLES.HR_MANAGER,
+      ROLES.RECRUITER,
+      ROLES.HIRING_MANAGER,
+      ROLES.INTERVIEWER,
+      ROLES.APPROVER,
+    ],
+  },
 ];
 
-const Sidebar: React.FC = () => {
+const isRole = (role: string): role is Role => Object.hasOwn(ROLE_NAMES, role);
+
+const Sidebar: FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const location = useLocation();
   const navigate = useNavigate();
-
-  const userData = tokenService.getUserData();
-  const userRoles = userData?.roles ?? [];
-  const userName = userData?.fullName || userData?.email || 'Người dùng';
-  
-  const displayRole = userRoles.find(
-    (role): role is Role => Object.hasOwn(ROLE_NAMES, role),
-  );
-
-  const visibleMenus = MENU_ITEMS.filter(menu => 
-    menu.allowedRoles.some(role => userRoles.includes(role))
-  );
+  const user = tokenService.getUserData();
+  const userRoles = user?.roles ?? [];
+  const visibleMenu = getVisibleMenuItems(menuItems, userRoles);
+  const displayName = user?.fullName || user?.email || 'Người dùng';
+  const roleLabel = userRoles.length > 0
+    ? userRoles.map((role) => isRole(role) ? ROLE_NAMES[role] : role).join(', ')
+    : 'Khách';
 
   const handleLogout = async () => {
     try {
       await authService.logout();
     } catch (error: unknown) {
-      console.error("Logout API failed", error);
+      console.error('Logout API failed', error);
     } finally {
       tokenService.clearAll();
       navigate('/login');
@@ -53,96 +86,89 @@ const Sidebar: React.FC = () => {
 
   return (
     <>
-      {/* --------------------------------------------------------
-          GIAO DIỆN MOBILE: Nút Hamburger (AC 3)
-          -------------------------------------------------------- */}
-      <button 
-        className="md:hidden fixed top-4 left-4 z-50 p-2 bg-blue-600 text-white rounded-md focus:outline-none shadow-md transition-transform hover:scale-105"
-        onClick={() => setIsOpen(!isOpen)}
-        aria-label="Toggle Menu"
-      >
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          {isOpen ? (
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          ) : (
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          )}
-        </svg>
-      </button>
+      <div className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur-sm md:hidden">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-800">Smart Recruitment</p>
+            <p className="text-[11px] text-slate-500">{displayName}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsOpen((open) => !open)}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-lg text-slate-700 hover:bg-slate-100"
+            aria-label="Toggle menu"
+            aria-expanded={isOpen}
+          >
+            ☰
+          </button>
+        </div>
+      </div>
 
-      {/* Overlay: Nền mờ khi mở menu trên điện thoại */}
       {isOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-30 md:hidden backdrop-blur-sm transition-opacity" 
+        <button
+          type="button"
+          className="fixed inset-0 z-30 bg-black/50 md:hidden"
+          aria-label="Close menu"
           onClick={() => setIsOpen(false)}
         />
       )}
 
-      {/* --------------------------------------------------------
-          CẤU TRÚC SIDEBAR CHÍNH (Desktop & Drawer Mobile)
-          -------------------------------------------------------- */}
-      <aside 
-        className={`fixed top-0 left-0 h-screen w-72 bg-slate-900 text-white shadow-2xl z-40 flex flex-col transition-transform duration-300 ease-out
-          ${isOpen ? 'translate-x-0' : '-translate-x-full'} 
-          md:translate-x-0 md:static md:h-screen md:flex-shrink-0`}
+      <aside
+        className={[
+          'fixed left-0 top-0 z-40 flex h-screen w-72 flex-col bg-slate-900 text-white shadow-xl transition-transform',
+          isOpen ? 'translate-x-0' : '-translate-x-full',
+          'md:static md:translate-x-0 md:flex-shrink-0',
+        ].join(' ')}
       >
-        {/* Header Logo */}
-        <div className="flex items-center justify-center h-16 bg-slate-950 border-b border-slate-800 px-4 shrink-0">
-          <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-teal-300 truncate">
+        <div className="flex h-16 shrink-0 items-center justify-center border-b border-slate-800 bg-slate-950 px-4">
+          <span className="truncate bg-gradient-to-r from-blue-400 to-teal-300 bg-clip-text text-xl font-bold text-transparent">
             Smart Recruitment
           </span>
         </div>
 
-        {/* Thông tin người dùng đang đăng nhập (AC 2) */}
-        <div className="p-5 border-b border-slate-800 bg-slate-800/50 shrink-0">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-lg font-bold shadow-inner">
-              {userName.charAt(0).toUpperCase()}
+        <div className="shrink-0 border-b border-slate-800 bg-slate-800/50 p-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-lg font-bold">
+              {displayName.charAt(0).toUpperCase()}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-100 truncate">{userName}</p>
-              <p className="text-xs font-medium text-blue-400 mt-0.5 uppercase tracking-wider truncate">
-                {displayRole ? (ROLE_NAMES[displayRole] || displayRole) : 'Khách'}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-slate-200">{displayName}</p>
+              <p className="mt-0.5 truncate text-xs font-semibold uppercase tracking-wider text-blue-400">
+                {roleLabel}
               </p>
             </div>
           </div>
         </div>
 
-        {/* Danh sách Menu Navigation (Đã lọc) */}
-        <nav className="flex-1 overflow-y-auto py-4 custom-scrollbar">
+        <nav className="custom-scrollbar flex-1 overflow-y-auto py-4">
           <ul className="space-y-1 px-3">
-            {visibleMenus.map((menu) => {
-              const isActive = location.pathname.startsWith(menu.path);
-              return (
-                <li key={menu.path}>
-                  <Link
-                    to={menu.path}
-                    onClick={() => setIsOpen(false)} // UX: Tự đóng Drawer khi user click menu trên Mobile
-                    className={`flex items-center px-4 py-3 rounded-lg transition-all duration-200 group ${
-                      isActive 
-                        ? 'bg-blue-600 text-white shadow-md' 
-                        : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                    }`}
-                  >
-                    <span className={`mr-3 text-xl transition-transform duration-200 ${isActive ? '' : 'group-hover:scale-110'}`}>
-                      {menu.icon}
-                    </span>
-                    <span className="font-medium text-sm">{menu.title}</span>
-                  </Link>
-                </li>
-              );
-            })}
+            {visibleMenu.map((item) => (
+              <li key={item.to}>
+                <NavLink
+                  to={item.to}
+                  onClick={() => setIsOpen(false)}
+                  className={({ isActive }) => [
+                    'flex items-center rounded-lg px-4 py-3 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'text-slate-400 hover:bg-slate-800 hover:text-white',
+                  ].join(' ')}
+                >
+                  <span className="mr-3 text-xl">{item.icon}</span>
+                  <span>{item.label}</span>
+                </NavLink>
+              </li>
+            ))}
           </ul>
         </nav>
 
-        {/* Nút Đăng xuất ở Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950 shrink-0">
-          <button 
-            className="w-full flex items-center justify-center px-4 py-2.5 bg-slate-800 hover:bg-red-600/90 text-slate-300 hover:text-white rounded-lg transition-colors duration-200"
+        <div className="shrink-0 border-t border-slate-800 bg-slate-950 p-4">
+          <button
+            type="button"
+            className="w-full rounded-lg bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-red-600 hover:text-white"
             onClick={handleLogout}
           >
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-            <span className="font-medium text-sm">Đăng xuất</span>
+            Đăng xuất
           </button>
         </div>
       </aside>
