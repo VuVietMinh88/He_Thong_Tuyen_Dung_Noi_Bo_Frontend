@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { ROLES, ROLE_NAMES, type Role } from '../../constants/roles';
 import { authService } from '../../services/auth.service';
 import { tokenService } from '../../services/token.service';
+import { usePermission } from '../../hooks/usePermission';
 import {
   getVisibleMenuItems,
   type SidebarMenuItem,
@@ -19,31 +20,59 @@ const menuItems: SidebarMenuItem[] = [
     label: 'Quản lý tài khoản',
     to: '/users',
     icon: '👥',
-    roles: [ROLES.ADMIN],
+    roles: [ROLES.ADMIN, ROLES.HR_MANAGER],
+    permissions: ['USER_ADMIN_READ_ALL'],
   },
   {
-    label: 'Đăng tuyển dụng',
+    label: 'Yêu cầu tuyển dụng',
     to: '/jobs',
     icon: '📝',
-    roles: [ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER],
+    roles: Object.values(ROLES),
+    permissions: ['REQUISITIONS_READ_ALL', 'REQUISITIONS_READ_SCOPED'],
+  },
+  {
+    label: 'Khung năng lực',
+    to: '/settings/competency-frameworks',
+    icon: '🧩',
+    roles: Object.values(ROLES),
+    permissions: ['ORGANIZATION_READ_ALL'],
+  },
+  {
+    label: 'Chức danh',
+    to: '/settings/positions',
+    icon: '💼',
+    roles: Object.values(ROLES),
+    permissions: ['ORGANIZATION_READ_ALL'],
+  },
+  {
+    label: 'Ngân hàng câu hỏi',
+    to: '/settings/interview-questions',
+    icon: '❔',
+    roles: Object.values(ROLES),
+    permissions: ['ORGANIZATION_READ_ALL'],
+  },
+  {
+    label: 'Danh mục tuyển dụng',
+    to: '/settings/recruitment-catalogs',
+    icon: '⚙️',
+    roles: Object.values(ROLES),
+    permissions: ['ORGANIZATION_READ_ALL'],
   },
   {
     label: 'Quản lý CV / Ứng viên',
     to: '/candidates',
     icon: '📄',
-    roles: [ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER, ROLES.HIRING_MANAGER],
+    roles: Object.values(ROLES),
+    permissions: ['CANDIDATES_READ_ALL', 'CANDIDATES_READ_SCOPED'],
   },
   {
     label: 'Lịch phỏng vấn',
     to: '/interviews',
     icon: '📅',
     roles: [
-      ROLES.ADMIN,
-      ROLES.HR_MANAGER,
-      ROLES.RECRUITER,
-      ROLES.HIRING_MANAGER,
-      ROLES.INTERVIEWER,
+      ...Object.values(ROLES),
     ],
+    permissions: ['INTERVIEWS_READ_ALL', 'INTERVIEWS_READ_SCOPED'],
   },
   {
     label: 'Hồ sơ cá nhân',
@@ -57,6 +86,14 @@ const menuItems: SidebarMenuItem[] = [
       ROLES.INTERVIEWER,
       ROLES.APPROVER,
     ],
+    permissions: ['SELF_PROFILE_READ'],
+  },
+  {
+    label: 'Đổi mật khẩu',
+    to: '/change-password',
+    icon: '🔑',
+    roles: Object.values(ROLES),
+    permissions: ['SELF_SECURITY_WRITE'],
   },
 ];
 
@@ -66,8 +103,9 @@ const Sidebar: FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
   const user = tokenService.getUserData();
+  const { permissions } = usePermission();
   const userRoles = user?.roles ?? [];
-  const visibleMenu = getVisibleMenuItems(menuItems, userRoles);
+  const visibleMenu = getVisibleMenuItems(menuItems, userRoles, permissions);
   const displayName = user?.fullName || user?.email || 'Người dùng';
   const roleLabel = userRoles.length > 0
     ? userRoles.map((role) => isRole(role) ? ROLE_NAMES[role] : role).join(', ')
@@ -80,6 +118,7 @@ const Sidebar: FC = () => {
       console.error('Logout API failed', error);
     } finally {
       tokenService.clearAll();
+      window.dispatchEvent(new Event('auth:changed'));
       navigate('/login');
     }
   };

@@ -58,13 +58,13 @@ describe('User Account List Filtering & Pagination (TKNHTTDNB1-142)', () => {
     });
   });
 
-  it('filters accounts by status (ACTIVE / LOCKED) accurately', () => {
+  it('filters accounts by backend status values accurately', () => {
     const activeAccounts = filterAccounts(MOCK_ACCOUNTS, '', 'ALL', 'ACTIVE');
-    const lockedAccounts = filterAccounts(MOCK_ACCOUNTS, '', 'ALL', 'LOCKED');
+    const lockedAccounts = filterAccounts(MOCK_ACCOUNTS, '', 'ALL', 'ADMINISTRATIVELY_LOCKED');
 
     expect(activeAccounts.length + lockedAccounts.length).toBe(MOCK_ACCOUNTS.length);
     lockedAccounts.forEach((acc) => {
-      expect(acc.status).toBe('LOCKED');
+      expect(acc.status).toBe('ADMINISTRATIVELY_LOCKED');
     });
   });
 

@@ -82,7 +82,7 @@ const UnlockAccountContent: React.FC<UnlockAccountContentProps> = ({
 
       <div className="mt-5 rounded-xl bg-amber-50 p-3 text-xs text-amber-900 border border-amber-200">
         <p>
-          Sau khi mở khóa, người dùng sẽ có thể đăng nhập bình thường và tiếp tục các công việc tuyển dụng được phân công.
+          Thao tác này gỡ khóa do quản trị viên đặt. Tài khoản chỉ đăng nhập được nếu không còn trạng thái hạn chế khác.
         </p>
       </div>
 
@@ -155,6 +155,8 @@ export const UnlockAccountModal: React.FC<UnlockAccountModalProps> = ({
   return (
     <div
       role="dialog"
+      data-session-draft-id={account.id}
+      data-session-draft-type="unlock-account"
       aria-modal="true"
       aria-labelledby="unlock-account-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-xs transition-opacity animate-fade-in"

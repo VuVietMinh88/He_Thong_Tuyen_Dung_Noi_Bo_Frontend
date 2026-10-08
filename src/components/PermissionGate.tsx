@@ -1,5 +1,6 @@
 import React, { cloneElement, isValidElement, type ReactNode } from 'react';
 import { usePermission } from '../hooks/usePermission';
+import { tokenService } from '../services/token.service';
 
 interface PermissionGateProps {
   allowedRoles?: readonly string[];
@@ -22,15 +23,17 @@ const PermissionGate: React.FC<PermissionGateProps> = ({
   className = '',
   disabledClassName = 'opacity-50 pointer-events-none',
 }) => {
-  const { hasRole, can } = usePermission();
+  const { hasPermission, can, isLoading } = usePermission();
+  const roles = tokenService.getUserData()?.roles ?? [];
 
   const hasAccess =
     allowedRoles && allowedRoles.length > 0
-      ? hasRole(allowedRoles)
+      ? roles.some((role) => allowedRoles.includes(role.replace(/^ROLE_/, '')))
       : action && resource
         ? can(action, resource)
-        : true;
+        : hasPermission(action ?? resource ?? '');
 
+  if (isLoading) return null;
   if (!hasAccess) {
     if (mode === 'disabled' || mode === 'disable') {
       if (isValidElement(children)) {

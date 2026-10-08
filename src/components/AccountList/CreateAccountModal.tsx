@@ -11,14 +11,12 @@ interface CreateAccountModalProps {
 interface FormValues {
   fullName: string;
   email: string;
-  department: string;
   role: AccountRole | '';
 }
 
 const INITIAL_VALUES: FormValues = {
   fullName: '',
   email: '',
-  department: '',
   role: '',
 };
 
@@ -64,7 +62,6 @@ export const CreateAccountModal: React.FC<CreateAccountModalProps> = ({
     } else if (!EMAIL_PATTERN.test(normalizedEmail)) {
       nextErrors.email = 'Email không đúng định dạng.';
     }
-    if (!values.department.trim()) nextErrors.department = 'Vui lòng nhập phòng ban.';
     if (!values.role) nextErrors.role = 'Vui lòng chọn vai trò.';
 
     setErrors(nextErrors);
@@ -82,12 +79,11 @@ export const CreateAccountModal: React.FC<CreateAccountModalProps> = ({
       await userService.createAccount({
         fullName: values.fullName.trim(),
         email: values.email.trim(),
-        department: values.department.trim(),
-        role: values.role,
+        roles: [values.role],
       });
       setValues(INITIAL_VALUES);
       setErrors({});
-      onSuccess('Tạo tài khoản thành công. Hệ thống đã gửi email kích hoạt kèm mật khẩu tạm đến người dùng.');
+      onSuccess('Tạo tài khoản thành công. Backend đã gửi thông tin kích hoạt đến email người dùng.');
       onClose();
     } catch (error: unknown) {
       if (error instanceof CreateAccountError) {
@@ -116,6 +112,7 @@ export const CreateAccountModal: React.FC<CreateAccountModalProps> = ({
       }}
     >
       <section
+        data-session-draft-type="create-account"
         aria-labelledby="create-account-title"
         aria-modal="true"
         className="my-auto w-full max-w-xl rounded-2xl bg-white p-5 shadow-2xl sm:p-7"
@@ -183,21 +180,6 @@ export const CreateAccountModal: React.FC<CreateAccountModalProps> = ({
               value={values.email}
             />
             {errors.email && <p className="mt-1 text-xs text-rose-600">{errors.email}</p>}
-          </div>
-
-          <div>
-            <label className="text-sm font-semibold text-slate-700" htmlFor="create-department">
-              Phòng ban <span className="text-rose-600">*</span>
-            </label>
-            <input
-              className={fieldClass('department')}
-              id="create-department"
-              maxLength={120}
-              onChange={(event) => updateField('department', event.target.value)}
-              required
-              value={values.department}
-            />
-            {errors.department && <p className="mt-1 text-xs text-rose-600">{errors.department}</p>}
           </div>
 
           <div>

@@ -2,7 +2,8 @@ export type SidebarMenuItem = {
   label: string;
   to: string;
   icon?: string;
-  roles: string[];
+  roles?: string[];
+  permissions?: string[];
 };
 
 export const normalizeRole = (value?: string | null): string =>
@@ -32,5 +33,10 @@ export const canAccessMenu = (
 export const getVisibleMenuItems = (
   items: SidebarMenuItem[],
   currentRoles?: string[] | string | null,
+  currentPermissions?: string[],
 ): SidebarMenuItem[] =>
-  items.filter((item) => canAccessMenu(item.roles, currentRoles));
+  items.filter((item) =>
+    (!item.roles || canAccessMenu(item.roles, currentRoles))
+    && (!item.permissions?.length
+      || item.permissions.some((permission) => currentPermissions?.includes(permission))),
+  );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useToast } from '../../components/notifications/useToast';
 import type { AccountFilterParams, AccountRole, UserAccount } from '../../types/account';
 import { userService } from '../../services/userService';
@@ -12,6 +12,8 @@ import ManageRolesModal from '../../components/AccountList/ManageRolesModal';
 import LockAccountModal from '../../components/AccountList/LockAccountModal';
 import UnlockAccountModal from '../../components/AccountList/UnlockAccountModal';
 import Sidebar from '../../components/layout/Sidebar';
+import { usePermission } from '../../hooks/usePermission';
+import type { SessionDraftDialog } from '../../services/sessionDraft.service';
 
 const DEFAULT_PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_DELAY_MS = 350;
@@ -28,6 +30,7 @@ export const AccountListPage: React.FC = () => {
   const [totalItems, setTotalItems] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [totalSystemUsers, setTotalSystemUsers] = useState<number>(0);
+  const [reloadKey, setReloadKey] = useState(0);
 
   // Filter and pagination controls
   const [filterParams, setFilterParams] = useState<AccountFilterParams>(INITIAL_FILTERS);
@@ -52,8 +55,13 @@ export const AccountListPage: React.FC = () => {
   const [isLockModalOpen, setIsLockModalOpen] = useState<boolean>(false);
   const [unlockingAccount, setUnlockingAccount] = useState<UserAccount | null>(null);
   const [isUnlockModalOpen, setIsUnlockModalOpen] = useState<boolean>(false);
+  const pendingDraftDialog = useRef<SessionDraftDialog | null>(null);
+  const accountsRef = useRef<UserAccount[]>([]);
+  const isLoadingRef = useRef(true);
 
   const { notify } = useToast();
+  const { can } = usePermission();
+  const canManageAccounts = can('edit', 'user');
 
   // Debounce search keyword to avoid flooding API requests while typing
   const debouncedSearchKeyword = useDebounce(
@@ -64,11 +72,61 @@ export const AccountListPage: React.FC = () => {
   const showNotification = (message: string, type: 'success' | 'error' = 'success') =>
     notify(message, type);
 
+  useEffect(() => {
+    accountsRef.current = accounts;
+    isLoadingRef.current = isLoading;
+  }, [accounts, isLoading]);
+
+  const openDraftDialog = (dialog: SessionDraftDialog, sourceAccounts: UserAccount[]) => {
+    if (dialog.type === 'create-account') {
+      setIsCreateModalOpen(true);
+      return;
+    }
+    const account = sourceAccounts.find((item) => item.id === dialog.id);
+    if (!account) return;
+
+    if (dialog.type === 'edit-account') {
+      setEditingAccount(account);
+      setIsEditModalOpen(true);
+    } else if (dialog.type === 'manage-roles') {
+      setManagingRolesAccount(account);
+      setIsManageRolesModalOpen(true);
+    } else if (dialog.type === 'lock-account') {
+      setLockingAccount(account);
+      setIsLockModalOpen(true);
+    } else if (dialog.type === 'unlock-account') {
+      setUnlockingAccount(account);
+      setIsUnlockModalOpen(true);
+    }
+  };
+
+  useEffect(() => {
+    const restoreDialog = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const detail: unknown = event.detail;
+      if (
+        typeof detail !== 'object'
+        || detail === null
+        || !('type' in detail)
+        || typeof detail.type !== 'string'
+      ) return;
+      const dialog = {
+        type: detail.type,
+        id: 'id' in detail && typeof detail.id === 'string' ? detail.id : undefined,
+      };
+      if (isLoadingRef.current) pendingDraftDialog.current = dialog;
+      else openDraftDialog(dialog, accountsRef.current);
+    };
+    window.addEventListener('session-draft:restore-dialog', restoreDialog);
+    return () => window.removeEventListener('session-draft:restore-dialog', restoreDialog);
+  }, []);
+
   // Fetch accounts from API whenever search, filter, or pagination changes
   useEffect(() => {
     let isMounted = true;
 
     const loadData = async () => {
+      isLoadingRef.current = true;
       setIsLoading(true);
       setApiError(null);
 
@@ -82,6 +140,7 @@ export const AccountListPage: React.FC = () => {
         });
 
         if (isMounted) {
+          accountsRef.current = response.users;
           setAccounts(response.users);
           setTotalItems(response.totalItems);
           setTotalPages(response.totalPages);
@@ -89,6 +148,10 @@ export const AccountListPage: React.FC = () => {
           // Store total count on initial load when no filter is applied
           if (!debouncedSearchKeyword && filterParams.role === 'ALL' && filterParams.status === 'ALL') {
             setTotalSystemUsers(response.totalItems);
+          }
+          if (pendingDraftDialog.current) {
+            openDraftDialog(pendingDraftDialog.current, response.users);
+            pendingDraftDialog.current = null;
           }
         }
       } catch (error) {
@@ -104,6 +167,7 @@ export const AccountListPage: React.FC = () => {
         }
       } finally {
         if (isMounted) {
+          isLoadingRef.current = false;
           setIsLoading(false);
         }
       }
@@ -114,7 +178,7 @@ export const AccountListPage: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [debouncedSearchKeyword, filterParams.role, filterParams.status, currentPage, pageSize]);
+  }, [debouncedSearchKeyword, filterParams.role, filterParams.status, currentPage, pageSize, reloadKey]);
 
   // Handler for filter changes, resetting page to 1
   const handleFilterChange = (newFilters: Partial<AccountFilterParams>) => {
@@ -156,15 +220,16 @@ export const AccountListPage: React.FC = () => {
           item.id === userId
             ? {
                 ...item,
-                status: 'LOCKED',
-                lockReason: reason,
-                lockedAt: result.lockedAt,
+                status: result.status,
+                lockReason: result.lockReason ?? reason.trim(),
+                lockedAt: result.lockedAt ?? undefined,
               }
             : item
         )
       );
 
       showNotification(`Đã khóa thành công tài khoản. Lý do: "${reason}"`);
+      if (result.handoverWarning) showNotification(result.handoverWarning);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Lỗi khi thực hiện khóa tài khoản.';
@@ -176,22 +241,26 @@ export const AccountListPage: React.FC = () => {
   // Handler for confirming unlock via API (User Story S1-10 / TKNHTTDNB1-160)
   const handleConfirmUnlock = async (userId: string) => {
     try {
-      await userService.unlockUser(userId);
+      const result = await userService.unlockUser(userId);
 
       setAccounts((prevList) =>
         prevList.map((item) =>
           item.id === userId
             ? {
                 ...item,
-                status: 'ACTIVE',
-                lockReason: undefined,
-                lockedAt: undefined,
+                status: result.status,
+                lockReason: result.lockReason ?? undefined,
+                lockedAt: result.lockedAt ?? undefined,
               }
             : item
         )
       );
 
-      showNotification('Đã mở khóa thành công tài khoản người dùng.');
+      showNotification(
+        result.status === 'ACTIVE'
+          ? 'Đã mở khóa thành công tài khoản người dùng.'
+          : `Đã gỡ khóa quản trị. Trạng thái tài khoản hiện tại: ${result.status}.`,
+      );
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Lỗi khi mở khóa tài khoản.';
@@ -224,7 +293,10 @@ export const AccountListPage: React.FC = () => {
   // Handler for updating user roles via API (User Story S1-09)
   const handleSaveRoles = async (userId: string, newRoles: AccountRole[]) => {
     try {
-      await userService.updateUserRoles(userId, newRoles);
+      const account = accounts.find((item) => item.id === userId);
+      if (!account) throw new Error('Không tìm thấy tài khoản cần cập nhật vai trò.');
+      const currentRoles = account.roles?.length ? account.roles : [account.role];
+      await userService.updateUserRoles(userId, currentRoles, newRoles);
 
       setAccounts((prevList) =>
         prevList.map((item) =>
@@ -236,11 +308,12 @@ export const AccountListPage: React.FC = () => {
 
       showNotification('Cập nhật phân quyền vai trò người dùng thành công.');
     } catch (error) {
+      setReloadKey((current) => current + 1);
       const message =
         error instanceof Error
           ? error.message
           : 'Lỗi khi cập nhật vai trò người dùng.';
-      showNotification(message);
+      showNotification(message, 'error');
       throw error;
     }
   };
@@ -260,8 +333,15 @@ export const AccountListPage: React.FC = () => {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Lỗi khi cập nhật tài khoản.';
-      showNotification(message);
+      showNotification(message, 'error');
+      throw error;
     }
+  };
+
+  const handleAccountCreated = (message: string) => {
+    showNotification(message);
+    setCurrentPage(1);
+    setReloadKey((current) => current + 1);
   };
 
   return (
@@ -284,14 +364,14 @@ export const AccountListPage: React.FC = () => {
                 <h1 className="text-2xl font-bold tracking-tight text-slate-900">
                   Danh sách tài khoản nội bộ
                 </h1>
-                <button
+                {canManageAccounts && <button
                   className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                   onClick={() => setIsCreateModalOpen(true)}
                   type="button"
                 >
                   <span aria-hidden="true" className="text-lg leading-none">+</span>
                   Tạo tài khoản
-                </button>
+                </button>}
               </div>
             </div>
 
@@ -336,11 +416,11 @@ export const AccountListPage: React.FC = () => {
             <AccountTable
               accounts={accounts}
               isLoading={isLoading}
-              onEditAccount={handleOpenEditModal}
-              onManageRoles={handleOpenManageRoles}
-              onRequestLock={handleRequestLock}
-              onRequestUnlock={handleRequestUnlock}
-              onToggleStatus={handleToggleStatus}
+              onEditAccount={canManageAccounts ? handleOpenEditModal : undefined}
+              onManageRoles={canManageAccounts ? handleOpenManageRoles : undefined}
+              onRequestLock={canManageAccounts ? handleRequestLock : undefined}
+              onRequestUnlock={canManageAccounts ? handleRequestUnlock : undefined}
+              onToggleStatus={canManageAccounts ? handleToggleStatus : undefined}
               onResetFilters={handleResetFilters}
             />
 
@@ -360,20 +440,20 @@ export const AccountListPage: React.FC = () => {
 
       {/* Edit Account Modal */}
       <EditAccountModal
-        isOpen={isEditModalOpen}
+        isOpen={isEditModalOpen && canManageAccounts}
         account={editingAccount}
         onClose={() => setIsEditModalOpen(false)}
         onSave={handleSaveAccount}
       />
       <CreateAccountModal
-        isOpen={isCreateModalOpen}
+        isOpen={isCreateModalOpen && canManageAccounts}
         onClose={() => setIsCreateModalOpen(false)}
-        onSuccess={showNotification}
+        onSuccess={handleAccountCreated}
       />
 
       {/* Manage Roles Modal (User Story S1-09 / TKNHTTDNB1-152) */}
       <ManageRolesModal
-        isOpen={isManageRolesModalOpen}
+        isOpen={isManageRolesModalOpen && canManageAccounts}
         account={managingRolesAccount}
         onClose={() => setIsManageRolesModalOpen(false)}
         onSaveRoles={handleSaveRoles}
@@ -381,7 +461,7 @@ export const AccountListPage: React.FC = () => {
 
       {/* Lock Account Modal with Reason & Headcount Warning (User Story S1-10 / TKNHTTDNB1-160) */}
       <LockAccountModal
-        isOpen={isLockModalOpen}
+        isOpen={isLockModalOpen && canManageAccounts}
         account={lockingAccount}
         onClose={() => setIsLockModalOpen(false)}
         onConfirmLock={handleConfirmLock}
@@ -389,7 +469,7 @@ export const AccountListPage: React.FC = () => {
 
       {/* Unlock Account Modal (User Story S1-10 / TKNHTTDNB1-160) */}
       <UnlockAccountModal
-        isOpen={isUnlockModalOpen}
+        isOpen={isUnlockModalOpen && canManageAccounts}
         account={unlockingAccount}
         onClose={() => setIsUnlockModalOpen(false)}
         onConfirmUnlock={handleConfirmUnlock}

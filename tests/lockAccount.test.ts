@@ -55,7 +55,8 @@ const validateLockAccountRequest = ({
 
   // AC2: Cảnh báo bàn giao headcount - nếu nhân sự đang phụ trách job thì phải xác nhận bàn giao
   const activeJobsCount = account.activeJobsCount ?? (account.assignedJobs?.length || 0);
-  if (activeJobsCount > 0 && !hasConfirmedHandover) {
+  const hasAssignmentData = account.activeJobsCount !== undefined || account.assignedJobs !== undefined;
+  if ((activeJobsCount > 0 || !hasAssignmentData) && !hasConfirmedHandover) {
     return {
       isValid: false,
       error: 'Vui lòng xác nhận đã kiểm tra và nắm thông tin bàn giao các vị trí tuyển dụng trước khi khóa.',
@@ -109,13 +110,23 @@ describe('User Account Status: Active/Locked Management (TKNHTTDNB1-160 / S1-10)
     assignedJobs: [],
   };
 
+  const accountWithUnknownAssignments: UserAccount = {
+    id: 'ACC-UNKNOWN',
+    fullName: 'Nhân sự chưa đồng bộ phân công',
+    email: 'unknown@example.com',
+    department: '',
+    role: 'RECRUITER',
+    status: 'ACTIVE',
+    createdAt: '2026-10-08T00:00:00Z',
+  };
+
   const lockedAccount: UserAccount = {
     id: 'ACC-005',
     fullName: 'Vũ Đức Cường',
     email: 'cuong.vu@smartrecruitment.vn',
     department: 'Phòng Quản lý Sản phẩm',
     role: 'HIRING_MANAGER',
-    status: 'LOCKED',
+    status: 'ADMINISTRATIVELY_LOCKED',
     createdAt: '2025-03-12',
     lockReason: 'Nhân sự nghỉ việc chuyển công tác từ ngày 20/09/2026',
     lockedAt: '2026-09-20 09:10',
@@ -174,6 +185,18 @@ describe('User Account Status: Active/Locked Management (TKNHTTDNB1-160 / S1-10)
   });
 
   describe('AC2: Cảnh báo bàn giao Headcount & Vị trí tuyển dụng phụ trách', () => {
+    it('requires explicit handover confirmation when backend does not provide assignment data', () => {
+      const result = validateLockAccountRequest({
+        account: accountWithUnknownAssignments,
+        currentUser: currentAdmin,
+        reason: 'Nhân sự nghỉ việc',
+        hasConfirmedHandover: false,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.error).toContain('bàn giao');
+    });
+
     it('phát hiện nhân sự đang phụ trách vị trí tuyển dụng và yêu cầu xác nhận bàn giao trước khi khóa', () => {
       // Khi chưa tích xác nhận bàn giao -> Báo lỗi yêu cầu xác nhận
       const resultWithoutHandover = validateLockAccountRequest({
@@ -216,27 +239,31 @@ describe('User Account Status: Active/Locked Management (TKNHTTDNB1-160 / S1-10)
   });
 
   describe('AC3: Cập nhật API và mở khóa tài khoản', () => {
-    it('gọi userService.lockUser thành công và trả về trạng thái LOCKED kèm lý do', async () => {
+    it('gọi userService.lockUser thành công và trả về trạng thái backend cùng lý do', async () => {
       const reason = 'Chấm dứt hợp đồng lao động theo nguyện vọng cá nhân';
       const spy = vi.spyOn(userService, 'lockUser').mockResolvedValueOnce({
-        id: recruiterWithJobs.id,
-        status: 'LOCKED',
+        userId: recruiterWithJobs.id,
+        status: 'ADMINISTRATIVELY_LOCKED',
         lockReason: reason,
         lockedAt: '2026-10-07 09:00',
+        handoverWarning: null,
       });
 
       const response = await userService.lockUser(recruiterWithJobs.id, reason);
 
       expect(spy).toHaveBeenCalledWith(recruiterWithJobs.id, reason);
-      expect(response.status).toBe('LOCKED');
+      expect(response.status).toBe('ADMINISTRATIVELY_LOCKED');
       expect(response.lockReason).toBe(reason);
       expect(response.lockedAt).toBeDefined();
     });
 
     it('gọi userService.unlockUser thành công và trả về trạng thái ACTIVE', async () => {
       const spy = vi.spyOn(userService, 'unlockUser').mockResolvedValueOnce({
-        id: lockedAccount.id,
+        userId: lockedAccount.id,
         status: 'ACTIVE',
+        lockReason: null,
+        lockedAt: null,
+        handoverWarning: null,
       });
 
       const response = await userService.unlockUser(lockedAccount.id);

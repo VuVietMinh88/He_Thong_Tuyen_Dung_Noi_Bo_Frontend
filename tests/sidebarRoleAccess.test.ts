@@ -44,4 +44,15 @@ describe("sidebar role access", () => {
     expect(getVisibleMenuItems(items, [ROLES.RECRUITER])).toHaveLength(1);
     expect(getVisibleMenuItems(items, [ROLES.APPROVER])).toHaveLength(0);
   });
+
+  it('filters menu items by backend permission codes as well as roles', () => {
+    const item = {
+      label: 'Accounts',
+      to: '/users',
+      roles: [ROLES.ADMIN, ROLES.HR_MANAGER],
+      permissions: ['USER_ADMIN_READ_ALL'],
+    };
+    expect(getVisibleMenuItems([item], [ROLES.HR_MANAGER], ['USER_ADMIN_READ_ALL'])).toHaveLength(1);
+    expect(getVisibleMenuItems([item], [ROLES.ADMIN], ['USER_ADMIN_WRITE_ALL'])).toHaveLength(0);
+  });
 });

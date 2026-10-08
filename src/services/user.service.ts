@@ -5,8 +5,15 @@ import type { AccountRole } from '../types/account';
 export interface CreateAccountInput {
   fullName: string;
   email: string;
-  department: string;
-  role: AccountRole;
+  roles: AccountRole[];
+}
+
+export interface CreatedAccount {
+  id: string;
+  email: string;
+  fullName: string;
+  roles: AccountRole[];
+  status: 'PENDING_ACTIVATION';
 }
 
 export class CreateAccountError extends Error {
@@ -21,6 +28,10 @@ export class CreateAccountError extends Error {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
+
+const isAccountRole = (value: unknown): value is AccountRole =>
+  typeof value === 'string'
+  && ['ADMIN', 'HR_MANAGER', 'RECRUITER', 'HIRING_MANAGER', 'INTERVIEWER', 'APPROVER'].includes(value);
 
 const getResponseMessage = (data: unknown): string | undefined => {
   if (typeof data === 'string') return data;
@@ -55,10 +66,38 @@ const isDuplicateEmailError = (error: AxiosError<unknown>): boolean => {
 };
 
 export const userService = {
-  async createAccount(input: CreateAccountInput): Promise<void> {
+  async createAccount(input: CreateAccountInput): Promise<CreatedAccount> {
     try {
-      await axiosClient.post('/users', input);
+      const response = await axiosClient.post<unknown>('/accounts', {
+        fullName: input.fullName.trim(),
+        email: input.email.trim().toLowerCase(),
+        roles: input.roles,
+      });
+      const data: unknown = response.data;
+      if (
+        !isRecord(data)
+        || typeof data.id !== 'string'
+        || typeof data.email !== 'string'
+        || typeof data.fullName !== 'string'
+        || !Array.isArray(data.roles)
+        || !data.roles.every(isAccountRole)
+        || data.status !== 'PENDING_ACTIVATION'
+      ) {
+        throw new CreateAccountError(
+          'Backend trả về dữ liệu tạo tài khoản không đúng hợp đồng API.',
+          'REQUEST_FAILED',
+        );
+      }
+
+      return {
+        id: data.id,
+        email: data.email,
+        fullName: data.fullName,
+        roles: data.roles,
+        status: 'PENDING_ACTIVATION',
+      };
     } catch (error: unknown) {
+      if (error instanceof CreateAccountError) throw error;
       if (axios.isAxiosError(error)) {
         if (isDuplicateEmailError(error)) {
           throw new CreateAccountError(
@@ -67,7 +106,10 @@ export const userService = {
           );
         }
 
-        const message = getResponseMessage(error.response?.data);
+        const message = getResponseMessage(error.response?.data)
+          ?? (error.response?.status === 403
+            ? 'Bạn không có quyền tạo tài khoản nhân sự.'
+            : undefined);
         throw new CreateAccountError(
           message ?? 'Không thể tạo tài khoản lúc này. Vui lòng thử lại.',
           'REQUEST_FAILED',
