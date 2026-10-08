@@ -72,9 +72,7 @@ function App() {
         {/* Các route tương lai sau khi đăng nhập thành công */}
         <Route
           path="/admin/dashboard"
-          element={
-            <main className="p-8 text-2xl font-bold">Admin Dashboard</main>
-          }
+          element={<AccountListPage />}
         />
         <Route
           path="/hr/dashboard"
