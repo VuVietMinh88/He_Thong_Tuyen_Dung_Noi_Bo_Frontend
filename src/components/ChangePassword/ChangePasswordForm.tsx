@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { authService } from "../../services/auth.service";
-import { tokenService } from "../../services/token.service";
 
 const PASSWORD_REGEX = /^(?=.*\p{L})(?=.*\d).{8,72}$/u;
 
@@ -44,7 +43,7 @@ export const ChangePasswordForm: React.FC = () => {
       !isPasswordWithinByteLimit(newPassword)
     ) {
       setNewPasswordError(
-        "Mật khẩu mới phải có tối thiểu 8 ký tự, tối đa 72 ký tự, có chữ và số.",
+        "Mật khẩu mới phải có tối thiểu 8 ký tự, tối đa 72 byte UTF-8, có chữ và số.",
       );
       isValid = false;
     } else {
@@ -77,14 +76,6 @@ export const ChangePasswordForm: React.FC = () => {
 
     try {
       await authService.changePassword(currentPassword, newPassword);
-
-      try {
-        await authService.logout();
-      } catch (logoutError) {
-        console.warn("Logout failed after password change", logoutError);
-      }
-
-      tokenService.clearAll();
       setIsSuccess(true);
     } catch (error) {
       const message =
@@ -128,28 +119,26 @@ export const ChangePasswordForm: React.FC = () => {
             Đổi mật khẩu thành công
           </h2>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            Mật khẩu của bạn đã được cập nhật thành công. Hệ thống đã thu hồi
-            phiên đăng nhập hiện tại để bảo mật, nên bạn cần đăng nhập lại để
-            tiếp tục sử dụng.
+            Mật khẩu của bạn đã được cập nhật thành công. Phiên đăng nhập hiện
+            tại vẫn hoạt động; các phiên đăng nhập khác đã được thu hồi.
           </p>
         </div>
 
         <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-700">
           <p className="font-medium">Lưu ý bảo mật:</p>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-emerald-700/90">
-            <li>Phiên hiện tại đã được vô hiệu hóa.</li>
-            <li>Refresh token trên server đã được thu hồi.</li>
-            <li>Vui lòng đăng nhập lại để tiếp tục làm việc.</li>
+            <li>Phiên đăng nhập hiện tại vẫn được giữ nguyên.</li>
+            <li>Các phiên đăng nhập khác đã được thu hồi.</li>
           </ul>
         </div>
 
         <div className="mt-8">
           <button
             type="button"
-            onClick={() => navigate("/login")}
+            onClick={() => navigate("/dashboard")}
             className="flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:from-blue-700 hover:to-indigo-700"
           >
-            Đăng nhập lại
+            Hoàn tất
           </button>
         </div>
       </div>
