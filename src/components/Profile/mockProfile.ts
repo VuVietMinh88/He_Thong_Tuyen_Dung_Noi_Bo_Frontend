@@ -7,6 +7,7 @@ export interface UserProfile {
   departmentName: string;
   roles: string[];
   avatarUrl?: string;
+  hasAvatar?: boolean;
 }
 
 export const mockUserProfile: UserProfile = {

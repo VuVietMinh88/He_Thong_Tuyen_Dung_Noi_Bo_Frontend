@@ -1,6 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import ReactCrop, { type Crop, type PixelCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
+import {
+  avatarService,
+  getAvatarErrorMessage,
+  type UploadAvatarResponse,
+} from "../../services/avatarService";
 import { validateAvatarFile } from "./avatarValidation";
 import {
   generateCroppedFile,
@@ -10,7 +15,10 @@ import {
 export interface AvatarUploadUIProps {
   currentAvatarUrl?: string | null;
   fullName?: string;
+  hasAvatar?: boolean;
   onSave?: (file: File) => void;
+  onUploadSuccess?: (response: UploadAvatarResponse) => void;
+  onDeleteSuccess?: () => void;
   onCancel?: () => void;
   className?: string;
 }
@@ -18,7 +26,10 @@ export interface AvatarUploadUIProps {
 export const AvatarUploadUI: React.FC<AvatarUploadUIProps> = ({
   currentAvatarUrl,
   fullName = "Người dùng",
+  hasAvatar = false,
   onSave,
+  onUploadSuccess,
+  onDeleteSuccess,
   onCancel,
   className = "",
 }) => {
@@ -29,7 +40,12 @@ export const AvatarUploadUI: React.FC<AvatarUploadUIProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
+
+  // Trạng thái gọi API
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
   // Trạng thái phục vụ Modal cắt ảnh hình vuông
   const [isCropModalOpen, setIsCropModalOpen] = useState<boolean>(false);
@@ -68,6 +84,7 @@ export const AvatarUploadUI: React.FC<AvatarUploadUIProps> = ({
 
     if (!validation.isValid) {
       setErrorMessage(validation.error || "Tệp không hợp lệ.");
+      setSuccessMessage(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -84,6 +101,7 @@ export const AvatarUploadUI: React.FC<AvatarUploadUIProps> = ({
     setRawImageSrc(objectUrl);
     setRawFile(file);
     setErrorMessage(null);
+    setSuccessMessage(null);
     setIsCropModalOpen(true);
   };
 
@@ -151,6 +169,7 @@ export const AvatarUploadUI: React.FC<AvatarUploadUIProps> = ({
       const croppedUrl = URL.createObjectURL(croppedFile);
       setSelectedFile(croppedFile);
       setPreviewUrl(croppedUrl);
+      setSuccessMessage("Đã cắt ảnh vuông 1:1 thành công. Sẵn sàng lưu lên hệ thống.");
 
       // Đóng modal và giải phóng Object URL của ảnh gốc
       if (rawImageSrc) {
@@ -188,6 +207,7 @@ export const AvatarUploadUI: React.FC<AvatarUploadUIProps> = ({
     setPreviewUrl(null);
     setSelectedFile(null);
     setErrorMessage(null);
+    setSuccessMessage(null);
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -196,17 +216,60 @@ export const AvatarUploadUI: React.FC<AvatarUploadUIProps> = ({
     onCancel?.();
   };
 
-  const handleSave = () => {
+  // Tải ảnh đại diện lên máy chủ (PUT /profile/avatar)
+  const handleSave = async () => {
     if (!selectedFile) return;
 
-    // Subtask: Client-side UI & preview logic, ghi log chuẩn bị cho task tích hợp API 188
-    console.log("Selected cropped avatar file ready for upload:", {
-      name: selectedFile.name,
-      size: `${(selectedFile.size / 1024).toFixed(1)} KB`,
-      type: selectedFile.type,
-    });
+    setIsUploading(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
 
-    onSave?.(selectedFile);
+    try {
+      const response = await avatarService.uploadAvatar(selectedFile);
+      setSuccessMessage("Tải lên ảnh đại diện thành công!");
+      onUploadSuccess?.(response);
+      onSave?.(selectedFile);
+      setSelectedFile(null);
+    } catch (err: unknown) {
+      const message = getAvatarErrorMessage(
+        err,
+        "Không thể tải lên ảnh đại diện. Vui lòng thử lại.",
+      );
+      setErrorMessage(message);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Xóa ảnh đại diện khỏi máy chủ (DELETE /profile/avatar)
+  const handleDeleteAvatar = async () => {
+    const isConfirmed = window.confirm(
+      "Bạn có chắc chắn muốn xóa ảnh đại diện hiện tại?",
+    );
+    if (!isConfirmed) return;
+
+    setIsDeleting(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      await avatarService.deleteAvatar();
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      setPreviewUrl(null);
+      setSelectedFile(null);
+      setSuccessMessage("Đã xóa ảnh đại diện thành công.");
+      onDeleteSuccess?.();
+    } catch (err: unknown) {
+      const message = getAvatarErrorMessage(
+        err,
+        "Không thể xóa ảnh đại diện. Vui lòng thử lại.",
+      );
+      setErrorMessage(message);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const getInitials = (name: string): string => {
@@ -226,6 +289,8 @@ export const AvatarUploadUI: React.FC<AvatarUploadUIProps> = ({
   };
 
   const displayAvatarSrc = previewUrl || currentAvatarUrl;
+  const canDeleteCurrentAvatar =
+    (hasAvatar || Boolean(currentAvatarUrl)) && !selectedFile;
 
   return (
     <>
@@ -317,7 +382,7 @@ export const AvatarUploadUI: React.FC<AvatarUploadUIProps> = ({
               type="file"
             />
 
-            {/* Thông báo lỗi định dạng hoặc dung lượng vượt quá 2MB */}
+            {/* Thông báo lỗi */}
             {errorMessage && (
               <div
                 aria-live="assertive"
@@ -341,6 +406,18 @@ export const AvatarUploadUI: React.FC<AvatarUploadUIProps> = ({
               </div>
             )}
 
+            {/* Thông báo thành công */}
+            {successMessage && !errorMessage && (
+              <div
+                aria-live="polite"
+                className="mt-3 inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs font-semibold text-emerald-700 shadow-2xs"
+                role="status"
+              >
+                <span>✅</span>
+                <span>{successMessage}</span>
+              </div>
+            )}
+
             {/* Thông tin tệp ảnh hợp lệ đã cắt */}
             {selectedFile && !errorMessage && (
               <div className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-slate-50 px-3.5 py-2 text-xs text-slate-700 sm:justify-start">
@@ -358,6 +435,7 @@ export const AvatarUploadUI: React.FC<AvatarUploadUIProps> = ({
             <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 sm:justify-start">
               <button
                 className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                disabled={isUploading || isDeleting}
                 id="btn-change-avatar"
                 onClick={handleOpenFileDialog}
                 type="button"
@@ -380,30 +458,62 @@ export const AvatarUploadUI: React.FC<AvatarUploadUIProps> = ({
 
               <button
                 className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-2xs transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-slate-300"
-                disabled={!selectedFile}
+                disabled={!selectedFile || isUploading || isDeleting}
                 id="btn-save-avatar"
                 onClick={handleSave}
                 type="button"
               >
-                <svg
-                  className="h-4 w-4"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    d="M5 13l4 4L19 7"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                <span>Lưu ảnh</span>
+                {isUploading ? (
+                  <>
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    <span>Đang lưu...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        d="M5 13l4 4L19 7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    <span>Lưu ảnh</span>
+                  </>
+                )}
               </button>
+
+              {/* Nút Xóa ảnh hiện tại từ server */}
+              {canDeleteCurrentAvatar && (
+                <button
+                  className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-semibold text-rose-700 shadow-2xs transition hover:bg-rose-100 hover:text-rose-800 focus:outline-none focus:ring-2 focus:ring-rose-200 disabled:opacity-50"
+                  disabled={isDeleting || isUploading}
+                  id="btn-delete-avatar"
+                  onClick={handleDeleteAvatar}
+                  type="button"
+                >
+                  {isDeleting ? (
+                    <>
+                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-rose-600 border-t-transparent" />
+                      <span>Đang xóa...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>🗑️</span>
+                      <span>Xóa ảnh hiện tại</span>
+                    </>
+                  )}
+                </button>
+              )}
 
               <button
                 className="rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:opacity-40 disabled:hover:bg-white"
-                disabled={!selectedFile && !errorMessage}
+                disabled={(!selectedFile && !errorMessage) || isUploading || isDeleting}
                 id="btn-cancel-avatar"
                 onClick={handleCancel}
                 type="button"
