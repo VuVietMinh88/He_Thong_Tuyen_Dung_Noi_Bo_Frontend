@@ -1,5 +1,10 @@
-import React, { useState, type FormEvent } from "react";
+import React, { useEffect, useState, type FormEvent } from "react";
 import { mockUserProfile, type UserProfile } from "./mockProfile";
+import {
+  profileService,
+  getApiErrorMessage,
+} from "../../services/profileService";
+import { useToast } from "../notifications/useToast";
 
 export type { UserProfile };
 
@@ -23,25 +28,119 @@ interface FormErrors {
 const VIETNAM_PHONE_REGEX = /^(?:\+84|0)(?:[35789]\d{8}|2\d{9})$/;
 
 export const UserProfileUI: React.FC<UserProfileUIProps> = ({
-  initialData = mockUserProfile,
+  initialData,
   onSave,
   onCancel,
 }) => {
-  const [profileData, setProfileData] = useState<UserProfile>(initialData);
+  const { notify } = useToast();
 
-  const [fullName, setFullName] = useState<string>(initialData.fullName);
-  const [phone, setPhone] = useState<string>(initialData.phone);
-  const [displayTitle, setDisplayTitle] = useState<string>(
-    initialData.displayTitle,
+  const [profileData, setProfileData] = useState<UserProfile>(
+    initialData ?? mockUserProfile,
   );
 
+  const [fullName, setFullName] = useState<string>(
+    initialData?.fullName ?? mockUserProfile.fullName,
+  );
+  const [phone, setPhone] = useState<string>(
+    initialData?.phone ?? mockUserProfile.phone,
+  );
+  const [displayTitle, setDisplayTitle] = useState<string>(
+    initialData?.displayTitle ?? mockUserProfile.displayTitle,
+  );
+
+  const [isLoading, setIsLoading] = useState<boolean>(!initialData);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
   const [showSuccessAlert, setShowSuccessAlert] = useState<boolean>(false);
 
-  const validateForm = (
-    nameValue: string,
-    phoneValue: string,
-  ): FormErrors => {
+  const loadProfile = React.useCallback(async () => {
+    setIsLoading(true);
+    setApiError(null);
+    try {
+      const data = await profileService.getProfile();
+      const mapped: UserProfile = {
+        id: data.id,
+        email: data.email,
+        fullName: data.fullName,
+        phone: data.phone ?? "",
+        displayTitle: data.displayTitle ?? "",
+        departmentName: data.departmentName ?? "Chưa phân phòng ban",
+        roles: data.roles ?? [],
+        avatarUrl: data.hasAvatar
+          ? `/api/v1/profile/avatar?t=${Date.now()}`
+          : undefined,
+      };
+
+      setProfileData(mapped);
+      setFullName(mapped.fullName);
+      setPhone(mapped.phone);
+      setDisplayTitle(mapped.displayTitle);
+    } catch (err: unknown) {
+      const message = getApiErrorMessage(
+        err,
+        "Không thể tải thông tin hồ sơ từ máy chủ.",
+      );
+      setApiError(message);
+      if (!initialData) {
+        setProfileData(mockUserProfile);
+        setFullName(mockUserProfile.fullName);
+        setPhone(mockUserProfile.phone);
+        setDisplayTitle(mockUserProfile.displayTitle);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [initialData]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (!initialData) {
+      profileService
+        .getProfile()
+        .then((data) => {
+          if (isCancelled) return;
+          const mapped: UserProfile = {
+            id: data.id,
+            email: data.email,
+            fullName: data.fullName,
+            phone: data.phone ?? "",
+            displayTitle: data.displayTitle ?? "",
+            departmentName: data.departmentName ?? "Chưa phân phòng ban",
+            roles: data.roles ?? [],
+            avatarUrl: data.hasAvatar
+              ? `/api/v1/profile/avatar?t=${Date.now()}`
+              : undefined,
+          };
+
+          setProfileData(mapped);
+          setFullName(mapped.fullName);
+          setPhone(mapped.phone);
+          setDisplayTitle(mapped.displayTitle);
+          setIsLoading(false);
+        })
+        .catch((err: unknown) => {
+          if (isCancelled) return;
+          const message = getApiErrorMessage(
+            err,
+            "Không thể tải thông tin hồ sơ từ máy chủ.",
+          );
+          setApiError(message);
+          setProfileData(mockUserProfile);
+          setFullName(mockUserProfile.fullName);
+          setPhone(mockUserProfile.phone);
+          setDisplayTitle(mockUserProfile.displayTitle);
+          setIsLoading(false);
+        });
+    }
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [initialData]);
+
+  const validateForm = (nameValue: string, phoneValue: string): FormErrors => {
     const newErrors: FormErrors = {};
 
     const trimmedName = nameValue.trim();
@@ -89,11 +188,12 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
     setPhone(profileData.phone);
     setDisplayTitle(profileData.displayTitle);
     setErrors({});
+    setApiError(null);
     setShowSuccessAlert(false);
     onCancel?.();
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const formValidationErrors = validateForm(fullName, phone);
@@ -103,26 +203,56 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
       return;
     }
 
-    const updatedProfile: UserProfile = {
-      ...profileData,
-      fullName: fullName.trim(),
-      phone: phone.trim(),
-      displayTitle: displayTitle.trim(),
-    };
+    setIsSaving(true);
+    setApiError(null);
 
-    console.log("Cập nhật thông tin hồ sơ người dùng:", updatedProfile);
+    try {
+      const updated = await profileService.updateProfile({
+        fullName: fullName.trim(),
+        phone: phone.trim() || null,
+        displayTitle: displayTitle.trim() || null,
+      });
 
-    setProfileData(updatedProfile);
-    setShowSuccessAlert(true);
-    onSave?.(updatedProfile);
+      const mapped: UserProfile = {
+        ...profileData,
+        fullName: updated.fullName,
+        phone: updated.phone ?? "",
+        displayTitle: updated.displayTitle ?? "",
+        departmentName: updated.departmentName ?? profileData.departmentName,
+        roles: updated.roles ?? profileData.roles,
+        avatarUrl: updated.hasAvatar
+          ? `/api/v1/profile/avatar?t=${Date.now()}`
+          : profileData.avatarUrl,
+      };
 
-    window.setTimeout(() => {
-      setShowSuccessAlert(false);
-    }, 4000);
+      setProfileData(mapped);
+      setFullName(mapped.fullName);
+      setPhone(mapped.phone);
+      setDisplayTitle(mapped.displayTitle);
+      setShowSuccessAlert(true);
+      notify("Cập nhật thông tin hồ sơ thành công!", "success");
+      onSave?.(mapped);
+
+      window.setTimeout(() => {
+        setShowSuccessAlert(false);
+      }, 4000);
+    } catch (err: unknown) {
+      const message = getApiErrorMessage(
+        err,
+        "Không thể cập nhật hồ sơ cá nhân. Vui lòng thử lại.",
+      );
+      setApiError(message);
+      notify(message, "error");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const isFormInvalid =
-    !fullName.trim() || Boolean(errors.fullName) || Boolean(errors.phone);
+    !fullName.trim() ||
+    Boolean(errors.fullName) ||
+    Boolean(errors.phone) ||
+    isSaving;
 
   const getInitials = (name: string): string => {
     const parts = name.trim().split(/\s+/);
@@ -132,6 +262,21 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
       parts[0].charAt(0) + parts[parts.length - 1].charAt(0)
     ).toUpperCase();
   };
+
+  if (isLoading) {
+    return (
+      <section className="mx-auto max-w-4xl space-y-6">
+        <div className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white p-12 shadow-xs">
+          <div className="flex flex-col items-center gap-3 text-slate-500">
+            <span className="h-8 w-8 animate-spin rounded-full border-3 border-indigo-600 border-t-transparent" />
+            <span className="text-sm font-medium">
+              Đang tải thông tin hồ sơ cá nhân...
+            </span>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="mx-auto max-w-4xl space-y-6">
@@ -181,6 +326,36 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
         </div>
       </div>
 
+      {/* Thông báo lỗi khi gọi API từ server */}
+      {apiError && (
+        <div
+          aria-live="assertive"
+          className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800 shadow-xs"
+          role="alert"
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="text-base">⚠️</span>
+            <span>{apiError}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className="text-xs font-semibold text-rose-700 underline hover:text-rose-900"
+              onClick={loadProfile}
+              type="button"
+            >
+              Thử lại
+            </button>
+            <button
+              className="text-xs font-semibold text-rose-600 hover:text-rose-800"
+              onClick={() => setApiError(null)}
+              type="button"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Thông báo cập nhật thành công dạng flash banner */}
       {showSuccessAlert && (
         <div
@@ -190,10 +365,7 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
         >
           <div className="flex items-center gap-2.5">
             <span className="text-base">✅</span>
-            <span>
-              Lưu thay đổi thành công! Dữ liệu mẫu đã được ghi nhận trên
-              giao diện.
-            </span>
+            <span>Đã lưu thành công thông tin hồ sơ của bạn lên máy chủ!</span>
           </div>
           <button
             className="text-xs font-semibold text-emerald-700 hover:text-emerald-900"
@@ -319,6 +491,7 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
                     ? "border-rose-300 bg-rose-50/30 focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
                     : "border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                 }`}
+                disabled={isSaving}
                 id="profile-full-name"
                 maxLength={255}
                 onChange={handleFullNameChange}
@@ -348,6 +521,7 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
                     ? "border-rose-300 bg-rose-50/30 focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
                     : "border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                 }`}
+                disabled={isSaving}
                 id="profile-phone"
                 maxLength={20}
                 onChange={handlePhoneChange}
@@ -375,7 +549,8 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
                 Chức danh hiển thị
               </label>
               <input
-                className="mt-1 w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-900 shadow-xs outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-900 shadow-xs outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-100"
+                disabled={isSaving}
                 id="profile-display-title"
                 maxLength={120}
                 onChange={handleDisplayTitleChange}
@@ -393,18 +568,26 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
         {/* Khu vực nút bấm hành động */}
         <div className="mt-8 flex flex-col-reverse justify-end gap-3 border-t border-slate-100 pt-5 sm:flex-row">
           <button
-            className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-xs transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200"
+            className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-xs transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:opacity-50"
+            disabled={isSaving}
             onClick={handleReset}
             type="button"
           >
             Hủy bỏ
           </button>
           <button
-            className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-slate-300"
             disabled={isFormInvalid}
             type="submit"
           >
-            Lưu thay đổi
+            {isSaving ? (
+              <>
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                <span>Đang lưu...</span>
+              </>
+            ) : (
+              <span>Lưu thay đổi</span>
+            )}
           </button>
         </div>
       </form>
