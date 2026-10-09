@@ -5,6 +5,7 @@ import {
   getApiErrorMessage,
 } from "../../services/profileService";
 import { useToast } from "../notifications/useToast";
+import { AvatarUploadUI } from "./AvatarUploadUI";
 
 export type { UserProfile };
 
@@ -53,6 +54,7 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
   const [apiError, setApiError] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
   const [showSuccessAlert, setShowSuccessAlert] = useState<boolean>(false);
+  const [showAvatarUpload, setShowAvatarUpload] = useState<boolean>(false);
 
   const loadProfile = React.useCallback(async () => {
     setIsLoading(true);
@@ -295,36 +297,72 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
             )}
           </div>
 
-          <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-2xl font-bold text-slate-900 truncate">
-                {profileData.fullName}
-              </h1>
-              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                Đang hoạt động
-              </span>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 flex-1 min-w-0">
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h1 className="text-2xl font-bold text-slate-900 truncate">
+                  {profileData.fullName}
+                </h1>
+                <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                  Đang hoạt động
+                </span>
+              </div>
+
+              <p className="mt-1 text-sm text-slate-500">
+                {profileData.displayTitle || "Chưa thiết lập chức danh"}
+              </p>
+
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+                  🏢 {profileData.departmentName}
+                </span>
+                {profileData.roles.map((role) => (
+                  <span
+                    key={role}
+                    className="inline-flex items-center rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700"
+                  >
+                    {role}
+                  </span>
+                ))}
+              </div>
             </div>
 
-            <p className="mt-1 text-sm text-slate-500">
-              {profileData.displayTitle || "Chưa thiết lập chức danh"}
-            </p>
-
-            <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
-                🏢 {profileData.departmentName}
-              </span>
-              {profileData.roles.map((role) => (
-                <span
-                  key={role}
-                  className="inline-flex items-center rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700"
-                >
-                  {role}
-                </span>
-              ))}
+            {/* Nút bật/tắt khu vực tải lên ảnh đại diện */}
+            <div className="shrink-0">
+              <button
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                id="btn-toggle-avatar-upload"
+                onClick={() => setShowAvatarUpload((prev) => !prev)}
+                type="button"
+              >
+                <span>📷</span>
+                <span>{showAvatarUpload ? "Đóng tải ảnh" : "Đổi ảnh đại diện"}</span>
+              </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Khu vực xem trước và tải lên ảnh đại diện (TKNHTTDNB1-185) */}
+      {showAvatarUpload && (
+        <AvatarUploadUI
+          currentAvatarUrl={profileData.avatarUrl}
+          fullName={profileData.fullName}
+          onCancel={() => setShowAvatarUpload(false)}
+          onSave={(file) => {
+            const tempPreviewUrl = URL.createObjectURL(file);
+            setProfileData((prev) => ({
+              ...prev,
+              avatarUrl: tempPreviewUrl,
+            }));
+            notify(
+              `Đã chọn ảnh "${file.name}". Sẵn sàng kết nối API ở task tiếp theo!`,
+              "info",
+            );
+            setShowAvatarUpload(false);
+          }}
+        />
+      )}
 
       {/* Thông báo lỗi khi gọi API từ server */}
       {apiError && (
