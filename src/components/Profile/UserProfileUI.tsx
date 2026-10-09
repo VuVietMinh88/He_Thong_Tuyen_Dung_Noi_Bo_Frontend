@@ -6,6 +6,7 @@ import {
 } from "../../services/profileService";
 import { useToast } from "../notifications/useToast";
 import { AvatarUploadUI } from "./AvatarUploadUI";
+import { avatarService } from "../../services/avatarService";
 
 export type { UserProfile };
 
@@ -61,6 +62,15 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
     setApiError(null);
     try {
       const data = await profileService.getProfile();
+      let avatarUrl: string | undefined;
+      if (data.hasAvatar) {
+        try {
+          avatarUrl = (await avatarService.getMyAvatarBlobUrl()) ?? undefined;
+        } catch {
+          avatarUrl = undefined;
+        }
+      }
+
       const mapped: UserProfile = {
         id: data.id,
         email: data.email,
@@ -69,9 +79,8 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
         displayTitle: data.displayTitle ?? "",
         departmentName: data.departmentName ?? "Chưa phân phòng ban",
         roles: data.roles ?? [],
-        avatarUrl: data.hasAvatar
-          ? `/api/v1/profile/avatar?t=${Date.now()}`
-          : undefined,
+        hasAvatar: data.hasAvatar,
+        avatarUrl,
       };
 
       setProfileData(mapped);
@@ -103,24 +112,34 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
         .getProfile()
         .then((data) => {
           if (isCancelled) return;
-          const mapped: UserProfile = {
-            id: data.id,
-            email: data.email,
-            fullName: data.fullName,
-            phone: data.phone ?? "",
-            displayTitle: data.displayTitle ?? "",
-            departmentName: data.departmentName ?? "Chưa phân phòng ban",
-            roles: data.roles ?? [],
-            avatarUrl: data.hasAvatar
-              ? `/api/v1/profile/avatar?t=${Date.now()}`
-              : undefined,
-          };
+          let avatarUrlPromise = Promise.resolve<string | undefined>(undefined);
+          if (data.hasAvatar) {
+            avatarUrlPromise = avatarService
+              .getMyAvatarBlobUrl()
+              .then((url) => url ?? undefined)
+              .catch(() => undefined);
+          }
 
-          setProfileData(mapped);
-          setFullName(mapped.fullName);
-          setPhone(mapped.phone);
-          setDisplayTitle(mapped.displayTitle);
-          setIsLoading(false);
+          avatarUrlPromise.then((avatarUrl) => {
+            if (isCancelled) return;
+            const mapped: UserProfile = {
+              id: data.id,
+              email: data.email,
+              fullName: data.fullName,
+              phone: data.phone ?? "",
+              displayTitle: data.displayTitle ?? "",
+              departmentName: data.departmentName ?? "Chưa phân phòng ban",
+              roles: data.roles ?? [],
+              hasAvatar: data.hasAvatar,
+              avatarUrl,
+            };
+
+            setProfileData(mapped);
+            setFullName(mapped.fullName);
+            setPhone(mapped.phone);
+            setDisplayTitle(mapped.displayTitle);
+            setIsLoading(false);
+          });
         })
         .catch((err: unknown) => {
           if (isCancelled) return;
@@ -343,22 +362,33 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
         </div>
       </div>
 
-      {/* Khu vực xem trước và tải lên ảnh đại diện (TKNHTTDNB1-185) */}
+      {/* Khu vực xem trước và tải lên ảnh đại diện (TKNHTTDNB1-190) */}
       {showAvatarUpload && (
         <AvatarUploadUI
           currentAvatarUrl={profileData.avatarUrl}
           fullName={profileData.fullName}
+          hasAvatar={profileData.hasAvatar}
           onCancel={() => setShowAvatarUpload(false)}
-          onSave={(file) => {
-            const tempPreviewUrl = URL.createObjectURL(file);
+          onDeleteSuccess={() => {
+            notify("Đã xóa ảnh đại diện thành công.", "success");
             setProfileData((prev) => ({
               ...prev,
-              avatarUrl: tempPreviewUrl,
+              hasAvatar: false,
+              avatarUrl: undefined,
             }));
-            notify(
-              `Đã chọn ảnh "${file.name}". Sẵn sàng kết nối API ở task tiếp theo!`,
-              "info",
-            );
+            setShowAvatarUpload(false);
+          }}
+          onUploadSuccess={(_response) => {
+            notify("Tải lên ảnh đại diện thành công!", "success");
+            avatarService.getMyAvatarBlobUrl().then((blobUrl) => {
+              if (blobUrl) {
+                setProfileData((prev) => ({
+                  ...prev,
+                  hasAvatar: true,
+                  avatarUrl: blobUrl,
+                }));
+              }
+            });
             setShowAvatarUpload(false);
           }}
         />
