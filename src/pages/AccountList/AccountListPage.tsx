@@ -481,7 +481,12 @@ export const AccountListPage: React.FC = () => {
 
           {showImportExcel && (
             <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-              <ImportExcelUI />
+              <ImportExcelUI
+                onSuccess={() => {
+                  setReloadKey((prev) => prev + 1);
+                }}
+                onClose={() => setShowImportExcel(false)}
+              />
             </div>
           )}
 

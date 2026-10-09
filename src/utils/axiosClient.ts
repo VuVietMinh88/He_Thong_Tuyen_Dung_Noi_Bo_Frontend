@@ -98,6 +98,11 @@ axiosClient.interceptors.request.use(
 
     const accessToken = tokenService.getAccessToken();
     if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
+
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+      config.headers.delete('Content-Type');
+    }
+
     return config;
   },
   (error: unknown) => Promise.reject(error),
