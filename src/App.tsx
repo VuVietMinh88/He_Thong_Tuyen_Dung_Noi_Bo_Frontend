@@ -25,6 +25,7 @@ import { ROLES, type Role } from "./constants/roles";
 import JobTitlesPage from "./pages/JobTitle/JobTitlesPage";
 import DepartmentPage from "./pages/Department/DepartmentPage";
 import MasterDataManagement from "./pages/MasterData/MasterDataManagement";
+import HeadcountBudgetManagement from "./pages/Headcount/HeadcountBudgetManagement";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -256,6 +257,14 @@ function App() {
                 element={
                   <MainLayout>
                     <MasterDataManagement />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/headcount-budget"
+                element={
+                  <MainLayout>
+                    <HeadcountBudgetManagement />
                   </MainLayout>
                 }
               />

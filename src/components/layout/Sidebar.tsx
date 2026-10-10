@@ -31,6 +31,13 @@ const menuItems: SidebarMenuItem[] = [
     permissions: ['REQUISITIONS_READ_ALL', 'REQUISITIONS_READ_SCOPED'],
   },
   {
+    label: 'Định biên & Ngân sách',
+    to: '/headcount-budget',
+    icon: '💰',
+    roles: Object.values(ROLES),
+    permissions: ['ORGANIZATION_READ_ALL'], // Giả sử dùng quyền ORGANIZATION_READ_ALL cho định biên
+  },
+  {
     label: 'Khung năng lực',
     to: '/settings/competency-frameworks',
     icon: '🧩',
