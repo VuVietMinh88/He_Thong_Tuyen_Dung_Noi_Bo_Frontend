@@ -9,6 +9,7 @@ import ToastProvider from "./components/notifications/ToastProvider";
 import LoginPage from "./pages/Login/LoginPage";
 import ForgotPasswordPage from "./pages/ForgotPassword/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPassword/ResetPasswordPage";
+import AccountActivationPage from "./pages/AccountActivation/AccountActivationPage";
 import ChangePasswordPage from "./pages/ChangePassword/ChangePasswordPage";
 import AccountListPage from "./pages/AccountList/AccountListPage";
 import ProfilePage from "./pages/Profile/ProfilePage";
@@ -110,6 +111,7 @@ function App() {
             <Route path="/health" element={<HealthCheck />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/activate-account" element={<AccountActivationPage />} />
             <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
             <Route element={<ProtectedRoute allowedRoles={ALL_ROLES} />}>
