@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowRight, Heart, Users, ShieldCheck, Target, TrendingUp, Sparkles, Coffee } from 'lucide-react';
-import type { CareerPageConfig } from './CareerPageEditorUI';
+import type { CareerPageConfig } from '../../services/careerPageService';
+import { careerPageService } from '../../services/careerPageService';
 
 export interface CareerPagePreviewUIProps {
   data?: CareerPageConfig;
@@ -11,12 +12,12 @@ const defaultMockData: CareerPageConfig = {
   slogan: "Nơi tài năng của bạn được tỏa sáng và phát triển không giới hạn.",
   aboutUs: "TechCorp là công ty công nghệ hàng đầu, tập trung vào việc tạo ra các giải pháp phần mềm đột phá. Chúng tôi tin rằng con người là tài sản quý giá nhất, và luôn tạo điều kiện tốt nhất để nhân viên phát triển sự nghiệp.\n\nGia nhập với chúng tôi, bạn sẽ được làm việc trong một môi trường năng động, đa văn hóa và đầy thách thức, nơi những ý tưởng mới luôn được chào đón và khuyến khích.",
   benefits: [
-    "Lương thưởng cạnh tranh, tháng lương 13",
-    "Bảo hiểm sức khỏe cao cấp toàn diện",
-    "Môi trường làm việc năng động, sáng tạo",
-    "Cơ hội đào tạo và thăng tiến rõ ràng",
-    "Chương trình chăm sóc sức khỏe tinh thần",
-    "Hỗ trợ ăn trưa và trang thiết bị làm việc",
+    { title: "Lương thưởng cạnh tranh, tháng lương 13", icon: "trending-up" },
+    { title: "Bảo hiểm sức khỏe cao cấp toàn diện", icon: "shield-check" },
+    { title: "Môi trường làm việc năng động, sáng tạo", icon: "users" },
+    { title: "Cơ hội đào tạo và thăng tiến rõ ràng", icon: "target" },
+    { title: "Chương trình chăm sóc sức khỏe tinh thần", icon: "heart" },
+    { title: "Hỗ trợ ăn trưa và trang thiết bị làm việc", icon: "coffee" },
   ],
   coverImageUrl: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&q=80&w=2000&ixlib=rb-4.0.3",
 };
@@ -33,9 +34,34 @@ const benefitIcons = [
 ];
 
 export const CareerPagePreviewUI: React.FC<CareerPagePreviewUIProps> = ({
-  data = defaultMockData,
+  data,
 }) => {
-  const displayData = data;
+  const [apiData, setApiData] = useState<CareerPageConfig | null>(null);
+  const [isLoading, setIsLoading] = useState(!data);
+
+  useEffect(() => {
+    if (data) {
+      setIsLoading(false);
+      return;
+    }
+    
+    careerPageService.getCareerPage()
+      .then((res) => {
+        setApiData(res);
+      })
+      .catch((err) => {
+        console.error('Failed to load career page config', err);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [data]);
+
+  const displayData = data || apiData || defaultMockData;
+
+  if (isLoading) {
+    return <div className="min-h-screen flex items-center justify-center bg-slate-50"><span className="animate-pulse font-medium text-slate-500">Đang tải...</span></div>;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans selection:bg-indigo-200">
@@ -136,18 +162,20 @@ export const CareerPagePreviewUI: React.FC<CareerPagePreviewUIProps> = ({
               
               return (
                 <div
-                  key={index}
+                  key={benefit.id || index}
                   className="group relative overflow-hidden rounded-3xl border border-slate-100 bg-slate-50 p-8 transition-all hover:-translate-y-2 hover:bg-white hover:shadow-xl hover:shadow-indigo-100"
                 >
                   <div className="mb-6 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600 transition-colors group-hover:bg-indigo-600 group-hover:text-white">
                     {Icon}
                   </div>
                   <h3 className="mb-3 text-xl font-bold text-slate-900">
-                    Phúc lợi nổi bật
+                    {benefit.title}
                   </h3>
-                  <p className="text-base font-medium text-slate-600">
-                    {benefit}
-                  </p>
+                  {benefit.description && (
+                    <p className="text-base font-medium text-slate-600">
+                      {benefit.description}
+                    </p>
+                  )}
                   
                   {/* Decorative corner accent */}
                   <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-indigo-50 opacity-0 transition-opacity group-hover:opacity-100" />

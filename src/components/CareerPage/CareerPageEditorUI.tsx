@@ -1,33 +1,54 @@
-import React, { useState } from "react";
-
-export interface CareerPageConfig {
-  title: string;
-  slogan: string;
-  aboutUs: string;
-  benefits: string[];
-  coverImageUrl: string;
-}
+import React, { useState, useEffect } from "react";
+import { careerPageService, type CareerPageConfig, type CareerPageBenefit } from "../../services/careerPageService";
+import { useToast } from "../notifications/useToast";
 
 const mockCareerPageData: CareerPageConfig = {
   title: "Gia nhập gia đình TechCorp",
   slogan: "Nơi tài năng của bạn được tỏa sáng và phát triển không giới hạn.",
   aboutUs: "TechCorp là công ty công nghệ hàng đầu, tập trung vào việc tạo ra các giải pháp phần mềm đột phá. Chúng tôi tin rằng con người là tài sản quý giá nhất, và luôn tạo điều kiện tốt nhất để nhân viên phát triển sự nghiệp.",
   benefits: [
-    "Lương thưởng cạnh tranh, tháng lương 13",
-    "Bảo hiểm sức khỏe cao cấp",
-    "Môi trường làm việc năng động, sáng tạo",
-    "Cơ hội đào tạo và thăng tiến rõ ràng",
+    { title: "Lương thưởng cạnh tranh, tháng lương 13", description: "" },
+    { title: "Bảo hiểm sức khỏe cao cấp", description: "" },
+    { title: "Môi trường làm việc năng động, sáng tạo", description: "" },
+    { title: "Cơ hội đào tạo và thăng tiến rõ ràng", description: "" },
   ],
   coverImageUrl: "",
 };
 
 export const CareerPageEditorUI: React.FC = () => {
   const [config, setConfig] = useState<CareerPageConfig>(mockCareerPageData);
-  const [newBenefit, setNewBenefit] = useState("");
+  const [newBenefitTitle, setNewBenefitTitle] = useState("");
+  const [newBenefitDesc, setNewBenefitDesc] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const { notify } = useToast();
+
+  useEffect(() => {
+    let isCancelled = false;
+    
+    careerPageService.getCareerPage()
+      .then((data) => {
+        if (!isCancelled) setConfig(data);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!isCancelled) {
+          notify("Không thể tải cấu hình từ máy chủ, đang dùng dữ liệu mẫu", "error");
+          setConfig(mockCareerPageData);
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) setIsLoading(false);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [notify]);
 
   const handleConfigChange = (
     field: keyof CareerPageConfig,
-    value: string | string[],
+    value: string | CareerPageBenefit[],
   ) => {
     setConfig((prev) => ({
       ...prev,
@@ -36,9 +57,13 @@ export const CareerPageEditorUI: React.FC = () => {
   };
 
   const handleAddBenefit = () => {
-    if (newBenefit.trim()) {
-      handleConfigChange("benefits", [...config.benefits, newBenefit.trim()]);
-      setNewBenefit("");
+    if (newBenefitTitle.trim()) {
+      handleConfigChange("benefits", [
+        ...config.benefits, 
+        { title: newBenefitTitle.trim(), description: newBenefitDesc.trim() || undefined }
+      ]);
+      setNewBenefitTitle("");
+      setNewBenefitDesc("");
     }
   };
 
@@ -47,15 +72,31 @@ export const CareerPageEditorUI: React.FC = () => {
     handleConfigChange("benefits", updatedBenefits);
   };
 
-  const handleSave = () => {
-    console.log("Saving Career Page Config:", config);
-    alert("Đã lưu cấu hình (Xem console log)");
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const updated = await careerPageService.updateCareerPage(config);
+      setConfig(updated);
+      notify("Đã lưu cấu hình thành công", "success");
+    } catch (error) {
+      console.error(error);
+      notify("Lỗi khi lưu cấu hình", "error");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handlePreview = () => {
-    console.log("Previewing Career Page Config:", config);
     alert("Chế độ xem trước (Chuẩn bị cho task 235)");
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <span className="animate-pulse font-medium text-slate-500">Đang tải cấu hình...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
@@ -70,23 +111,29 @@ export const CareerPageEditorUI: React.FC = () => {
         </div>
         <div className="flex items-center gap-3">
           <button
-            className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-xs transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200"
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-xs transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:opacity-50"
+            disabled={isSaving}
             type="button"
           >
             Hủy bỏ
           </button>
           <button
-            className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-700 shadow-xs transition hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-700 shadow-xs transition hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:opacity-50"
             onClick={handlePreview}
+            disabled={isSaving}
             type="button"
           >
             Xem trước
           </button>
           <button
-            className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:bg-slate-400"
             onClick={handleSave}
+            disabled={isSaving}
             type="button"
           >
+            {isSaving && (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            )}
             Lưu cấu hình
           </button>
         </div>
@@ -194,16 +241,23 @@ export const CareerPageEditorUI: React.FC = () => {
           <div className="space-y-3">
             {config.benefits.map((benefit, index) => (
               <div
-                key={index}
+                key={benefit.id || index}
                 className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-5 py-3.5 transition hover:border-slate-300"
               >
                 <div className="flex items-center gap-3">
                   <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700">
                     ✓
                   </span>
-                  <span className="text-sm font-medium text-slate-700">
-                    {benefit}
-                  </span>
+                  <div>
+                    <span className="block text-sm font-medium text-slate-700">
+                      {benefit.title}
+                    </span>
+                    {benefit.description && (
+                      <span className="block text-xs text-slate-500">
+                        {benefit.description}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <button
                   className="text-slate-400 transition hover:text-rose-600 focus:outline-none"
@@ -229,40 +283,52 @@ export const CareerPageEditorUI: React.FC = () => {
             ))}
           </div>
 
-          <div className="mt-5 flex items-center gap-3">
-            <input
-              className="flex-1 rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 shadow-xs outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-              onChange={(e) => setNewBenefit(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleAddBenefit();
-                }
-              }}
-              placeholder="Nhập tên phúc lợi mới (VD: Hỗ trợ ăn trưa, làm việc từ xa)..."
-              type="text"
-              value={newBenefit}
-            />
-            <button
-              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-xs transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
-              onClick={handleAddBenefit}
-              type="button"
-            >
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                viewBox="0 0 24 24"
+          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <h4 className="mb-3 text-xs font-semibold uppercase text-slate-500">Thêm phúc lợi mới</h4>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <input
+                className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm text-slate-900 shadow-xs outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                onChange={(e) => setNewBenefitTitle(e.target.value)}
+                placeholder="Tên phúc lợi (VD: Hỗ trợ ăn trưa)..."
+                type="text"
+                value={newBenefitTitle}
+              />
+              <input
+                className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm text-slate-900 shadow-xs outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                onChange={(e) => setNewBenefitDesc(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddBenefit();
+                  }
+                }}
+                placeholder="Mô tả ngắn (không bắt buộc)..."
+                type="text"
+                value={newBenefitDesc}
+              />
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button
+                className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                onClick={handleAddBenefit}
+                type="button"
               >
-                <path
-                  d="M12 4v16m8-8H4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              Thêm phúc lợi
-            </button>
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    d="M12 4v16m8-8H4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                Thêm
+              </button>
+            </div>
           </div>
         </div>
       </div>
