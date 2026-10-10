@@ -8,6 +8,7 @@ import {
   type Requisition,
 } from '../../services/business.service';
 import { usePermission } from '../../hooks/usePermission';
+import { RequisitionList } from '../../components/Recruitment/RequisitionList';
 
 type Tab = 'requisitions' | 'positions';
 const RecruitmentPage = ({ initialTab = 'requisitions' }: { initialTab?: Tab }) => {
@@ -315,7 +316,7 @@ const RecruitmentPage = ({ initialTab = 'requisitions' }: { initialTab?: Tab }) 
 
       {loading ? <div className="rounded-xl bg-white p-6 text-slate-600" role="status">Đang tải dữ liệu…</div> : (
         tab === 'requisitions'
-          ? <RequisitionTable items={requisitions} positions={positions} departments={departments} editable={canWriteRequisition} onEdit={openEdit} onClone={openClone} />
+          ? <RequisitionList items={requisitions} positions={positions} departments={departments} editable={canWriteRequisition} onEdit={openEdit} onClone={openClone} />
           : <PositionTable
             items={positions}
             frameworks={frameworks}
@@ -362,20 +363,6 @@ const Table = ({ headers, rows }: { headers: string[]; rows: Array<Array<string 
     <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>{headers.map((header) => <th className="px-4 py-3" key={header}>{header}</th>)}</tr></thead>
     <tbody className="divide-y divide-slate-100">{rows.length ? rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => <td className="px-4 py-3 text-slate-700" key={cellIndex}>{cell}</td>)}</tr>) : <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={headers.length}>Chưa có dữ liệu</td></tr>}</tbody>
   </table></div>
-);
-
-const RequisitionTable = ({ items, positions, departments, editable, onEdit, onClone }: {
-  items: Requisition[]; positions: Position[]; departments: Department[]; editable: boolean; onEdit: (item: Requisition) => void; onClone: (item: Requisition) => void;
-}) => (
-  <Table headers={['Chức danh', 'Phòng ban', 'Số lượng', 'Lý do', 'Trạng thái', 'Ngày cần', ...(editable ? ['Thao tác'] : [])]} rows={items.map((item) => [
-    positions.find((position) => position.id === item.positionId)?.name ?? item.positionId,
-    departments.find((department) => department.id === item.departmentId)?.name ?? item.departmentId,
-    item.headcount,
-    item.reason === 'NEW_HEADCOUNT' ? 'Tăng định biên' : 'Thay thế',
-    item.status,
-    item.neededBy ?? '—',
-    ...(editable ? [<div className="flex gap-3" key={item.id}><button className="font-medium text-indigo-700 underline" onClick={() => onEdit(item)} type="button">Sửa nháp</button><button className="font-medium text-indigo-700 underline" onClick={() => onClone(item)} type="button">Sao chép</button></div>] : []),
-  ])} />
 );
 
 const PositionTable = ({ items, frameworks, canReadSalary, editable, canManageFramework, saving, onEdit, onFrameworkChange, onViewEvaluation }: {
