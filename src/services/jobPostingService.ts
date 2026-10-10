@@ -1,10 +1,12 @@
 import axiosClient from '../utils/axiosClient';
+import type { Requisition, Position, Department } from './business.service';
 
 export type SalaryType = 'RANGE' | 'NEGOTIABLE' | 'UP_TO' | 'STARTING_FROM';
 export type JobPostingStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED';
 
 export interface JobPostingData {
   id?: string;
+  requisitionId?: string; // ID của yêu cầu tuyển dụng đã duyệt được liên kết
   title: string;
   positionTitle: string;
   departmentId: string;
@@ -161,9 +163,95 @@ export const validateJobPostingForm = (data: Partial<JobPostingData>): {
 };
 
 /**
+ * Hàm chuyển đổi dữ liệu từ Yêu cầu tuyển dụng đã duyệt sang biểu mẫu Tin tuyển dụng (AC1 - Task TKNHTTDNB1-301)
+ */
+export const mapRequisitionToJobPosting = (
+  req: Requisition,
+  positions: Position[] = [],
+  departments: Department[] = [],
+): Partial<JobPostingData> => {
+  const position = positions.find((p) => p.id === req.positionId);
+  const department = departments.find((d) => d.id === req.departmentId);
+  const positionTitle = position?.name || req.positionId || 'Chuyên viên';
+  const departmentName = department?.name || '';
+  const level = position?.level || 'MIDDLE';
+
+  let salaryType: SalaryType = 'NEGOTIABLE';
+  let salaryMin: number | undefined;
+  let salaryMax: number | undefined;
+
+  if (req.proposedSalaryMin !== null && req.proposedSalaryMax !== null) {
+    salaryType = 'RANGE';
+    salaryMin = req.proposedSalaryMin;
+    salaryMax = req.proposedSalaryMax;
+  } else if (req.proposedSalaryMax !== null) {
+    salaryType = 'UP_TO';
+    salaryMax = req.proposedSalaryMax;
+  } else if (req.proposedSalaryMin !== null) {
+    salaryType = 'STARTING_FROM';
+    salaryMin = req.proposedSalaryMin;
+  }
+
+  return {
+    requisitionId: req.id,
+    title: `Tuyển dụng ${positionTitle}${departmentName ? ` - ${departmentName}` : ''}`,
+    positionTitle,
+    departmentId: req.departmentId,
+    departmentName,
+    workLocation: 'Hà Nội',
+    employmentType: 'FULL_TIME',
+    level,
+    headcount: req.headcount || 1,
+    deadline: req.neededBy || '',
+    salaryType,
+    salaryMin,
+    salaryMax,
+    currency: 'VND',
+    isSalaryNegotiable: salaryType === 'NEGOTIABLE',
+    jobDescription: req.jobDescription || '',
+    requirements: req.candidateRequirements || '',
+    benefits: '',
+    skills: [],
+    status: 'DRAFT',
+    publishInternal: true,
+    publishCareerPage: false,
+  };
+};
+
+/**
  * Service API cho tin tuyển dụng
  */
 export const jobPostingService = {
+  /**
+   * Lấy danh sách các yêu cầu tuyển dụng đã duyệt (status = APPROVED) (AC1)
+   */
+  async getApprovedRequisitions(): Promise<Requisition[]> {
+    try {
+      const response = await axiosClient.get<{ items: Requisition[] } | Requisition[]>('/requisitions', {
+        params: { status: 'APPROVED', size: 100 },
+      });
+      const items = Array.isArray(response.data)
+        ? response.data
+        : (response.data.items || []);
+      return items.filter((item) => item.status === 'APPROVED');
+    } catch {
+      // Fallback danh sách rỗng an toàn nếu backend chưa sẵn sàng endpoint
+      return [];
+    }
+  },
+
+  /**
+   * Lấy chi tiết yêu cầu tuyển dụng theo ID
+   */
+  async getRequisitionById(id: string): Promise<Requisition | null> {
+    try {
+      const response = await axiosClient.get<Requisition>(`/requisitions/${id}`);
+      return response.data;
+    } catch {
+      return null;
+    }
+  },
+
   /**
    * Tạo mới hoặc xuất bản tin tuyển dụng
    */
@@ -190,7 +278,7 @@ export const jobPostingService = {
   },
 
   /**
-   * Lưu bản nháp tin tuyển dụng (không áp dụng strict validation toàn bộ)
+   * Lưu bản nháp tin tuyển dụng (không áp dụng strict validation toàn bộ) (AC2)
    */
   async saveDraft(data: Partial<JobPostingData>): Promise<JobPostingData> {
     if (!data.title?.trim()) {
@@ -199,6 +287,7 @@ export const jobPostingService = {
 
     const draftData: JobPostingData = {
       id: data.id || `jp-draft-${Date.now()}`,
+      requisitionId: data.requisitionId || undefined,
       title: data.title.trim(),
       positionTitle: data.positionTitle || '',
       departmentId: data.departmentId || '',

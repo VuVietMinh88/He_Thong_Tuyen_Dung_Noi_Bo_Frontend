@@ -3,9 +3,11 @@ import axiosClient from '../src/utils/axiosClient';
 import {
   jobPostingService,
   validateJobPostingForm,
+  mapRequisitionToJobPosting,
   type JobPostingData,
   type SalaryType,
 } from '../src/services/jobPostingService';
+import type { Requisition, Position, Department } from '../src/services/business.service';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -243,6 +245,173 @@ describe('Job Posting Form & Service (Task TKNHTTDNB1-300)', () => {
       await expect(
         jobPostingService.saveDraft({ title: '   ' })
       ).rejects.toThrow('Vui lòng nhập tiêu đề để có thể lưu bản nháp.');
+    });
+  });
+
+  describe('Task TKNHTTDNB1-301: Tích hợp lưu nháp tin từ yêu cầu đã duyệt', () => {
+    const mockPositions: Position[] = [
+      {
+        id: 'pos-101',
+        code: 'FE_DEV',
+        name: 'Senior Frontend Developer',
+        level: 'SENIOR',
+        active: true,
+        competencyFrameworkId: 'fw-1',
+        createdAt: '2026-10-10T00:00:00Z',
+        updatedAt: '2026-10-10T00:00:00Z',
+      },
+    ];
+
+    const mockDepartments: Department[] = [
+      {
+        id: 'dept-tech',
+        name: 'Trung tâm Phát triển Phần mềm',
+        active: true,
+      },
+    ];
+
+    const mockApprovedReq: Requisition = {
+      id: 'req-app-999',
+      positionId: 'pos-101',
+      departmentId: 'dept-tech',
+      headcount: 3,
+      reason: 'NEW_HEADCOUNT',
+      proposedSalaryMin: 25,
+      proposedSalaryMax: 40,
+      salaryJustification: 'Theo khung thị trường',
+      neededBy: '2026-12-31',
+      jobDescription: 'Phát triển các tính năng quản lý tuyển dụng cốt lõi.',
+      candidateRequirements: 'Tối thiểu 3 năm kinh nghiệm React, TypeScript.',
+      status: 'APPROVED',
+      createdAt: '2026-10-01T00:00:00Z',
+      updatedAt: '2026-10-05T00:00:00Z',
+    };
+
+    it('AC1: lấy danh sách yêu cầu tuyển dụng đã duyệt (status = APPROVED) từ API', async () => {
+      const getSpy = vi.spyOn(axiosClient, 'get').mockResolvedValueOnce({
+        data: {
+          items: [
+            mockApprovedReq,
+            { ...mockApprovedReq, id: 'req-draft-1', status: 'DRAFT' },
+          ],
+        },
+      });
+
+      const approvedList = await jobPostingService.getApprovedRequisitions();
+      expect(getSpy).toHaveBeenCalledWith('/requisitions', {
+        params: { status: 'APPROVED', size: 100 },
+      });
+      expect(approvedList).toHaveLength(1);
+      expect(approvedList[0].id).toBe('req-app-999');
+      expect(approvedList[0].status).toBe('APPROVED');
+    });
+
+    it('AC1: lấy chi tiết yêu cầu tuyển dụng theo ID từ API', async () => {
+      const getSpy = vi.spyOn(axiosClient, 'get').mockResolvedValueOnce({
+        data: mockApprovedReq,
+      });
+
+      const reqDetail = await jobPostingService.getRequisitionById('req-app-999');
+      expect(getSpy).toHaveBeenCalledWith('/requisitions/req-app-999');
+      expect(reqDetail?.id).toBe('req-app-999');
+      expect(reqDetail?.headcount).toBe(3);
+    });
+
+    it('AC1: chuyển đổi và điền sẵn dữ liệu từ yêu cầu đã duyệt vào form (mapRequisitionToJobPosting)', () => {
+      const mapped = mapRequisitionToJobPosting(mockApprovedReq, mockPositions, mockDepartments);
+
+      expect(mapped.requisitionId).toBe('req-app-999');
+      expect(mapped.title).toContain('Senior Frontend Developer');
+      expect(mapped.title).toContain('Trung tâm Phát triển Phần mềm');
+      expect(mapped.positionTitle).toBe('Senior Frontend Developer');
+      expect(mapped.departmentId).toBe('dept-tech');
+      expect(mapped.departmentName).toBe('Trung tâm Phát triển Phần mềm');
+      expect(mapped.headcount).toBe(3);
+      expect(mapped.deadline).toBe('2026-12-31');
+      expect(mapped.salaryType).toBe('RANGE');
+      expect(mapped.salaryMin).toBe(25);
+      expect(mapped.salaryMax).toBe(40);
+      expect(mapped.jobDescription).toBe('Phát triển các tính năng quản lý tuyển dụng cốt lõi.');
+      expect(mapped.requirements).toBe('Tối thiểu 3 năm kinh nghiệm React, TypeScript.');
+      expect(mapped.status).toBe('DRAFT');
+    });
+
+    it('AC1: xử lý mapping mức lương UP_TO và STARTING_FROM khi yêu cầu chỉ có min hoặc max', () => {
+      // Chỉ có max lương
+      const reqUpTo: Requisition = {
+        ...mockApprovedReq,
+        proposedSalaryMin: null,
+        proposedSalaryMax: 50,
+      };
+      const mappedUpTo = mapRequisitionToJobPosting(reqUpTo, mockPositions, mockDepartments);
+      expect(mappedUpTo.salaryType).toBe('UP_TO');
+      expect(mappedUpTo.salaryMax).toBe(50);
+      expect(mappedUpTo.salaryMin).toBeUndefined();
+
+      // Chỉ có min lương
+      const reqStarting: Requisition = {
+        ...mockApprovedReq,
+        proposedSalaryMin: 18,
+        proposedSalaryMax: null,
+      };
+      const mappedStarting = mapRequisitionToJobPosting(reqStarting, mockPositions, mockDepartments);
+      expect(mappedStarting.salaryType).toBe('STARTING_FROM');
+      expect(mappedStarting.salaryMin).toBe(18);
+      expect(mappedStarting.salaryMax).toBeUndefined();
+
+      // Lương thỏa thuận
+      const reqNegotiable: Requisition = {
+        ...mockApprovedReq,
+        proposedSalaryMin: null,
+        proposedSalaryMax: null,
+      };
+      const mappedNegotiable = mapRequisitionToJobPosting(reqNegotiable, mockPositions, mockDepartments);
+      expect(mappedNegotiable.salaryType).toBe('NEGOTIABLE');
+      expect(mappedNegotiable.isSalaryNegotiable).toBe(true);
+    });
+
+    it('AC2: gọi API lưu trạng thái nháp thành công kèm requisitionId liên kết', async () => {
+      const postSpy = vi.spyOn(axiosClient, 'post').mockResolvedValueOnce({
+        data: {
+          id: 'jp-draft-saved-101',
+          requisitionId: 'req-app-999',
+          title: 'Tin nháp tuyển dụng từ Requisition 999',
+          status: 'DRAFT',
+        },
+      });
+
+      const result = await jobPostingService.saveDraft({
+        requisitionId: 'req-app-999',
+        title: 'Tin nháp tuyển dụng từ Requisition 999',
+        positionTitle: 'Senior Frontend Developer',
+        status: 'DRAFT',
+      });
+
+      expect(postSpy).toHaveBeenCalledWith(
+        '/job-postings/draft',
+        expect.objectContaining({
+          requisitionId: 'req-app-999',
+          title: 'Tin nháp tuyển dụng từ Requisition 999',
+          status: 'DRAFT',
+        })
+      );
+      expect(result.id).toBe('jp-draft-saved-101');
+      expect(result.requisitionId).toBe('req-app-999');
+      expect(result.status).toBe('DRAFT');
+    });
+
+    it('AC2: fallback tạo bản nháp cục bộ an toàn khi API backend trả về lỗi', async () => {
+      vi.spyOn(axiosClient, 'post').mockRejectedValueOnce(new Error('Server unavailable'));
+
+      const fallbackDraft = await jobPostingService.saveDraft({
+        requisitionId: 'req-app-999',
+        title: 'Tin tuyển dụng fallback',
+      });
+
+      expect(fallbackDraft.id).toBeDefined();
+      expect(fallbackDraft.requisitionId).toBe('req-app-999');
+      expect(fallbackDraft.title).toBe('Tin tuyển dụng fallback');
+      expect(fallbackDraft.status).toBe('DRAFT');
     });
   });
 });

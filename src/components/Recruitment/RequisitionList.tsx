@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { differenceInDays, parseISO, startOfDay } from 'date-fns';
 import { AlertCircle, X, Edit, Copy, Inbox, RefreshCcw } from 'lucide-react';
 import { businessService, type Requisition, type Position, type Department } from '../../services/business.service';
@@ -249,7 +250,16 @@ export const RequisitionList: React.FC<RequisitionListProps> = ({
                   </td>
                   {editable && (
                     <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex items-center justify-end gap-2">
+                        {req.status === 'APPROVED' && (
+                          <Link
+                            to={`/job-postings/create?requisitionId=${req.id}`}
+                            className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                            title="Soạn tin tuyển dụng từ yêu cầu đã duyệt này"
+                          >
+                            ✍️ Soạn tin
+                          </Link>
+                        )}
                         <button 
                           className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
                           onClick={() => onEdit(req)}

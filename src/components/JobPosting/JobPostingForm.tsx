@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import {
   FileText,
   Eye,
@@ -16,10 +16,13 @@ import {
   Plus,
   ArrowLeft,
   Tag,
+  CheckCheck,
 } from 'lucide-react';
+import { ToastContext } from '../notifications/ToastContext';
 import {
   jobPostingService,
   validateJobPostingForm,
+  mapRequisitionToJobPosting,
   type JobPostingData,
   type SalaryType,
   type ValidationErrors,
@@ -28,6 +31,7 @@ import {
   businessService,
   type Department,
   type Position,
+  type Requisition,
 } from '../../services/business.service';
 
 export interface JobPostingFormProps {
@@ -145,8 +149,20 @@ export const JobPostingForm: React.FC<JobPostingFormProps> = ({
   const [departments, setDepartments] = useState<Department[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
 
+  // Danh sách yêu cầu tuyển dụng đã duyệt (AC1 - Task TKNHTTDNB1-301)
+  const [approvedRequisitions, setApprovedRequisitions] = useState<Requisition[]>([]);
+  const [isLoadingApproved, setIsLoadingApproved] = useState<boolean>(false);
+  const [selectedRequisitionId, setSelectedRequisitionId] = useState<string>(
+    initialData?.requisitionId || ''
+  );
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+
+  const toastContext = useContext(ToastContext);
+
   // Dữ liệu Form
   const [formData, setFormData] = useState<JobPostingData>({
+    id: initialData?.id,
+    requisitionId: initialData?.requisitionId,
     title: initialData?.title || '',
     positionTitle: initialData?.positionTitle || '',
     departmentId: initialData?.departmentId || '',
@@ -179,26 +195,87 @@ export const JobPostingForm: React.FC<JobPostingFormProps> = ({
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // 1. Tải danh sách phòng ban và chức danh từ hệ thống
+  // Helper thông báo đồng bộ Toast Context (Global) & Inline Alert (Local) (AC3)
+  const showNotify = useCallback(
+    (text: string, type: 'success' | 'error' = 'success') => {
+      setToastMessage({ type, text });
+      if (toastContext?.notify) {
+        toastContext.notify(text, type);
+      }
+    },
+    [toastContext]
+  );
+
+  // 1. Tải danh sách phòng ban, chức danh và yêu cầu đã duyệt từ hệ thống
   useEffect(() => {
     let isMounted = true;
+    setIsLoadingApproved(true);
+
     Promise.allSettled([
       businessService.getDepartments(0),
       businessService.getPositions(0),
-    ]).then(([deptRes, posRes]) => {
+      jobPostingService.getApprovedRequisitions(),
+    ]).then(([deptRes, posRes, reqRes]) => {
       if (!isMounted) return;
-      if (deptRes.status === 'fulfilled') {
-        setDepartments(deptRes.value.items);
+      const loadedDepts = deptRes.status === 'fulfilled' ? deptRes.value.items : [];
+      const loadedPositions = posRes.status === 'fulfilled' ? posRes.value.items : [];
+      const loadedReqs = reqRes.status === 'fulfilled' ? reqRes.value : [];
+
+      if (deptRes.status === 'fulfilled') setDepartments(loadedDepts);
+      if (posRes.status === 'fulfilled') setPositions(loadedPositions);
+      if (reqRes.status === 'fulfilled') setApprovedRequisitions(loadedReqs);
+      setIsLoadingApproved(false);
+
+      // Tự động kiểm tra param ?requisitionId=... trên URL hoặc initialData
+      let targetReqId = initialData?.requisitionId || '';
+      try {
+        if (typeof window !== 'undefined' && window.location?.search) {
+          const params = new URLSearchParams(window.location.search);
+          const qId = params.get('requisitionId');
+          if (qId) targetReqId = qId;
+        }
+      } catch {
+        // ignore
       }
-      if (posRes.status === 'fulfilled') {
-        setPositions(posRes.value.items);
+
+      if (targetReqId) {
+        const found = loadedReqs.find((r) => r.id === targetReqId);
+        if (found) {
+          const mapped = mapRequisitionToJobPosting(found, loadedPositions, loadedDepts);
+          setFormData((prev) => ({
+            ...prev,
+            ...mapped,
+            id: prev.id,
+          }));
+          setSelectedRequisitionId(found.id);
+          showNotify(
+            `Đã tự động nạp dữ liệu từ yêu cầu đã duyệt #${found.id} vào biểu mẫu!`,
+            'success'
+          );
+        } else {
+          jobPostingService.getRequisitionById(targetReqId).then((singleReq) => {
+            if (singleReq && isMounted) {
+              const mapped = mapRequisitionToJobPosting(singleReq, loadedPositions, loadedDepts);
+              setFormData((prev) => ({
+                ...prev,
+                ...mapped,
+                id: prev.id,
+              }));
+              setSelectedRequisitionId(singleReq.id);
+              showNotify(
+                `Đã tự động nạp dữ liệu từ yêu cầu đã duyệt #${singleReq.id} vào biểu mẫu!`,
+                'success'
+              );
+            }
+          });
+        }
       }
     });
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [initialData?.requisitionId, showNotify]);
 
   // 2. Tự động đóng toast sau 4 giây
   useEffect(() => {
@@ -248,6 +325,25 @@ export const JobPostingForm: React.FC<JobPostingFormProps> = ({
     );
   };
 
+  // Xử lý nạp dữ liệu từ yêu cầu tuyển dụng đã duyệt (AC1 - Task TKNHTTDNB1-301)
+  const handleSelectApprovedRequisition = useCallback(
+    (req: Requisition) => {
+      const mapped = mapRequisitionToJobPosting(req, positions, departments);
+      setFormData((prev) => ({
+        ...prev,
+        ...mapped,
+        id: prev.id,
+      }));
+      setSelectedRequisitionId(req.id);
+      setErrors({});
+      showNotify(
+        `Đã nạp dữ liệu từ yêu cầu tuyển dụng đã duyệt #${req.id} vào biểu mẫu!`,
+        'success'
+      );
+    },
+    [positions, departments, showNotify]
+  );
+
   // Xử lý Xuất bản tin tuyển dụng (Publish)
   const handleSubmitPublish = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -257,10 +353,10 @@ export const JobPostingForm: React.FC<JobPostingFormProps> = ({
     if (!isValid) {
       setErrors(validationErrors);
       setActiveTab('editor');
-      setToastMessage({
-        type: 'error',
-        text: 'Vui lòng kiểm tra và hoàn thành các trường thông tin bắt buộc còn thiếu.',
-      });
+      showNotify(
+        'Vui lòng kiểm tra và hoàn thành các trường thông tin bắt buộc còn thiếu.',
+        'error'
+      );
 
       // Scroll mượt lên đầu biểu mẫu
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -273,34 +369,33 @@ export const JobPostingForm: React.FC<JobPostingFormProps> = ({
     try {
       const saved = await jobPostingService.createJobPosting({
         ...formData,
+        requisitionId: selectedRequisitionId || formData.requisitionId,
         status: 'PUBLISHED',
       });
 
-      setToastMessage({
-        type: 'success',
-        text: 'Đã xuất bản tin tuyển dụng thành công lên hệ thống!',
-      });
+      showNotify('Đã xuất bản tin tuyển dụng thành công lên hệ thống!', 'success');
 
       if (onSuccess) onSuccess(saved);
     } catch (err: unknown) {
-      setToastMessage({
-        type: 'error',
-        text: err instanceof Error ? err.message : 'Không thể lưu tin tuyển dụng.',
-      });
+      const errorMsg = err instanceof Error ? err.message : 'Không thể lưu tin tuyển dụng.';
+      showNotify(errorMsg, 'error');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Xử lý Lưu bản nháp (Save Draft)
+  // Xử lý Lưu bản nháp (Save Draft - AC2 & AC3)
   const handleSaveDraft = async () => {
-    if (!formData.title.trim()) {
-      setErrors((prev) => ({ ...prev, title: 'Vui lòng nhập tiêu đề để có thể lưu bản nháp.' }));
-      setToastMessage({
-        type: 'error',
-        text: 'Cần nhập ít nhất tiêu đề tin tuyển dụng để lưu nháp.',
-      });
-      return;
+    let effectiveTitle = formData.title.trim();
+    if (!effectiveTitle) {
+      if (selectedRequisitionId) {
+        effectiveTitle = `Bản nháp tin tuyển dụng (Yêu cầu #${selectedRequisitionId})`;
+        setFormData((prev) => ({ ...prev, title: effectiveTitle }));
+      } else {
+        setErrors((prev) => ({ ...prev, title: 'Vui lòng nhập tiêu đề để có thể lưu bản nháp.' }));
+        showNotify('Cần nhập ít nhất tiêu đề tin tuyển dụng để lưu nháp.', 'error');
+        return;
+      }
     }
 
     setIsSavingDraft(true);
@@ -309,20 +404,20 @@ export const JobPostingForm: React.FC<JobPostingFormProps> = ({
     try {
       const draft = await jobPostingService.saveDraft({
         ...formData,
+        title: effectiveTitle,
+        requisitionId: selectedRequisitionId || formData.requisitionId,
         status: 'DRAFT',
       });
 
-      setToastMessage({
-        type: 'success',
-        text: 'Đã lưu bản nháp tin tuyển dụng thành công.',
-      });
+      const nowTime = new Date().toLocaleTimeString('vi-VN');
+      setLastSavedTime(nowTime);
+      setFormData((prev) => ({ ...prev, id: draft.id }));
+      showNotify('Đã lưu bản nháp tin tuyển dụng thành công!', 'success');
 
       if (onSuccess) onSuccess(draft);
     } catch (err: unknown) {
-      setToastMessage({
-        type: 'error',
-        text: err instanceof Error ? err.message : 'Không thể lưu bản nháp.',
-      });
+      const errorMsg = err instanceof Error ? err.message : 'Không thể lưu bản nháp.';
+      showNotify(errorMsg, 'error');
     } finally {
       setIsSavingDraft(false);
     }
@@ -399,6 +494,13 @@ export const JobPostingForm: React.FC<JobPostingFormProps> = ({
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {lastSavedTime && (
+            <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 shadow-2xs">
+              <CheckCheck className="h-3.5 w-3.5 text-emerald-600" />
+              Đã lưu nháp {lastSavedTime}
+            </span>
+          )}
+
           {onCancel && (
             <button
               type="button"
@@ -436,6 +538,88 @@ export const JobPostingForm: React.FC<JobPostingFormProps> = ({
             )}
             <span>Đăng tin tuyển dụng</span>
           </button>
+        </div>
+      </div>
+
+      {/* Approved Requisitions Integration Card (AC1 - Task TKNHTTDNB1-301) */}
+      <div className="rounded-2xl border border-emerald-200/80 bg-linear-to-r from-emerald-50/90 to-teal-50/40 p-4 shadow-2xs">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-2xs">
+              <FileText className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-bold text-slate-800">
+                  Nạp dữ liệu từ Yêu cầu tuyển dụng đã duyệt
+                </span>
+                {selectedRequisitionId ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800 border border-emerald-300">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Đã liên kết #{selectedRequisitionId}
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                    Chưa liên kết
+                  </span>
+                )}
+              </div>
+              <p className="mt-0.5 text-[11px] text-slate-600">
+                Tự động lấy chức danh, phòng ban, dải lương và mô tả từ yêu cầu đã được phê duyệt để điền sẵn vào biểu mẫu.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              aria-label="Chọn yêu cầu tuyển dụng đã duyệt"
+              value={selectedRequisitionId}
+              onChange={(e) => {
+                const reqId = e.target.value;
+                if (!reqId) {
+                  setSelectedRequisitionId('');
+                  return;
+                }
+                const found = approvedRequisitions.find((r) => r.id === reqId);
+                if (found) {
+                  handleSelectApprovedRequisition(found);
+                }
+              }}
+              disabled={isLoadingApproved}
+              className="rounded-xl border border-emerald-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-2xs focus:border-emerald-500 focus:outline-hidden max-w-sm truncate"
+            >
+              <option value="">
+                {isLoadingApproved
+                  ? 'Đang tải yêu cầu đã duyệt...'
+                  : approvedRequisitions.length === 0
+                  ? 'Không có yêu cầu đã duyệt nào'
+                  : '-- Chọn yêu cầu đã duyệt để điền form --'}
+              </option>
+              {approvedRequisitions.map((req) => {
+                const pos = positions.find((p) => p.id === req.positionId);
+                const dept = departments.find((d) => d.id === req.departmentId);
+                return (
+                  <option key={req.id} value={req.id}>
+                    #{req.id} - {pos?.name || req.positionId} ({dept?.name || req.departmentId}) - {req.headcount} nhân sự
+                  </option>
+                );
+              })}
+            </select>
+
+            {selectedRequisitionId && (
+              <button
+                type="button"
+                onClick={() => {
+                  const found = approvedRequisitions.find((r) => r.id === selectedRequisitionId);
+                  if (found) handleSelectApprovedRequisition(found);
+                }}
+                className="rounded-xl border border-emerald-300 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors cursor-pointer"
+                title="Đồng bộ lại dữ liệu từ yêu cầu đã duyệt này"
+              >
+                Đồng bộ lại
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

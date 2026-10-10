@@ -62,7 +62,7 @@ export interface Requisition {
   neededBy: string | null;
   jobDescription: string | null;
   candidateRequirements: string | null;
-  status: 'DRAFT';
+  status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'OPEN' | 'CLOSED' | 'CANCELLED' | string;
   createdAt: string;
   updatedAt: string;
 }
@@ -208,6 +208,8 @@ export const businessService = {
         : axiosClient.post<Requisition>('/requisitions', input),
       'Không thể lưu yêu cầu tuyển dụng.',
     ),
+  getRequisition: (id: string) =>
+    call(() => axiosClient.get<Requisition>(`/requisitions/${id}`), 'Không thể tải chi tiết yêu cầu tuyển dụng.'),
 
   getFrameworks: (page = 0) =>
     call(() => axiosClient.get<PageResult<Pick<CompetencyFramework, 'id' | 'code' | 'name' | 'description' | 'status'> & { criterionCount: number }>>(
