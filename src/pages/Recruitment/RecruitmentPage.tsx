@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import {
   businessService,
   type CompetencyFramework,
@@ -226,15 +227,23 @@ const RecruitmentPage = ({ initialTab = 'requisitions' }: { initialTab?: Tab }) 
           <h1 className="text-2xl font-bold text-slate-900">Tuyển dụng &amp; chức danh</h1>
           <p className="mt-1 text-sm text-slate-500">Dữ liệu và thao tác được kết nối trực tiếp với API Backend.</p>
         </div>
-        {!showForm && ((tab === 'requisitions' && canWriteRequisition) || (tab === 'positions' && canWritePosition)) && (
-          <button
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white"
-            onClick={() => tab === 'requisitions' ? openCreate() : startPositionEdit()}
-            type="button"
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to="/job-postings/create"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
           >
-            {tab === 'requisitions' ? 'Tạo yêu cầu' : 'Thêm chức danh'}
-          </button>
-        )}
+            ✍️ Soạn tin tuyển dụng
+          </Link>
+          {!showForm && ((tab === 'requisitions' && canWriteRequisition) || (tab === 'positions' && canWritePosition)) && (
+            <button
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white"
+              onClick={() => tab === 'requisitions' ? openCreate() : startPositionEdit()}
+              type="button"
+            >
+              {tab === 'requisitions' ? 'Tạo yêu cầu' : 'Thêm chức danh'}
+            </button>
+          )}
+        </div>
       </header>
       {error && <ErrorBanner error={error} onRetry={() => { setLoading(true); setError(''); loadData(); }} />}
       <div className="flex gap-2 border-b border-slate-200">

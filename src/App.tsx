@@ -26,6 +26,7 @@ import JobTitlesPage from "./pages/JobTitle/JobTitlesPage";
 import DepartmentPage from "./pages/Department/DepartmentPage";
 import MasterDataManagement from "./pages/MasterData/MasterDataManagement";
 import HeadcountBudgetManagement from "./pages/Headcount/HeadcountBudgetManagement";
+import JobPostingForm from "./components/JobPosting/JobPostingForm";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -200,6 +201,22 @@ function App() {
                 element={
                   <MainLayout>
                     <RecruitmentPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/jobs/create"
+                element={
+                  <MainLayout>
+                    <JobPostingForm />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/job-postings/create"
+                element={
+                  <MainLayout>
+                    <JobPostingForm />
                   </MainLayout>
                 }
               />
