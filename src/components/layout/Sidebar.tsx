@@ -59,6 +59,13 @@ const menuItems: SidebarMenuItem[] = [
     permissions: ['ORGANIZATION_READ_ALL'],
   },
   {
+    label: 'Danh mục dùng chung',
+    to: '/settings/master-data',
+    icon: '🗂️',
+    roles: Object.values(ROLES),
+    permissions: ['ORGANIZATION_READ_ALL'],
+  },
+  {
     label: 'Quản lý CV / Ứng viên',
     to: '/candidates',
     icon: '📄',

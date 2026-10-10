@@ -238,6 +238,8 @@ export const businessService = {
     ),
   deleteCatalogItem: (type: string, id: string) =>
     call(() => axiosClient.delete<void>(`/recruitment-catalogs/${type}/items/${id}`), 'Không thể xóa giá trị danh mục.'),
+  reorderCatalogItems: (type: string, itemIds: string[]) =>
+    call(() => axiosClient.put<RecruitmentCatalogItem[]>(`/recruitment-catalogs/${type}/order`, { itemIds }), 'Không thể sắp xếp danh mục.'),
   getDepartments: (page = 0) =>
     call(() => axiosClient.get<PageResult<Department>>('/departments', { params: { page, size: 100 } }), 'Không thể tải phòng ban.'),
 };
