@@ -6,11 +6,11 @@ import {
 } from '../../services/business.service';
 import {
   calculateTotalWeight,
-  distributeWeightsEqually,
   isWeightValid,
   type CompetencyFrameworkFormData,
   type CriterionFormData,
 } from './competencyFramework.types';
+import CriterionWeightManager from './CriterionWeightManager';
 
 interface CompetencyFrameworkFormModalProps {
   isOpen: boolean;
@@ -135,63 +135,9 @@ export const CompetencyFrameworkFormModal: FC<CompetencyFrameworkFormModalProps>
   const totalWeight = calculateTotalWeight(formData.criteria);
   const isValidWeight = isWeightValid(totalWeight);
 
-  // Thêm dòng tiêu chí động
-  const handleAddCriterion = () => {
-    setFormData((prev) => ({
-      ...prev,
-      criteria: [...prev.criteria, createEmptyCriterion(prev.criteria.length + 1)],
-    }));
-  };
-
-  // Cập nhật giá trị một dòng tiêu chí
-  const handleUpdateCriterion = (
-    index: number,
-    field: keyof Omit<CriterionFormData, 'tempId' | 'id'>,
-    value: string | number,
-  ) => {
-    setFormData((prev) => {
-      const nextCriteria = [...prev.criteria];
-      const target = nextCriteria[index];
-      if (!target) return prev;
-
-      nextCriteria[index] = {
-        ...target,
-        [field]: value,
-      };
-
-      return {
-        ...prev,
-        criteria: nextCriteria,
-      };
-    });
-  };
-
-  // Xóa một dòng tiêu chí
-  const handleRemoveCriterion = (index: number) => {
-    if (formData.criteria.length <= 1) {
-      setErrorMessage('Khung năng lực phải có tối thiểu ít nhất 1 tiêu chí đánh giá.');
-      return;
-    }
-    setFormData((prev) => ({
-      ...prev,
-      criteria: prev.criteria.filter((_, idx) => idx !== index),
-    }));
-  };
-
-  // Tự động phân bổ đều 100% trọng số cho toàn bộ tiêu chí hiện có
-  const handleDistributeEqually = () => {
-    const weights = distributeWeightsEqually(formData.criteria.length);
-    setFormData((prev) => ({
-      ...prev,
-      criteria: prev.criteria.map((item, idx) => ({
-        ...item,
-        weight: weights[idx] ?? 0,
-      })),
-    }));
-  };
-
   // Thao tác chọn / gỡ chức danh
   const handleTogglePosition = (positionId: string) => {
+
     setFormData((prev) => {
       const isSelected = prev.assignedPositionIds.includes(positionId);
       const nextPositionIds = isSelected
@@ -521,206 +467,15 @@ export const CompetencyFrameworkFormModal: FC<CompetencyFrameworkFormModalProps>
               </div>
 
               {/* Phần 3: Quản lý tiêu chí & Trọng số (AC1 & AC2) */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">
-                      3. Bộ tiêu chí đánh giá & Trọng số %
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Thêm động các tiêu chí. Tổng trọng số bắt buộc phải bằng 100%.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleDistributeEqually}
-                      title="Tự động chia đều 100% cho số lượng tiêu chí hiện có"
-                      className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
-                    >
-                      <span>⚡</span> Chia đều 100%
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAddCriterion}
-                      className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-indigo-700"
-                    >
-                      <span>+</span> Thêm tiêu chí
-                    </button>
-                  </div>
-                </div>
-
-                {/* Thanh tiến trình & cảnh báo tổng trọng số REAL-TIME (AC1 & AC2) */}
-                <div className="mb-4 rounded-xl border p-4 transition-colors duration-200 bg-white">
-                  <div className="mb-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                        Tổng trọng số:
-                      </span>
-                      <span
-                        className={`text-base font-extrabold ${
-                          isValidWeight
-                            ? 'text-emerald-600'
-                            : totalWeight > 100
-                            ? 'text-rose-600'
-                            : 'text-amber-600'
-                        }`}
-                        data-testid="total-weight-display"
-                      >
-                        {totalWeight}%
-                      </span>
-                    </div>
-                    <div>
-                      {isValidWeight ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
-                          <svg className="h-3.5 w-3.5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                            <path
-                              fillRule="evenodd"
-                              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                          Hợp lệ (Đúng 100%)
-                        </span>
-                      ) : totalWeight > 100 ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-800">
-                          Vượt quá {(totalWeight - 100).toFixed(2)}%
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
-                          Còn thiếu {(100 - totalWeight).toFixed(2)}%
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Thanh Progress Bar trực quan */}
-                  <div className="h-3 w-full overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className={`h-full transition-all duration-300 ${
-                        isValidWeight
-                          ? 'bg-emerald-500'
-                          : totalWeight > 100
-                          ? 'bg-rose-500'
-                          : 'bg-amber-500'
-                      }`}
-                      style={{ width: `${Math.min(totalWeight, 100)}%` }}
-                    />
-                  </div>
-
-                  {/* Banner cảnh báo đỏ khi tổng khác 100% (AC2) */}
-                  {!isValidWeight && (
-                    <div
-                      className="mt-3 flex items-start gap-2 rounded-lg border border-rose-300 bg-rose-50/80 p-2.5 text-xs text-rose-700"
-                      role="alert"
-                      data-testid="weight-constraint-alert"
-                    >
-                      <svg className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                          fillRule="evenodd"
-                          d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                      <div>
-                        <span className="font-bold">Cảnh báo ràng buộc: </span>
-                        Hệ thống chỉ cho phép lưu khi tổng trọng số đúng bằng 100%. Vui lòng điều chỉnh lại trọng số của các tiêu chí để đạt 100% trước khi lưu!
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Danh sách các dòng tiêu chí */}
-                <div className="space-y-3">
-                  {formData.criteria.map((criterion, index) => (
-                    <div
-                      key={criterion.tempId}
-                      className="group relative rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs transition-shadow hover:shadow-md"
-                    >
-                      <div className="grid gap-3 sm:grid-cols-12 sm:items-start">
-                        {/* Số thứ tự & Tên tiêu chí */}
-                        <div className="sm:col-span-5">
-                          <label className="block text-[11px] font-semibold text-slate-600">
-                            Tiêu chí #{index + 1} <span className="text-rose-500">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Tên tiêu chí (VD: Kiến thức React & TS)"
-                            value={criterion.name}
-                            onChange={(e) =>
-                              handleUpdateCriterion(index, 'name', e.target.value)
-                            }
-                            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                          />
-                        </div>
-
-                        {/* Mô tả tiêu chí */}
-                        <div className="sm:col-span-4">
-                          <label className="block text-[11px] font-semibold text-slate-600">
-                            Mô tả / Thang đánh giá
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="Mô tả chi tiết nội dung đánh giá..."
-                            value={criterion.description}
-                            onChange={(e) =>
-                              handleUpdateCriterion(index, 'description', e.target.value)
-                            }
-                            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                          />
-                        </div>
-
-                        {/* Trọng số % */}
-                        <div className="sm:col-span-2">
-                          <label className="block text-[11px] font-semibold text-slate-600">
-                            Trọng số (%) <span className="text-rose-500">*</span>
-                          </label>
-                          <div className="relative mt-1">
-                            <input
-                              type="number"
-                              required
-                              min="0.1"
-                              max="100"
-                              step="0.5"
-                              placeholder="%"
-                              value={criterion.weight}
-                              onChange={(e) =>
-                                handleUpdateCriterion(index, 'weight', e.target.value)
-                              }
-                              className="w-full rounded-lg border border-slate-300 pr-7 pl-3 py-1.5 text-xs font-semibold text-slate-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                            />
-                            <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-xs text-slate-400">
-                              %
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Nút xóa tiêu chí */}
-                        <div className="flex sm:col-span-1 sm:h-full sm:items-center sm:justify-center sm:pt-4">
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveCriterion(index)}
-                            title="Xóa tiêu chí này"
-                            className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-rose-600"
-                          >
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                              />
-                            </svg>
-                            <span className="sm:hidden">Xóa</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <CriterionWeightManager
+                criteria={formData.criteria}
+                onChange={(nextCriteria) =>
+                  setFormData((prev) => ({ ...prev, criteria: nextCriteria }))
+                }
+                disabled={isSaving}
+              />
             </div>
+
           )}
         </form>
 
