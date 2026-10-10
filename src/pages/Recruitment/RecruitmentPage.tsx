@@ -17,7 +17,6 @@ const RecruitmentPage = ({ initialTab = 'requisitions' }: { initialTab?: Tab }) 
   const canReadRequisition = permissions.includes('REQUISITIONS_READ_ALL')
     || permissions.includes('REQUISITIONS_READ_SCOPED');
   const [tab, setTab] = useState<Tab>(initialTab);
-  const [requisitions, setRequisitions] = useState<Requisition[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [frameworks, setFrameworks] = useState<Array<Pick<CompetencyFramework, 'id' | 'code' | 'name' | 'status'>>>([]);
@@ -33,9 +32,6 @@ const RecruitmentPage = ({ initialTab = 'requisitions' }: { initialTab?: Tab }) 
   const [positionForm, setPositionForm] = useState<PositionForm>(emptyPositionForm);
 
   const fetchData = useCallback(async () => {
-    const requisitionItems = canReadRequisition
-      ? (await businessService.getRequisitions()).items
-      : [];
     let positionItems: Position[] = [];
     let departmentItems: Department[] = [];
     let frameworkItems: Array<Pick<CompetencyFramework, 'id' | 'code' | 'name' | 'status'>> = [];
@@ -55,7 +51,7 @@ const RecruitmentPage = ({ initialTab = 'requisitions' }: { initialTab?: Tab }) 
     } else if (canReadRequisition) {
       referenceMessage = 'Tài khoản không có quyền đọc danh mục chức danh/phòng ban; không thể tạo yêu cầu mới.';
     }
-    return { requisitionItems, positionItems, departmentItems, frameworkItems, referenceMessage };
+    return { positionItems, departmentItems, frameworkItems, referenceMessage };
   }, [canReadOrganization, canReadRequisition]);
 
   useEffect(() => {
@@ -63,7 +59,6 @@ const RecruitmentPage = ({ initialTab = 'requisitions' }: { initialTab?: Tab }) 
     fetchData()
       .then((data) => {
         if (!current) return;
-        setRequisitions(data.requisitionItems);
         setPositions(data.positionItems);
         setDepartments(data.departmentItems);
         setFrameworks(data.frameworkItems);
@@ -81,7 +76,6 @@ const RecruitmentPage = ({ initialTab = 'requisitions' }: { initialTab?: Tab }) 
     setError('');
     try {
       const data = await fetchData();
-      setRequisitions(data.requisitionItems);
       setPositions(data.positionItems);
       setDepartments(data.departmentItems);
       setFrameworks(data.frameworkItems);
