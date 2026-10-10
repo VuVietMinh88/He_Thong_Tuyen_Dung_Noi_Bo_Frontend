@@ -55,6 +55,8 @@ export const CreateJobRequisition: React.FC = () => {
         description: detailsData.jobDescription,
         requirements: detailsData.requirements,
         benefits: detailsData.benefits,
+        isOverride: basicData.isOverride,
+        overrideReason: basicData.overrideReason,
       };
 
       await jobRequisitionService.createJobRequisition(payload);
