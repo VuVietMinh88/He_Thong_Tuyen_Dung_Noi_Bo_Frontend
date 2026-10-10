@@ -6,6 +6,7 @@ import {
   type InterviewQuestion,
   type Position,
 } from '../../services/business.service';
+import { questionService } from '../../services/questionService';
 
 export interface InterviewQuestionFormModalProps {
   isOpen: boolean;
@@ -241,7 +242,9 @@ export const InterviewQuestionFormModal: FC<InterviewQuestionFormModalProps> = (
     setIsSaving(true);
 
     try {
-      await businessService.saveQuestion(questionToEdit?.id ?? null, {
+      await questionService.saveQuestion({
+        id: questionToEdit?.id ?? null,
+        criterionId: selectedCriterion.id,
         criterion: { id: selectedCriterion.id, name: selectedCriterion.name },
         content: content.trim(),
         difficulty,

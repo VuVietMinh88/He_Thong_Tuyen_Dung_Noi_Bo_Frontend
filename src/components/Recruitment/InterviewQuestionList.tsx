@@ -3,8 +3,12 @@ import {
   businessService,
   type CompetencyCriterion,
   type CompetencyFramework,
-  type InterviewQuestion,
+  type Position,
 } from '../../services/business.service';
+import {
+  questionService,
+  type InterviewQuestion,
+} from '../../services/questionService';
 import { usePermission } from '../../hooks/usePermission';
 import InterviewQuestionFormModal from './InterviewQuestionFormModal';
 
@@ -12,15 +16,21 @@ export const InterviewQuestionList: FC = () => {
   const { permissions } = usePermission();
   const canWrite = permissions.includes('ORGANIZATION_WRITE_ALL');
 
+  // Dữ liệu danh sách câu hỏi
   const [questions, setQuestions] = useState<InterviewQuestion[]>([]);
+  const [positions, setPositions] = useState<Position[]>([]);
   const [frameworks, setFrameworks] = useState<Array<Pick<CompetencyFramework, 'id' | 'code' | 'name'>>>([]);
   const [criteria, setCriteria] = useState<CompetencyCriterion[]>([]);
 
+  // Trạng thái tải & lỗi
   const [isLoading, setIsLoading] = useState(true);
+  const [isFetchingQuestions, setIsFetchingQuestions] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Bộ lọc thông minh (AC1)
+  // Bộ lọc thông minh (AC1 & AC2)
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedKeyword, setDebouncedKeyword] = useState('');
+  const [selectedPositionId, setSelectedPositionId] = useState('');
   const [selectedFrameworkId, setSelectedFrameworkId] = useState('');
   const [selectedCriterionId, setSelectedCriterionId] = useState('');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('ALL');
@@ -33,35 +43,104 @@ export const InterviewQuestionList: FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<InterviewQuestion | null>(null);
 
-  // Tải danh sách câu hỏi và danh sách frameworks
-  const loadInitialData = useCallback(async () => {
-    setIsLoading(true);
+  // Debounce tìm kiếm từ khóa 350ms
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedKeyword(searchTerm.trim());
+    }, 350);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [searchTerm]);
+
+  // 1. Tải metadata ban đầu (Chức danh & Khung năng lực)
+  useEffect(() => {
+    let isMounted = true;
+    Promise.all([
+      businessService.getPositions(0),
+      businessService.getFrameworks(0),
+    ])
+      .then(([positionsRes, frameworksRes]) => {
+        if (!isMounted) return;
+        setPositions(positionsRes.items);
+        setFrameworks(frameworksRes.items);
+      })
+      .catch((err: unknown) => {
+        if (!isMounted) return;
+        setErrorMessage(
+          err instanceof Error
+            ? err.message
+            : 'Không thể tải danh sách chức danh và khung năng lực.',
+        );
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // 2. Tải danh sách câu hỏi qua questionService.getQuestions(params) (AC1 & AC2)
+  const fetchQuestions = useCallback(async () => {
+    setIsFetchingQuestions(true);
     setErrorMessage('');
+
     try {
-      const [questionsRes, frameworksRes] = await Promise.all([
-        businessService.getQuestions(0),
-        businessService.getFrameworks(0),
-      ]);
-      setQuestions(questionsRes.items);
-      setFrameworks(frameworksRes.items);
+      const res = await questionService.getQuestions({
+        keyword: debouncedKeyword,
+        frameworkId: selectedFrameworkId || undefined,
+        positionId: selectedPositionId || undefined,
+        criterionId: selectedCriterionId || undefined,
+        difficulty: selectedDifficulty !== 'ALL' ? selectedDifficulty : undefined,
+        status: selectedStatus !== 'ALL' ? selectedStatus : undefined,
+      });
+      setQuestions(res.items);
     } catch (err: unknown) {
       setErrorMessage(
         err instanceof Error ? err.message : 'Không thể tải danh sách câu hỏi phỏng vấn.',
       );
     } finally {
+      setIsFetchingQuestions(false);
       setIsLoading(false);
     }
-  }, []);
+  }, [
+    debouncedKeyword,
+    selectedFrameworkId,
+    selectedPositionId,
+    selectedCriterionId,
+    selectedDifficulty,
+    selectedStatus,
+  ]);
 
+  // 3. Tự động đồng bộ và gọi API khi bộ lọc thay đổi (AC2)
   useEffect(() => {
-    void loadInitialData();
-  }, [loadInitialData]);
+    void fetchQuestions();
+  }, [fetchQuestions]);
 
-  // Khi chọn Framework trong bộ lọc, tải danh sách tiêu chí của Framework đó
+  // 4. Khi chọn Chức danh trong bộ lọc -> Tự động xác định Khung năng lực
+  const handlePositionFilterChange = async (posId: string) => {
+    setSelectedPositionId(posId);
+    if (!posId) return;
+
+    try {
+      const evalData = await businessService.getEvaluationCriteria(posId);
+      if (evalData.framework) {
+        setSelectedFrameworkId(evalData.framework.id);
+        setCriteria(evalData.criteria);
+        setSelectedCriterionId('');
+      }
+    } catch {
+      // Bỏ qua lỗi nếu chức danh chưa có khung năng lực
+    }
+  };
+
+  // 5. Khi chọn Framework trong bộ lọc, tải danh sách tiêu chí của Framework đó
   useEffect(() => {
     if (!selectedFrameworkId) {
-      setCriteria([]);
-      setSelectedCriterionId('');
+      if (!selectedPositionId) {
+        setCriteria([]);
+        setSelectedCriterionId('');
+      }
       return;
     }
 
@@ -69,23 +148,20 @@ export const InterviewQuestionList: FC = () => {
     businessService
       .getFramework(selectedFrameworkId)
       .then((res) => {
-        if (isMounted) {
-          setCriteria(res.criteria);
-          setSelectedCriterionId('');
-        }
+        if (!isMounted) return;
+        setCriteria(res.criteria);
       })
       .catch((err: unknown) => {
-        if (isMounted) {
-          setErrorMessage(
-            err instanceof Error ? err.message : 'Không thể tải danh sách tiêu chí.',
-          );
-        }
+        if (!isMounted) return;
+        setErrorMessage(
+          err instanceof Error ? err.message : 'Không thể tải danh sách tiêu chí.',
+        );
       });
 
     return () => {
       isMounted = false;
     };
-  }, [selectedFrameworkId]);
+  }, [selectedFrameworkId, selectedPositionId]);
 
   // Toggle ẩn/hiện gợi ý trả lời
   const toggleHint = (questionId: string) => {
@@ -107,15 +183,15 @@ export const InterviewQuestionList: FC = () => {
     setIsModalOpen(true);
   };
 
-  // Xóa câu hỏi (AC3)
+  // Xóa câu hỏi qua API questionService (AC1 & AC2)
   const handleDeleteQuestion = async (q: InterviewQuestion) => {
     if (!window.confirm(`Bạn có chắc chắn muốn xóa câu hỏi "${q.content.slice(0, 50)}..."?`)) {
       return;
     }
 
     try {
-      await businessService.deleteQuestion(q.id);
-      void loadInitialData();
+      await questionService.deleteQuestion(q.id);
+      void fetchQuestions();
     } catch (delError: unknown) {
       setErrorMessage(
         delError instanceof Error ? delError.message : 'Không thể xóa câu hỏi phỏng vấn.',
@@ -126,51 +202,14 @@ export const InterviewQuestionList: FC = () => {
   // Reset bộ lọc
   const handleResetFilters = () => {
     setSearchTerm('');
+    setSelectedPositionId('');
     setSelectedFrameworkId('');
     setSelectedCriterionId('');
     setSelectedDifficulty('ALL');
     setSelectedStatus('ALL');
   };
 
-  // Áp dụng bộ lọc thông minh (AC1)
-  const filteredQuestions = questions.filter((q) => {
-    // 1. Tìm kiếm từ khóa
-    const term = searchTerm.toLowerCase().trim();
-    const matchesSearch =
-      !term ||
-      q.content.toLowerCase().includes(term) ||
-      (q.answerHint && q.answerHint.toLowerCase().includes(term)) ||
-      q.criterion.name.toLowerCase().includes(term) ||
-      q.framework.name.toLowerCase().includes(term);
-
-    // 2. Lọc theo Khung năng lực
-    const matchesFramework =
-      !selectedFrameworkId || q.framework.id === selectedFrameworkId;
-
-    // 3. Lọc theo Tiêu chí
-    const matchesCriterion =
-      !selectedCriterionId || q.criterion.id === selectedCriterionId;
-
-    // 4. Lọc theo Độ khó
-    const matchesDifficulty =
-      selectedDifficulty === 'ALL' || q.difficulty === selectedDifficulty;
-
-    // 5. Lọc theo Trạng thái
-    const matchesStatus =
-      selectedStatus === 'ALL' ||
-      (selectedStatus === 'ACTIVE' && q.active) ||
-      (selectedStatus === 'INACTIVE' && !q.active);
-
-    return (
-      matchesSearch &&
-      matchesFramework &&
-      matchesCriterion &&
-      matchesDifficulty &&
-      matchesStatus
-    );
-  });
-
-  // Thống kê số lượng
+  // Thống kê số lượng theo danh sách hiện tại
   const totalQuestions = questions.length;
   const easyCount = questions.filter((q) => q.difficulty === 'EASY').length;
   const mediumCount = questions.filter((q) => q.difficulty === 'MEDIUM').length;
@@ -185,14 +224,14 @@ export const InterviewQuestionList: FC = () => {
             Ngân Hàng Câu Hỏi Phỏng Vấn
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Tra cứu câu hỏi chuẩn theo khung năng lực, tiêu chí đánh giá và mức độ khó cho người phỏng vấn.
+            Tra cứu câu hỏi chuẩn theo chức danh, khung năng lực và tiêu chí đánh giá cho người phỏng vấn.
           </p>
         </div>
         {canWrite && (
           <button
             type="button"
             onClick={handleOpenCreateModal}
-            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-indigo-700 active:scale-98"
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-indigo-700 active:scale-98 transition-all"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -222,20 +261,53 @@ export const InterviewQuestionList: FC = () => {
         </div>
       </div>
 
-      {/* Thông báo lỗi nếu có */}
+      {/* Thông báo lỗi nếu có kèm nút Thử lại (AC2) */}
       {errorMessage && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800" role="alert">
-          {errorMessage}
+        <div
+          className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800 shadow-xs"
+          role="alert"
+        >
+          <div className="flex items-center gap-2">
+            <svg className="h-4 w-4 shrink-0 text-rose-600" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                clipRule="evenodd"
+              />
+            </svg>
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => void fetchQuestions()}
+            className="rounded-lg bg-rose-100 px-3 py-1 font-semibold text-rose-800 hover:bg-rose-200"
+          >
+            Thử lại
+          </button>
         </div>
       )}
 
       {/* Bộ lọc thông minh (Filters & Search - AC1) */}
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-            Bộ lọc & Tìm kiếm câu hỏi
-          </h2>
-          {(searchTerm || selectedFrameworkId || selectedCriterionId || selectedDifficulty !== 'ALL' || selectedStatus !== 'ALL') && (
+          <div className="flex items-center gap-2">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+              Bộ lọc & Tìm kiếm câu hỏi
+            </h2>
+            {isFetchingQuestions && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600">
+                <span className="h-1.5 w-1.5 animate-ping rounded-full bg-indigo-600" />
+                Đang lọc...
+              </span>
+            )}
+          </div>
+
+          {(searchTerm ||
+            selectedPositionId ||
+            selectedFrameworkId ||
+            selectedCriterionId ||
+            selectedDifficulty !== 'ALL' ||
+            selectedStatus !== 'ALL') && (
             <button
               type="button"
               onClick={handleResetFilters}
@@ -246,7 +318,7 @@ export const InterviewQuestionList: FC = () => {
           )}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           {/* 1. Tìm kiếm theo từ khóa */}
           <div className="relative sm:col-span-2 lg:col-span-2">
             <input
@@ -266,7 +338,23 @@ export const InterviewQuestionList: FC = () => {
             </svg>
           </div>
 
-          {/* 2. Lọc theo Khung năng lực */}
+          {/* 2. Lọc theo Chức danh áp dụng (AC1) */}
+          <div>
+            <select
+              value={selectedPositionId}
+              onChange={(e) => void handlePositionFilterChange(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs text-slate-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+            >
+              <option value="">Tất cả chức danh</option>
+              {positions.map((pos) => (
+                <option key={pos.id} value={pos.id}>
+                  {pos.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 3. Lọc theo Khung năng lực (AC1) */}
           <div>
             <select
               value={selectedFrameworkId}
@@ -282,7 +370,7 @@ export const InterviewQuestionList: FC = () => {
             </select>
           </div>
 
-          {/* 3. Lọc theo Tiêu chí đánh giá */}
+          {/* 4. Lọc theo Tiêu chí đánh giá (AC1) */}
           <div>
             <select
               disabled={!selectedFrameworkId}
@@ -301,7 +389,7 @@ export const InterviewQuestionList: FC = () => {
             </select>
           </div>
 
-          {/* 4. Lọc theo Mức độ khó */}
+          {/* 5. Lọc theo Mức độ khó (AC1) */}
           <div>
             <select
               value={selectedDifficulty}
@@ -317,23 +405,30 @@ export const InterviewQuestionList: FC = () => {
         </div>
       </div>
 
-      {/* Danh sách câu hỏi phỏng vấn (AC2 & AC3) */}
+      {/* Danh sách câu hỏi phỏng vấn (AC2) */}
       <div className="space-y-3">
         {isLoading ? (
           <div className="flex h-48 items-center justify-center space-x-2 rounded-xl border border-slate-200 bg-white text-slate-500 shadow-xs">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
-            <span className="text-sm">Đang tải ngân hàng câu hỏi...</span>
+            <span className="text-sm">Đang nạp ngân hàng câu hỏi...</span>
           </div>
-        ) : filteredQuestions.length === 0 ? (
+        ) : questions.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-white py-12 text-slate-500 shadow-xs">
             <svg className="h-12 w-12 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <p className="mt-2 text-sm font-medium text-slate-600">Không tìm thấy câu hỏi phù hợp.</p>
-            <p className="text-xs text-slate-400">Thử thay đổi từ khóa hoặc điều kiện lọc ở trên.</p>
+            <p className="text-xs text-slate-400">Thử thay đổi từ khóa hoặc bộ lọc ở trên.</p>
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="mt-3 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Xóa điều kiện lọc
+            </button>
           </div>
         ) : (
-          filteredQuestions.map((q, index) => {
+          questions.map((q, index) => {
             const isHintOpen = expandedHintIds[q.id];
 
             return (
@@ -348,7 +443,7 @@ export const InterviewQuestionList: FC = () => {
                       #{index + 1}
                     </span>
 
-                    {/* Badge Mức độ khó (AC2) */}
+                    {/* Badge Mức độ khó */}
                     {q.difficulty === 'EASY' && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-600/20">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -368,60 +463,87 @@ export const InterviewQuestionList: FC = () => {
                       </span>
                     )}
 
-                    {/* Badge Khung năng lực & Tiêu chí (AC2) */}
-                    <span className="rounded-md bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-xs font-medium text-indigo-700">
-                      {q.framework.name} &gt; {q.criterion.name}
+                    {/* Badge Tiêu chí liên kết */}
+                    <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                      {q.criterion.name}
                     </span>
 
-                    {/* Badge Trạng thái */}
-                    {!q.active && (
-                      <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
-                        Đã tạm ẩn
-                      </span>
-                    )}
+                    {/* Khung năng lực */}
+                    <span className="text-xs text-slate-500">
+                      • {q.framework.name}
+                    </span>
                   </div>
 
-                  {/* Nút Sửa / Xóa (AC3) */}
-                  {canWrite && (
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEditModal(q)}
-                        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300"
-                      >
-                        Sửa
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteQuestion(q)}
-                        className="rounded-lg p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
-                        title="Xóa câu hỏi"
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
-                  )}
+                  {/* Trạng thái & Nút thao tác (Sửa/Xóa) */}
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                        q.active
+                          ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/10'
+                          : 'bg-slate-100 text-slate-500 ring-1 ring-slate-200'
+                      }`}
+                    >
+                      {q.active ? '● Đang áp dụng' : '○ Tạm dừng'}
+                    </span>
+
+                    {canWrite && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditModal(q)}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 transition-colors"
+                          title="Chỉnh sửa câu hỏi"
+                          aria-label="Chỉnh sửa câu hỏi"
+                        >
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                            />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteQuestion(q)}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                          title="Xóa câu hỏi"
+                          aria-label="Xóa câu hỏi"
+                        >
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* Nội dung câu hỏi (AC2) */}
-                <div className="pt-3">
-                  <p className="text-sm font-semibold text-slate-900 leading-relaxed">
+                {/* Nội dung câu hỏi */}
+                <div className="mt-3">
+                  <h3 className="text-sm font-semibold text-slate-900 leading-relaxed">
                     {q.content}
-                  </p>
+                  </h3>
                 </div>
 
-                {/* Gợi ý câu trả lời mẫu (Answer Hint - Collapsible) (AC2) */}
+                {/* Gợi ý câu trả lời mẫu (Answer Hint) */}
                 {q.answerHint && (
                   <div className="mt-3">
                     <button
                       type="button"
                       onClick={() => toggleHint(q.id)}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
                     >
                       <svg
-                        className={`h-3.5 w-3.5 transition-transform ${isHintOpen ? 'rotate-90' : ''}`}
+                        className={`h-3.5 w-3.5 transition-transform duration-200 ${
+                          isHintOpen ? 'rotate-90' : ''
+                        }`}
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -453,9 +575,10 @@ export const InterviewQuestionList: FC = () => {
       <InterviewQuestionFormModal
         isOpen={isModalOpen}
         questionToEdit={editingQuestion}
+        initialPositionId={selectedPositionId}
         initialFrameworkId={selectedFrameworkId}
         onClose={() => setIsModalOpen(false)}
-        onSuccess={() => void loadInitialData()}
+        onSuccess={() => void fetchQuestions()}
       />
     </div>
   );
