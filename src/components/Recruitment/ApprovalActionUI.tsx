@@ -1,29 +1,54 @@
 import React, { useState } from "react";
-import { CheckCircle, XCircle, X } from "lucide-react";
+import { CheckCircle, XCircle, X, Loader2 } from "lucide-react";
+import { approvalActionService, type ApprovalActionPayload } from "../../services/approvalActionService";
 
 type ActionType = "APPROVE" | "REJECT" | null;
 
-export const ApprovalActionUI: React.FC = () => {
+export interface ApprovalActionUIProps {
+  requestId: string | number;
+  onSuccess?: () => void;
+}
+
+export const ApprovalActionUI: React.FC<ApprovalActionUIProps> = ({ requestId, onSuccess }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [actionType, setActionType] = useState<ActionType>(null);
   const [comment, setComment] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const handleOpenModal = (type: ActionType) => {
     setActionType(type);
     setComment("");
+    setApiError(null);
     setIsOpen(true);
   };
 
   const handleCloseModal = () => {
+    if (isSubmitting) return;
     setIsOpen(false);
     setActionType(null);
   };
 
-  const handleConfirm = () => {
-    console.log("Action:", actionType);
-    console.log("Comment:", comment);
-    alert(`Đã thực hiện: ${actionType === "APPROVE" ? "Phê duyệt" : "Từ chối"} thành công! (Xem Console)`);
-    handleCloseModal();
+  const handleConfirm = async () => {
+    if (!actionType || comment.trim() === "") return;
+
+    setIsSubmitting(true);
+    setApiError(null);
+
+    try {
+      const payload: ApprovalActionPayload = {
+        action: actionType,
+        comment: comment.trim(),
+      };
+      await approvalActionService.submitAction(requestId, payload);
+      alert(`Đã thực hiện: ${actionType === "APPROVE" ? "Phê duyệt" : "Từ chối"} thành công!`);
+      if (onSuccess) onSuccess();
+      handleCloseModal();
+    } catch (error: any) {
+      setApiError(error?.response?.data?.message || "Đã có lỗi xảy ra. Vui lòng thử lại.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -74,11 +99,15 @@ export const ApprovalActionUI: React.FC = () => {
               </button>
             </div>
 
+            {apiError && (
+              <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 shadow-sm">
+                <p className="font-medium">Lỗi: {apiError}</p>
+              </div>
+            )}
+
             <div className="mb-8">
               <label htmlFor="comment" className="mb-2 block text-sm font-semibold text-slate-700">
-                Nhận xét / Lý do <span className={actionType === "REJECT" ? "text-rose-500" : "text-slate-400"}>
-                  {actionType === "REJECT" ? "*" : "(Không bắt buộc)"}
-                </span>
+                Nhận xét / Lý do <span className="text-rose-500">*</span>
               </label>
               <textarea
                 id="comment"
@@ -86,26 +115,38 @@ export const ApprovalActionUI: React.FC = () => {
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 placeholder="Vui lòng nhập nhận xét của bạn..."
-                className="w-full resize-none rounded-xl border border-slate-300 p-4 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                disabled={isSubmitting}
+                className={`w-full resize-none rounded-xl border p-4 text-sm outline-none transition focus:ring-2 ${
+                  comment.trim() === "" 
+                    ? "border-rose-300 bg-rose-50/30 text-rose-900 focus:border-rose-500 focus:ring-rose-200" 
+                    : "border-slate-300 bg-white text-slate-900 focus:border-indigo-500 focus:ring-indigo-100"
+                }`}
               />
+              {comment.trim() === "" && (
+                <p className="mt-2 text-xs font-medium text-rose-500">
+                  Vui lòng nhập nhận xét trước khi xác nhận.
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col-reverse justify-end gap-3 sm:flex-row">
               <button
                 onClick={handleCloseModal}
-                className="rounded-xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100"
+                disabled={isSubmitting}
+                className="rounded-xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100 disabled:opacity-50"
               >
                 Hủy bỏ
               </button>
               <button
                 onClick={handleConfirm}
-                disabled={actionType === "REJECT" && comment.trim() === ""}
-                className={`inline-flex items-center justify-center rounded-xl px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all focus:outline-none focus:ring-4 ${
+                disabled={comment.trim() === "" || isSubmitting}
+                className={`inline-flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all focus:outline-none focus:ring-4 disabled:cursor-not-allowed disabled:opacity-50 ${
                   actionType === "APPROVE"
                     ? "bg-emerald-600 shadow-emerald-600/20 hover:bg-emerald-700 focus:ring-emerald-100"
-                    : "bg-rose-600 shadow-rose-600/20 hover:bg-rose-700 focus:ring-rose-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-rose-600"
+                    : "bg-rose-600 shadow-rose-600/20 hover:bg-rose-700 focus:ring-rose-100"
                 }`}
               >
+                {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
                 Xác nhận
               </button>
             </div>
