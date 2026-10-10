@@ -1,34 +1,73 @@
 import React, { useState } from "react";
-import { PauseCircle, CheckSquare, XOctagon, X } from "lucide-react";
+import { PauseCircle, CheckSquare, XOctagon, X, Loader2, AlertTriangle } from "lucide-react";
+import { jobReqStatusService } from "../../services/jobReqStatusService";
 
-type ActionType = "PAUSE" | "CLOSE" | "CANCEL" | null;
+type ActionType = "PAUSED" | "CLOSED" | "CANCELLED" | null;
 
-export const JobReqStatusActionsUI: React.FC = () => {
+export interface JobReqStatusActionsUIProps {
+  jobRequisitionId: string | number;
+  onSuccess?: () => void;
+}
+
+export const JobReqStatusActionsUI: React.FC<JobReqStatusActionsUIProps> = ({
+  jobRequisitionId,
+  onSuccess,
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [actionType, setActionType] = useState<ActionType>(null);
   const [reason, setReason] = useState("");
+  
+  const [checkingAction, setCheckingAction] = useState<ActionType>(null);
+  const [activeCandidatesCount, setActiveCandidatesCount] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
-  const handleOpenAction = (type: ActionType) => {
-    setActionType(type);
-    setReason("");
-    setIsOpen(true);
+  const handleOpenAction = async (type: ActionType) => {
+    setCheckingAction(type);
+    setApiError(null);
+    try {
+      const data = await jobReqStatusService.getActiveCandidatesCount(jobRequisitionId);
+      setActiveCandidatesCount(data.count || 0);
+      setActionType(type);
+      setReason("");
+      setIsOpen(true);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || "Không thể kiểm tra số lượng ứng viên.");
+    } finally {
+      setCheckingAction(null);
+    }
   };
 
   const handleCloseModal = () => {
+    if (isSubmitting) return;
     setIsOpen(false);
     setActionType(null);
+    setActiveCandidatesCount(0);
   };
 
-  const handleConfirm = () => {
-    console.log("Thực hiện hành động:", actionType);
-    console.log("Lý do:", reason);
-    alert(`Đã thực hiện: ${actionType} thành công! (Xem Console)`);
-    handleCloseModal();
+  const handleConfirm = async () => {
+    if (!actionType) return;
+    
+    setIsSubmitting(true);
+    setApiError(null);
+    try {
+      await jobReqStatusService.updateStatus(jobRequisitionId, {
+        status: actionType,
+        reason: reason.trim() || undefined,
+      });
+      alert(`Đã cập nhật trạng thái thành công!`);
+      if (onSuccess) onSuccess();
+      handleCloseModal();
+    } catch (err: any) {
+      setApiError(err?.response?.data?.message || "Đã có lỗi xảy ra khi cập nhật trạng thái.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const getModalConfig = () => {
     switch (actionType) {
-      case "PAUSE":
+      case "PAUSED":
         return {
           title: "Xác nhận tạm dừng yêu cầu",
           description: "Yêu cầu tuyển dụng này sẽ tạm thời không nhận thêm ứng viên. Bạn có thể mở lại sau.",
@@ -37,7 +76,7 @@ export const JobReqStatusActionsUI: React.FC = () => {
           icon: <PauseCircle className="h-5 w-5" />,
           actionLabel: "Tạm dừng",
         };
-      case "CLOSE":
+      case "CLOSED":
         return {
           title: "Xác nhận đóng yêu cầu",
           description: "Đóng yêu cầu khi đã tuyển đủ người hoặc không còn nhu cầu. Việc mở lại sẽ cần duyệt lại.",
@@ -46,7 +85,7 @@ export const JobReqStatusActionsUI: React.FC = () => {
           icon: <CheckSquare className="h-5 w-5" />,
           actionLabel: "Đóng yêu cầu",
         };
-      case "CANCEL":
+      case "CANCELLED":
         return {
           title: "Xác nhận hủy bỏ yêu cầu",
           description: "Hủy bỏ yêu cầu tuyển dụng này. Hành động này không thể hoàn tác.",
@@ -74,26 +113,29 @@ export const JobReqStatusActionsUI: React.FC = () => {
 
         <div className="flex flex-wrap items-center gap-3">
           <button
-            onClick={() => handleOpenAction("PAUSE")}
-            className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 hover:border-amber-300 focus:outline-none focus:ring-4 focus:ring-amber-50"
+            onClick={() => handleOpenAction("PAUSED")}
+            disabled={checkingAction !== null}
+            className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 hover:border-amber-300 focus:outline-none focus:ring-4 focus:ring-amber-50 disabled:opacity-50"
           >
-            <PauseCircle className="h-4 w-4" />
+            {checkingAction === "PAUSED" ? <Loader2 className="h-4 w-4 animate-spin" /> : <PauseCircle className="h-4 w-4" />}
             Tạm dừng
           </button>
 
           <button
-            onClick={() => handleOpenAction("CLOSE")}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:border-slate-400 focus:outline-none focus:ring-4 focus:ring-slate-100"
+            onClick={() => handleOpenAction("CLOSED")}
+            disabled={checkingAction !== null}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:border-slate-400 focus:outline-none focus:ring-4 focus:ring-slate-100 disabled:opacity-50"
           >
-            <CheckSquare className="h-4 w-4" />
+            {checkingAction === "CLOSED" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckSquare className="h-4 w-4" />}
             Đóng
           </button>
 
           <button
-            onClick={() => handleOpenAction("CANCEL")}
-            className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 hover:border-rose-300 focus:outline-none focus:ring-4 focus:ring-rose-50"
+            onClick={() => handleOpenAction("CANCELLED")}
+            disabled={checkingAction !== null}
+            className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 hover:border-rose-300 focus:outline-none focus:ring-4 focus:ring-rose-50 disabled:opacity-50"
           >
-            <XOctagon className="h-4 w-4" />
+            {checkingAction === "CANCELLED" ? <Loader2 className="h-4 w-4 animate-spin" /> : <XOctagon className="h-4 w-4" />}
             Hủy bỏ
           </button>
         </div>
@@ -119,7 +161,8 @@ export const JobReqStatusActionsUI: React.FC = () => {
               </div>
               <button
                 onClick={handleCloseModal}
-                className="rounded-full p-2 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700 focus:outline-none"
+                disabled={isSubmitting}
+                className="rounded-full p-2 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700 focus:outline-none disabled:opacity-50"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -127,7 +170,26 @@ export const JobReqStatusActionsUI: React.FC = () => {
 
             {/* Modal Body */}
             <div className="p-6">
+              {apiError && (
+                <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+                  <p className="font-medium">Lỗi: {apiError}</p>
+                </div>
+              )}
+
               <p className="mb-6 text-sm text-slate-600">{config.description}</p>
+
+              {activeCandidatesCount > 0 && (
+                <div className="mb-6 flex gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-700 shadow-sm">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                  <div>
+                    <p className="font-bold">Cảnh báo quan trọng!</p>
+                    <p className="mt-1 text-sm">
+                      Hiện đang có <strong>{activeCandidatesCount} ứng viên</strong> trong quy trình tuyển dụng. 
+                      Bạn có chắc chắn muốn tiếp tục hành động này không?
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -137,8 +199,9 @@ export const JobReqStatusActionsUI: React.FC = () => {
                   rows={4}
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
+                  disabled={isSubmitting}
                   placeholder="Nhập lý do thay đổi trạng thái (nếu có)..."
-                  className="w-full resize-none rounded-xl border border-slate-300 p-4 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  className="w-full resize-none rounded-xl border border-slate-300 p-4 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:opacity-50"
                 />
               </div>
             </div>
@@ -147,14 +210,17 @@ export const JobReqStatusActionsUI: React.FC = () => {
             <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50/50 px-6 py-5">
               <button
                 onClick={handleCloseModal}
-                className="rounded-xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100"
+                disabled={isSubmitting}
+                className="rounded-xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100 disabled:opacity-50"
               >
                 Hủy bỏ
               </button>
               <button
                 onClick={handleConfirm}
-                className={`inline-flex items-center justify-center rounded-xl px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all focus:outline-none focus:ring-4 ${config.buttonColor}`}
+                disabled={isSubmitting}
+                className={`inline-flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all focus:outline-none focus:ring-4 disabled:opacity-50 ${config.buttonColor}`}
               >
+                {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
                 {config.actionLabel}
               </button>
             </div>
