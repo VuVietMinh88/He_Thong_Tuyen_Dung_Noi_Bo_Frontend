@@ -223,8 +223,11 @@ export const businessService = {
       'Không thể lưu câu hỏi phỏng vấn.',
     );
   },
+  deleteQuestion: (id: string) =>
+    call(() => axiosClient.delete<void>(`/interview-questions/${id}`), 'Không thể xóa câu hỏi phỏng vấn.'),
 
   getCatalog: (type: string) =>
+
     call(() => axiosClient.get<RecruitmentCatalogItem[]>(`/recruitment-catalogs/${type}/items`), 'Không thể tải danh mục.'),
   saveCatalogItem: (type: string, id: string | null, input: Pick<RecruitmentCatalogItem, 'code' | 'name' | 'active'>) =>
     call(

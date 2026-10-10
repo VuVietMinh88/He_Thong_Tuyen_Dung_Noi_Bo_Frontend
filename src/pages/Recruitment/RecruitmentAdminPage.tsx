@@ -9,6 +9,7 @@ import {
 } from '../../services/business.service';
 import { usePermission } from '../../hooks/usePermission';
 import CompetencyFrameworkList from '../../components/Recruitment/CompetencyFrameworkList';
+import InterviewQuestionList from '../../components/Recruitment/InterviewQuestionList';
 
 export type RecruitmentAdminMode = 'frameworks' | 'questions' | 'catalogs';
 
@@ -320,8 +321,12 @@ const RecruitmentAdminPage = ({ mode }: { mode: RecruitmentAdminMode }) => {
   if (mode === 'frameworks') {
     return <CompetencyFrameworkList />;
   }
+  if (mode === 'questions') {
+    return <InterviewQuestionList />;
+  }
   return <RecruitmentAdminLegacyContent mode={mode} />;
 };
+
 
 export default RecruitmentAdminPage;
 
