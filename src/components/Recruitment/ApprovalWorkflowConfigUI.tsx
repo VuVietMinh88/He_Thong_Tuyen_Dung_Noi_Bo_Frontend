@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
-import { Plus, Trash2, ArrowDown, Save } from "lucide-react";
+import { Plus, Trash2, ArrowDown, Save, Loader2 } from "lucide-react";
+import { approvalService, type ApprovalWorkflowPayload } from "../../services/approvalService";
 
 interface ApprovalStep {
   approverType: "ROLE" | "USER";
@@ -44,13 +45,54 @@ export const ApprovalWorkflowConfigUI: React.FC = () => {
     name: "steps",
   });
 
-  const onSubmit = (data: ApprovalWorkflowForm) => {
-    console.log("Approval Workflow Config:", data);
-    alert("Lưu cấu hình thành công! (Xem Console Log)");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const onSubmit = async (data: ApprovalWorkflowForm) => {
+    if (data.steps.length === 0) {
+      setErrorMessage("Luồng phê duyệt phải có ít nhất 1 cấp.");
+      return;
+    }
+    
+    setErrorMessage(null);
+    setIsSubmitting(true);
+    
+    try {
+      const payload: ApprovalWorkflowPayload = {
+        steps: data.steps.map((step, index) => ({
+          level: index + 1,
+          roleId: step.approverType === "ROLE" ? step.targetId : null,
+          userId: step.approverType === "USER" ? step.targetId : null,
+        })),
+      };
+      
+      await approvalService.saveConfig(payload);
+      alert("Lưu cấu hình thành công!");
+    } catch (err: any) {
+      setErrorMessage(err?.response?.data?.message || "Đã có lỗi xảy ra khi lưu cấu hình.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="mx-auto max-w-3xl p-4 sm:p-6 lg:p-8">
+    <div className="relative mx-auto max-w-3xl p-4 sm:p-6 lg:p-8">
+      {/* Overlay for loading */}
+      {isSubmitting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/20 backdrop-blur-sm">
+          <div className="flex flex-col items-center rounded-2xl bg-white p-6 shadow-xl">
+            <Loader2 className="mb-4 h-10 w-10 animate-spin text-indigo-600" strokeWidth={3} />
+            <p className="font-semibold text-slate-800">Đang lưu cấu hình...</p>
+          </div>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-700 shadow-sm animate-in fade-in slide-in-from-top-2">
+          <p className="font-medium">Lỗi: {errorMessage}</p>
+        </div>
+      )}
+
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">
           Cấu hình luồng phê duyệt
