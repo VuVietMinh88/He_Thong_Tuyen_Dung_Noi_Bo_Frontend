@@ -99,6 +99,24 @@ const RecruitmentPage = ({ initialTab = 'requisitions' }: { initialTab?: Tab }) 
     setShowForm(true);
   };
 
+  const openClone = (item: Requisition) => {
+    setEditing(null);
+    setPositionEditing(null);
+    setForm({
+      positionId: item.positionId,
+      departmentId: item.departmentId,
+      headcount: String(item.headcount),
+      reasonCode: item.reason,
+      proposedSalaryMin: item.proposedSalaryMin === null ? '' : String(item.proposedSalaryMin),
+      proposedSalaryMax: item.proposedSalaryMax === null ? '' : String(item.proposedSalaryMax),
+      salaryJustification: item.salaryJustification ?? '',
+      neededBy: '', // Ngày cần người bị bỏ trống đối với bản sao
+      jobDescription: item.jobDescription ?? '',
+      candidateRequirements: item.candidateRequirements ?? '',
+    });
+    setShowForm(true);
+  };
+
   const openEdit = (item: Requisition) => {
     setEditing(item);
     setForm({
@@ -297,7 +315,7 @@ const RecruitmentPage = ({ initialTab = 'requisitions' }: { initialTab?: Tab }) 
 
       {loading ? <div className="rounded-xl bg-white p-6 text-slate-600" role="status">Đang tải dữ liệu…</div> : (
         tab === 'requisitions'
-          ? <RequisitionTable items={requisitions} positions={positions} departments={departments} editable={canWriteRequisition} onEdit={openEdit} />
+          ? <RequisitionTable items={requisitions} positions={positions} departments={departments} editable={canWriteRequisition} onEdit={openEdit} onClone={openClone} />
           : <PositionTable
             items={positions}
             frameworks={frameworks}
@@ -346,8 +364,8 @@ const Table = ({ headers, rows }: { headers: string[]; rows: Array<Array<string 
   </table></div>
 );
 
-const RequisitionTable = ({ items, positions, departments, editable, onEdit }: {
-  items: Requisition[]; positions: Position[]; departments: Department[]; editable: boolean; onEdit: (item: Requisition) => void;
+const RequisitionTable = ({ items, positions, departments, editable, onEdit, onClone }: {
+  items: Requisition[]; positions: Position[]; departments: Department[]; editable: boolean; onEdit: (item: Requisition) => void; onClone: (item: Requisition) => void;
 }) => (
   <Table headers={['Chức danh', 'Phòng ban', 'Số lượng', 'Lý do', 'Trạng thái', 'Ngày cần', ...(editable ? ['Thao tác'] : [])]} rows={items.map((item) => [
     positions.find((position) => position.id === item.positionId)?.name ?? item.positionId,
@@ -356,7 +374,7 @@ const RequisitionTable = ({ items, positions, departments, editable, onEdit }: {
     item.reason === 'NEW_HEADCOUNT' ? 'Tăng định biên' : 'Thay thế',
     item.status,
     item.neededBy ?? '—',
-    ...(editable ? [<button className="font-medium text-indigo-700 underline" key={item.id} onClick={() => onEdit(item)} type="button">Sửa nháp</button>] : []),
+    ...(editable ? [<div className="flex gap-3" key={item.id}><button className="font-medium text-indigo-700 underline" onClick={() => onEdit(item)} type="button">Sửa nháp</button><button className="font-medium text-indigo-700 underline" onClick={() => onClone(item)} type="button">Sao chép</button></div>] : []),
   ])} />
 );
 
