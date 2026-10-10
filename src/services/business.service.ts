@@ -130,6 +130,16 @@ export interface RecruitmentCatalogItem {
   active: boolean;
 }
 
+export interface RequisitionFilters {
+  status?: string;
+  departmentId?: string;
+  recruiterId?: string;
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  size?: number;
+}
+
 const errorMessage = (error: unknown, fallback: string): Error => {
   if (axios.isAxiosError(error)) {
     const data: unknown = error.response?.data;
@@ -179,8 +189,18 @@ export const businessService = {
       'Không thể tải tiêu chí đánh giá.',
     ),
 
-  getRequisitions: (page = 0) =>
-    call(() => axiosClient.get<PageResult<Requisition>>('/requisitions', { params: { page, size: 100 } }), 'Không thể tải yêu cầu tuyển dụng.'),
+  getRequisitions: (filters: RequisitionFilters = {}) =>
+    call(() => axiosClient.get<PageResult<Requisition>>('/requisitions', { 
+      params: { 
+        page: filters.page ?? 0, 
+        size: filters.size ?? 100,
+        status: filters.status || undefined,
+        departmentId: filters.departmentId || undefined,
+        recruiterId: filters.recruiterId || undefined,
+        startDate: filters.startDate || undefined,
+        endDate: filters.endDate || undefined,
+      } 
+    }), 'Không thể tải yêu cầu tuyển dụng.'),
   saveRequisition: (id: string | null, input: RequisitionInput) =>
     call(
       () => id

@@ -316,7 +316,7 @@ const RecruitmentPage = ({ initialTab = 'requisitions' }: { initialTab?: Tab }) 
 
       {loading ? <div className="rounded-xl bg-white p-6 text-slate-600" role="status">Đang tải dữ liệu…</div> : (
         tab === 'requisitions'
-          ? <RequisitionList items={requisitions} positions={positions} departments={departments} editable={canWriteRequisition} onEdit={openEdit} onClone={openClone} />
+          ? <RequisitionList positions={positions} departments={departments} editable={canWriteRequisition} onEdit={openEdit} onClone={openClone} />
           : <PositionTable
             items={positions}
             frameworks={frameworks}
