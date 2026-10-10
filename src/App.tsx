@@ -22,6 +22,8 @@ import SessionDraftRestorer from "./components/routes/SessionDraftRestorer";
 import Sidebar from "./components/layout/Sidebar";
 import { getHealth, type HealthResponse } from "./services/healthService";
 import { ROLES, type Role } from "./constants/roles";
+import JobTitlesPage from "./pages/JobTitle/JobTitlesPage";
+import DepartmentPage from "./pages/Department/DepartmentPage";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -209,10 +211,18 @@ function App() {
               }
             >
               <Route
+                path="/settings/departments"
+                element={
+                  <MainLayout>
+                    <DepartmentPage />
+                  </MainLayout>
+                }
+              />
+              <Route
                 path="/settings/positions"
                 element={
                   <MainLayout>
-                    <RecruitmentPage initialTab="positions" />
+                    <JobTitlesPage />
                   </MainLayout>
                 }
               />
