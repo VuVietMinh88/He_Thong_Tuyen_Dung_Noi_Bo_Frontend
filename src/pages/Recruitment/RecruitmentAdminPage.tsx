@@ -8,6 +8,7 @@ import {
   type RecruitmentCatalogItem,
 } from '../../services/business.service';
 import { usePermission } from '../../hooks/usePermission';
+import CompetencyFrameworkList from '../../components/Recruitment/CompetencyFrameworkList';
 
 export type RecruitmentAdminMode = 'frameworks' | 'questions' | 'catalogs';
 
@@ -19,8 +20,9 @@ const CATALOG_TYPES = [
 ] as const;
 type FrameworkSummary = Pick<CompetencyFramework, 'id' | 'code' | 'name' | 'status'> & { criterionCount: number };
 
-const RecruitmentAdminPage = ({ mode }: { mode: RecruitmentAdminMode }) => {
+const RecruitmentAdminLegacyContent = ({ mode }: { mode: RecruitmentAdminMode }) => {
   const { permissions } = usePermission();
+
   const canWrite = permissions.includes('ORGANIZATION_WRITE_ALL');
   const [frameworks, setFrameworks] = useState<FrameworkSummary[]>([]);
   const [framework, setFramework] = useState<CompetencyFramework | null>(null);
@@ -314,4 +316,12 @@ const DataTable = ({ headers, rows }: { headers: string[]; rows: Array<Array<str
   <tbody className="divide-y divide-slate-100">{rows.length ? rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => <td className="max-w-xl px-4 py-3 text-slate-700" key={cellIndex}>{cell}</td>)}</tr>) : <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={headers.length}>Chưa có dữ liệu</td></tr>}</tbody>
 </table></div>;
 
+const RecruitmentAdminPage = ({ mode }: { mode: RecruitmentAdminMode }) => {
+  if (mode === 'frameworks') {
+    return <CompetencyFrameworkList />;
+  }
+  return <RecruitmentAdminLegacyContent mode={mode} />;
+};
+
 export default RecruitmentAdminPage;
+
