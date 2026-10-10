@@ -61,11 +61,7 @@ export const jobTitleService = {
   },
 
   // Xóa chức danh 
-  // LƯU Ý BẢO MẬT: Theo tài liệu Backend, chức danh không có API DELETE cứng để tránh lỗi mất lịch sử. 
-  // Việc "Xóa" nên được thực hiện bằng cách update active = false.
-  // Tuy nhiên, hàm này được giữ lại theo thiết kế của giao diện. Nếu gọi bị 404, hãy dùng updateJobTitle(id, {...old, active: false})
-  async deleteJobTitle(id: string): Promise<void> {
-    await axiosClient.delete(`/positions/${id}`);
-  },
+  // Lưu ý: Backend KHÔNG có API DELETE /positions/{id} để tránh mất lịch sử.
+  // Mọi thao tác "Xóa" đều được thực hiện thông qua hàm updateJobTitle với trường active = false.
 };
 
