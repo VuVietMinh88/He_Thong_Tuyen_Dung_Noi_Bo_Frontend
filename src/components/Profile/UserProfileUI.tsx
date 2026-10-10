@@ -7,6 +7,7 @@ import {
 import { useToast } from "../notifications/useToast";
 import { AvatarUploadUI } from "./AvatarUploadUI";
 import { avatarService } from "../../services/avatarService";
+import { validatePhoneVN } from "../../utils/validators";
 
 export type { UserProfile };
 
@@ -20,14 +21,6 @@ interface FormErrors {
   fullName?: string;
   phone?: string;
 }
-
-/*
- * Regex kiểm tra số điện thoại Việt Nam:
- * - Cho phép tiền tố quốc tế (+84) hoặc số 0 nội địa ở đầu.
- * - Thuê bao di động 10 chữ số bắt đầu bằng các đầu mạng: 03, 05, 07, 08, 09.
- * - Thuê bao cố định 11 chữ số bắt đầu bằng đầu số: 02.
- */
-const VIETNAM_PHONE_REGEX = /^(?:\+84|0)(?:[35789]\d{8}|2\d{9})$/;
 
 export const UserProfileUI: React.FC<UserProfileUIProps> = ({
   initialData,
@@ -172,9 +165,8 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
     }
 
     const trimmedPhone = phoneValue.trim();
-    if (trimmedPhone && !VIETNAM_PHONE_REGEX.test(trimmedPhone)) {
-      newErrors.phone =
-        "Số điện thoại không đúng định dạng Việt Nam (VD: 0912345678 hoặc +84912345678).";
+    if (trimmedPhone && !validatePhoneVN(trimmedPhone)) {
+      newErrors.phone = "Số điện thoại không hợp lệ. Vui lòng nhập đúng định dạng số Việt Nam.";
     }
 
     return newErrors;
@@ -603,8 +595,7 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
                 </p>
               ) : (
                 <p className="mt-1 text-xs text-slate-400">
-                  Di động 10 số (03/05/07/08/09), số cố định 11 số (02) hoặc có
-                  +84.
+                  Di động 10 số (03/05/07/08/09) hoặc bắt đầu bằng +84/84.
                 </p>
               )}
             </div>
