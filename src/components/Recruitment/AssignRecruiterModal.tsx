@@ -32,7 +32,7 @@ export const AssignRecruiterModal: React.FC<AssignRecruiterModalProps> = ({
   jobRequisitionTitle = "Yêu cầu tuyển dụng",
 }) => {
   const [activeTab, setActiveTab] = useState<"ASSIGN" | "HISTORY">("ASSIGN");
-  
+
   // Assign State
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -111,11 +111,11 @@ export const AssignRecruiterModal: React.FC<AssignRecruiterModalProps> = ({
   };
 
   return (
-    <div 
+    <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm transition-opacity"
       onClick={onClose}
     >
-      <div 
+      <div
         className="flex w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
@@ -136,21 +136,19 @@ export const AssignRecruiterModal: React.FC<AssignRecruiterModalProps> = ({
               <X className="h-5 w-5" />
             </button>
           </div>
-          
+
           <div className="flex px-6">
             <button
               onClick={() => setActiveTab("ASSIGN")}
-              className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${
-                activeTab === "ASSIGN" ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-500 hover:text-slate-700"
-              }`}
+              className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${activeTab === "ASSIGN" ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-500 hover:text-slate-700"
+                }`}
             >
               <UserPlus className="h-4 w-4" /> Phân công mới
             </button>
             <button
               onClick={() => setActiveTab("HISTORY")}
-              className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${
-                activeTab === "HISTORY" ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-500 hover:text-slate-700"
-              }`}
+              className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${activeTab === "HISTORY" ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-500 hover:text-slate-700"
+                }`}
             >
               <History className="h-4 w-4" /> Lịch sử
             </button>
@@ -189,11 +187,10 @@ export const AssignRecruiterModal: React.FC<AssignRecruiterModalProps> = ({
                     <div
                       key={recruiter.id}
                       onClick={() => !isSubmitting && setSelectedId(recruiter.id)}
-                      className={`flex cursor-pointer items-center gap-3 rounded-lg p-2.5 transition-colors ${
-                        selectedId === recruiter.id
+                      className={`flex cursor-pointer items-center gap-3 rounded-lg p-2.5 transition-colors ${selectedId === recruiter.id
                           ? "bg-indigo-50 ring-1 ring-indigo-200"
                           : "hover:bg-slate-50"
-                      } ${isSubmitting && "opacity-50 cursor-not-allowed"}`}
+                        } ${isSubmitting && "opacity-50 cursor-not-allowed"}`}
                     >
                       {/* Avatar */}
                       {recruiter.avatarUrl ? (
@@ -215,9 +212,8 @@ export const AssignRecruiterModal: React.FC<AssignRecruiterModalProps> = ({
                       </div>
 
                       {/* Checkbox equivalent */}
-                      <div className={`flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors ${
-                        selectedId === recruiter.id ? "border-indigo-600" : "border-slate-300"
-                      }`}>
+                      <div className={`flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors ${selectedId === recruiter.id ? "border-indigo-600" : "border-slate-300"
+                        }`}>
                         {selectedId === recruiter.id && (
                           <div className="h-2.5 w-2.5 rounded-full bg-indigo-600"></div>
                         )}
