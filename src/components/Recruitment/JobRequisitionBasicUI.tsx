@@ -8,10 +8,7 @@ const basicInfoSchema = z.object({
   jobTitle: z.string().min(1, "Vui lòng nhập chức danh cần tuyển."),
   department: z.string().min(1, "Vui lòng chọn phòng ban."),
   level: z.string().min(1, "Vui lòng chọn cấp bậc."),
-  headcount: z.preprocess(
-    (val) => (val ? Number(val) : 0),
-    z.number().min(1, "Số lượng cần tuyển phải lớn hơn 0."),
-  ),
+  headcount: z.number().min(1, "Số lượng cần tuyển phải lớn hơn 0."),
   jobType: z.string().min(1, "Vui lòng chọn loại hình công việc."),
   expectedJoinDate: z.string().min(1, "Vui lòng chọn ngày cần nhân sự."),
 });
@@ -232,7 +229,7 @@ export const JobRequisitionBasicUI: React.FC<JobRequisitionBasicUIProps> = ({
                     ? "border-rose-300 bg-rose-50/30 focus:border-rose-500 focus:ring-rose-200"
                     : "border-slate-300 focus:border-indigo-500 focus:ring-indigo-100"
                 }`}
-                {...register("headcount")}
+                {...register("headcount", { valueAsNumber: true })}
               />
               {errors.headcount && (
                 <p className="mt-1.5 text-xs font-medium text-rose-600">
