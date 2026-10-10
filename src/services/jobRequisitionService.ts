@@ -10,6 +10,8 @@ export interface CreateJobRequisitionPayload {
   description: string;
   requirements: string;
   benefits: string;
+  isOverride?: boolean;
+  overrideReason?: string;
 }
 
 export const jobRequisitionService = {

@@ -1,7 +1,8 @@
-import React from "react";
-import { useForm, type SubmitHandler } from "react-hook-form";
+import React, { useState, useEffect, useMemo } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { HeadcountOverrideModal } from "./HeadcountOverrideModal";
 
 // Zod schema for form validation
 const basicInfoSchema = z.object({
@@ -11,6 +12,8 @@ const basicInfoSchema = z.object({
   headcount: z.number().min(1, "Số lượng cần tuyển phải lớn hơn 0."),
   jobType: z.string().min(1, "Vui lòng chọn loại hình công việc."),
   expectedJoinDate: z.string().min(1, "Vui lòng chọn ngày cần nhân sự."),
+  isOverride: z.boolean().optional(),
+  overrideReason: z.string().optional(),
 });
 
 type BasicInfoFormValues = z.infer<typeof basicInfoSchema>;
@@ -48,6 +51,7 @@ export const JobRequisitionBasicUI: React.FC<JobRequisitionBasicUIProps> = ({
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors },
   } = useForm<BasicInfoFormValues>({
     resolver: zodResolver(basicInfoSchema),
@@ -58,16 +62,67 @@ export const JobRequisitionBasicUI: React.FC<JobRequisitionBasicUIProps> = ({
       headcount: 1,
       jobType: "",
       expectedJoinDate: "",
+      isOverride: false,
+      overrideReason: "",
     },
   });
 
-  const onSubmit: SubmitHandler<BasicInfoFormValues> = (data) => {
-    console.log("Job Requisition Basic Data:", data);
-    if (onNext) {
-      onNext(data);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [remainingHeadcount, setRemainingHeadcount] = useState<number>(0);
+
+  // Mock currentUserRole (in real app, get from Context/Redux)
+  const currentUserRole = "HR_MANAGER"; 
+
+  const selectedDepartment = useWatch({ control, name: "department" });
+  const selectedHeadcount = useWatch({ control, name: "headcount" });
+
+  useEffect(() => {
+    if (selectedDepartment) {
+      // Mock API call to get remaining headcount based on department
+      // Example: IT has 2, HR has 5, etc.
+      const mockHeadcountData: Record<string, number> = {
+        IT: 2,
+        HR: 5,
+        Marketing: 1,
+      };
+      setRemainingHeadcount(mockHeadcountData[selectedDepartment] || 0);
     } else {
-      alert("Dữ liệu hợp lệ! (Xem console log)");
+      setRemainingHeadcount(0);
     }
+  }, [selectedDepartment]);
+
+  const isOverHeadcount = useMemo(() => {
+    if (!selectedDepartment) return false;
+    return (selectedHeadcount || 0) > remainingHeadcount;
+  }, [selectedDepartment, selectedHeadcount, remainingHeadcount]);
+
+  const handleNormalSubmit = () => {
+    if (isOverHeadcount) return;
+    handleSubmit((data) => {
+      data.isOverride = false;
+      data.overrideReason = "";
+      console.log("Job Requisition Basic Data:", data);
+      if (onNext) onNext(data);
+    })();
+  };
+
+  const handleOverrideSubmit = (reason: string) => {
+    handleSubmit((data) => {
+      data.isOverride = true;
+      data.overrideReason = reason;
+      console.log("Job Requisition Basic Data (Override):", data);
+      setIsModalOpen(false);
+      if (onNext) onNext(data);
+    })();
+  };
+
+  const onFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isOverHeadcount && currentUserRole === "HR_MANAGER") {
+      // Just prevent default, don't open modal automatically, they must click the override button
+      return;
+    }
+    handleNormalSubmit();
   };
 
   return (
@@ -88,7 +143,7 @@ export const JobRequisitionBasicUI: React.FC<JobRequisitionBasicUIProps> = ({
           <h2 className="text-lg font-bold text-slate-900">Thông tin cơ bản</h2>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="p-6 sm:p-8">
+        <form onSubmit={onFormSubmit} className="p-6 sm:p-8">
           <div className="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
             {/* Job Title */}
             <div className="md:col-span-2">
@@ -213,7 +268,7 @@ export const JobRequisitionBasicUI: React.FC<JobRequisitionBasicUIProps> = ({
             </div>
 
             {/* Headcount */}
-            <div>
+            <div className="md:col-span-2 lg:col-span-1">
               <label
                 htmlFor="headcount"
                 className="mb-1.5 block text-sm font-semibold text-slate-700"
@@ -231,6 +286,11 @@ export const JobRequisitionBasicUI: React.FC<JobRequisitionBasicUIProps> = ({
                 }`}
                 {...register("headcount", { valueAsNumber: true })}
               />
+              {selectedDepartment && (
+                <p className={`mt-1.5 text-sm font-medium ${isOverHeadcount ? 'text-rose-600' : 'text-emerald-600'}`}>
+                  Định biên còn lại: {remainingHeadcount}
+                </p>
+              )}
               {errors.headcount && (
                 <p className="mt-1.5 text-xs font-medium text-rose-600">
                   {errors.headcount.message}
@@ -312,8 +372,26 @@ export const JobRequisitionBasicUI: React.FC<JobRequisitionBasicUIProps> = ({
             </div>
           </div>
 
+          {/* Alert Cảnh báo vượt định biên */}
+          {isOverHeadcount && (
+            <div className="mt-8 rounded-lg border-l-4 border-rose-500 bg-rose-50 p-4">
+              <div className="flex">
+                <svg className="h-5 w-5 text-rose-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                <div className="ml-3">
+                  <h3 className="text-sm font-semibold text-rose-800">Cảnh báo vượt định biên!</h3>
+                  <p className="text-sm text-rose-700 mt-1">
+                    Số lượng yêu cầu tuyển ({selectedHeadcount}) đang vượt quá định biên cho phép của phòng ban ({remainingHeadcount}).
+                    {currentUserRole !== 'HR_MANAGER' && " Bạn không thể tạo yêu cầu này."}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Form Actions */}
-          <div className="mt-10 flex flex-col-reverse justify-end gap-3 border-t border-slate-100 pt-6 sm:flex-row">
+          <div className="mt-8 flex flex-col-reverse justify-end gap-3 border-t border-slate-100 pt-6 sm:flex-row">
             <button
               type="button"
               onClick={onCancel}
@@ -322,8 +400,14 @@ export const JobRequisitionBasicUI: React.FC<JobRequisitionBasicUIProps> = ({
               Hủy
             </button>
             <button
-              type="submit"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              type="button"
+              onClick={handleNormalSubmit}
+              disabled={isOverHeadcount}
+              className={`inline-flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold text-white shadow-xs transition focus:outline-none focus:ring-2 ${
+                isOverHeadcount 
+                  ? 'bg-slate-300 cursor-not-allowed text-slate-500' 
+                  : 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-200'
+              }`}
             >
               Tiếp tục
               <svg
@@ -333,16 +417,31 @@ export const JobRequisitionBasicUI: React.FC<JobRequisitionBasicUIProps> = ({
                 strokeWidth={2}
                 viewBox="0 0 24 24"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9 5l7 7-7 7"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
               </svg>
             </button>
+
+            {isOverHeadcount && currentUserRole === 'HR_MANAGER' && (
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(true)}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-6 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-200"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                Tiếp tục & Ghi đè chỉ tiêu
+              </button>
+            )}
           </div>
         </form>
       </div>
+
+      <HeadcountOverrideModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={handleOverrideSubmit}
+      />
     </div>
   );
 };
