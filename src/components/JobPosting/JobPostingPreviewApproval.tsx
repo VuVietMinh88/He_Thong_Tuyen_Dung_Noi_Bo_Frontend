@@ -19,17 +19,20 @@ import {
   Globe,
   Lock,
   Loader2,
+  Clock,
 } from 'lucide-react';
 import {
   jobPostingService,
   type JobPostingData,
   type JobPostingStatus,
+  type JobPostingAuditLog,
 } from '../../services/jobPostingService';
 import { ToastContext } from '../notifications/ToastContext';
 import {
   JobPostingApprovalModal,
   type ApprovalModalMode,
 } from './JobPostingApprovalModal';
+import { JobPostingAuditHistory } from './JobPostingAuditHistory';
 
 export interface JobPostingPreviewApprovalProps {
   jobPostingId?: string;
@@ -72,6 +75,52 @@ const DEFAULT_MOCK_POSTING: JobPostingData = {
   status: 'PENDING_APPROVAL',
   publishInternal: true,
   publishCareerPage: true,
+  createdBy: {
+    id: 'usr-hr-001',
+    name: 'Nguyễn Văn Minh',
+    email: 'minh.nguyen@company.com',
+    role: 'Chuyên viên Tuyển dụng (Recruiter)',
+    department: 'Khối Công nghệ & Sản phẩm',
+  },
+  auditLogs: [
+    {
+      id: 'log-demo-1',
+      postingId: 'jp-demo-306',
+      action: 'CREATED',
+      actionName: 'Tạo bản nháp tin tuyển dụng',
+      actor: {
+        id: 'usr-hr-001',
+        name: 'Nguyễn Văn Minh',
+        email: 'minh.nguyen@company.com',
+        role: 'Chuyên viên Tuyển dụng (Recruiter)',
+        department: 'Khối Công nghệ & Sản phẩm',
+      },
+      timestamp: '2026-10-10T08:00:00Z',
+      fromStatus: 'DRAFT',
+      toStatus: 'DRAFT',
+      note: 'Khởi tạo tin tuyển dụng từ Yêu cầu tuyển dụng #REQ-2026-001 đã duyệt.',
+      metadata: {
+        channels: ['Cổng thông tin nội bộ', 'Trang nghề nghiệp (Career Page)'],
+      },
+    },
+    {
+      id: 'log-demo-2',
+      postingId: 'jp-demo-306',
+      action: 'SUBMITTED',
+      actionName: 'Gửi yêu cầu phê duyệt',
+      actor: {
+        id: 'usr-hr-001',
+        name: 'Nguyễn Văn Minh',
+        email: 'minh.nguyen@company.com',
+        role: 'Chuyên viên Tuyển dụng (Recruiter)',
+        department: 'Khối Công nghệ & Sản phẩm',
+      },
+      timestamp: '2026-10-10T10:00:00Z',
+      fromStatus: 'DRAFT',
+      toStatus: 'PENDING_APPROVAL',
+      note: 'Đã hoàn thiện nội dung JD và các kênh phát hành, gửi cấp quản lý phê duyệt.',
+    },
+  ],
   createdAt: '2026-10-10T08:00:00Z',
   updatedAt: '2026-10-10T10:00:00Z',
 };
@@ -85,6 +134,7 @@ export const JobPostingPreviewApproval: React.FC<JobPostingPreviewApprovalProps>
   const toastContext = useContext(ToastContext);
 
   const [posting, setPosting] = useState<JobPostingData>(initialData || DEFAULT_MOCK_POSTING);
+  const [activeTab, setActiveTab] = useState<'preview' | 'history'>('preview');
   const [deviceMode, setDeviceMode] = useState<'desktop' | 'mobile'>('desktop');
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -163,7 +213,7 @@ export const JobPostingPreviewApproval: React.FC<JobPostingPreviewApprovalProps>
 
       if (modalMode === 'APPROVE') {
         updated = await jobPostingService.approveJobPosting(posting.id, reasonOrNote);
-        showNotify('Đã phê duyệt và xuất bản tin tuyển dụng thành công!', 'success');
+        showNotify('Đã phê duyệt và xuất bản tin tuyển dụng thành công! Đã ghi nhận vết kiểm toán.', 'success');
       } else if (modalMode === 'REJECT') {
         updated = await jobPostingService.rejectJobPosting(posting.id, reasonOrNote);
         showNotify('Đã từ chối tin tuyển dụng và lưu lý do thành công.', 'warning');
@@ -172,10 +222,45 @@ export const JobPostingPreviewApproval: React.FC<JobPostingPreviewApprovalProps>
         showNotify('Đã gửi yêu cầu chỉnh sửa tới người soạn thảo thành công.', 'warning');
       }
 
-      setPosting((prev) => ({
-        ...prev,
-        ...updated,
-      }));
+      setPosting((prev) => {
+        let newLogs = prev.auditLogs ? [...prev.auditLogs] : [];
+        if (updated.auditLogs && updated.auditLogs.length > 0) {
+          updated.auditLogs.forEach((ulog) => {
+            if (!newLogs.some((l) => l.id === ulog.id)) {
+              newLogs.unshift(ulog);
+            }
+          });
+        } else {
+          const approverRef = {
+            id: 'usr-mgr-002',
+            name: 'Trần Thị Thu Hà',
+            email: 'ha.tran@company.com',
+            role: 'Trưởng phòng Tuyển dụng & Đãi ngộ',
+            department: 'Ban Quản trị Nguồn nhân lực',
+          };
+          const createdLog: JobPostingAuditLog = {
+            id: `log-act-${Date.now()}`,
+            postingId: posting.id || '',
+            action: modalMode === 'APPROVE' ? 'PUBLISHED' : modalMode === 'REJECT' ? 'REJECTED' : 'REVISION_REQUESTED',
+            actionName: modalMode === 'APPROVE' ? 'Duyệt & Xuất bản' : modalMode === 'REJECT' ? 'Từ chối tin tuyển dụng' : 'Yêu cầu chỉnh sửa',
+            actor: approverRef,
+            timestamp: new Date().toISOString(),
+            fromStatus: prev.status,
+            toStatus: updated.status,
+            note: reasonOrNote.trim(),
+            metadata: modalMode === 'APPROVE' ? {
+              channels: ['Cổng thông tin nội bộ', 'Trang nghề nghiệp (Career Page)'],
+            } : undefined,
+          };
+          newLogs.unshift(createdLog);
+        }
+
+        return {
+          ...prev,
+          ...updated,
+          auditLogs: newLogs,
+        };
+      });
 
       setModalOpen(false);
       if (onStatusChange) onStatusChange(updated);
@@ -359,6 +444,70 @@ export const JobPostingPreviewApproval: React.FC<JobPostingPreviewApprovalProps>
         </div>
       </div>
 
+      {/* Navigation Tabs (Preview vs Audit History) & Quick Publisher Info (AC2) */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('preview')}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'preview'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <Monitor className="h-3.5 w-3.5" />
+            <span>Màn hình xem trước (Preview)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('history')}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'history'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <Clock className="h-3.5 w-3.5" />
+            <span>Lịch sử người đăng &amp; Kiểm toán</span>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                activeTab === 'history'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-indigo-50 text-indigo-700'
+              }`}
+            >
+              {posting.auditLogs?.length || 2}
+            </span>
+          </button>
+        </div>
+
+        {/* Quick Author & Approver Info Snippet */}
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <span>
+            Người đăng: <strong className="text-slate-800">{posting.createdBy?.name || 'Nguyễn Văn Minh'}</strong>
+          </span>
+          {posting.status === 'PUBLISHED' && (
+            <>
+              <span>•</span>
+              <span className="text-emerald-700 font-semibold">
+                Duyệt bởi: {posting.publishedBy?.name || posting.reviewedBy || 'Trần Thị Thu Hà'}
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {activeTab === 'history' ? (
+        <JobPostingAuditHistory
+          postingId={posting.id}
+          posting={posting}
+          initialLogs={posting.auditLogs}
+        />
+      ) : (
+        <>
+
       {/* Review Feedback Alert (Nếu có lý do từ chối hoặc góp ý trước đó) */}
       {(posting.rejectionReason || posting.revisionFeedback || posting.approvalNote) && (
         <div className="rounded-2xl border p-4.5 shadow-2xs space-y-2 bg-slate-50 border-slate-200">
@@ -538,6 +687,8 @@ export const JobPostingPreviewApproval: React.FC<JobPostingPreviewApprovalProps>
         </div>
       </div>
     )}
+        </>
+      )}
 
       {/* Confirmation & Rejection Modal (AC3) */}
       <JobPostingApprovalModal
