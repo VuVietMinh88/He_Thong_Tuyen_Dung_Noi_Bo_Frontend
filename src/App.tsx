@@ -24,6 +24,7 @@ import { getHealth, type HealthResponse } from "./services/healthService";
 import { ROLES, type Role } from "./constants/roles";
 import JobTitlesPage from "./pages/JobTitle/JobTitlesPage";
 import DepartmentPage from "./pages/Department/DepartmentPage";
+import MasterDataManagement from "./pages/MasterData/MasterDataManagement";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -247,6 +248,14 @@ function App() {
                 element={
                   <MainLayout>
                     <RecruitmentAdminPage mode="catalogs" />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/settings/master-data"
+                element={
+                  <MainLayout>
+                    <MasterDataManagement />
                   </MainLayout>
                 }
               />
