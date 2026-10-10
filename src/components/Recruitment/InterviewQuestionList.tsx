@@ -453,6 +453,7 @@ export const InterviewQuestionList: FC = () => {
       <InterviewQuestionFormModal
         isOpen={isModalOpen}
         questionToEdit={editingQuestion}
+        initialFrameworkId={selectedFrameworkId}
         onClose={() => setIsModalOpen(false)}
         onSuccess={() => void loadInitialData()}
       />
