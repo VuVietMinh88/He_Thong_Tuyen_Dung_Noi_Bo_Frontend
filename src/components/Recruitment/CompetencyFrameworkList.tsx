@@ -1,26 +1,17 @@
 import { useState, useEffect, useCallback, type FC } from 'react';
 import {
-  businessService,
+  competencyService,
   type CompetencyFramework,
-} from '../../services/business.service';
+  type CompetencyFrameworkSummary,
+} from '../../services/competencyService';
 import { usePermission } from '../../hooks/usePermission';
 import CompetencyFrameworkFormModal from './CompetencyFrameworkFormModal';
-
-interface FrameworkSummary {
-  id: string;
-  code: string;
-  name: string;
-  description: string | null;
-  status: 'DRAFT' | 'ACTIVE';
-  criterionCount: number;
-  positions?: Array<{ id: string; code: string; name: string; level: string; active: boolean }>;
-}
 
 export const CompetencyFrameworkList: FC = () => {
   const { permissions } = usePermission();
   const canWrite = permissions.includes('ORGANIZATION_WRITE_ALL');
 
-  const [frameworks, setFrameworks] = useState<FrameworkSummary[]>([]);
+  const [frameworks, setFrameworks] = useState<CompetencyFrameworkSummary[]>([]);
   const [frameworkDetailsMap, setFrameworkDetailsMap] = useState<Record<string, CompetencyFramework>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
@@ -41,12 +32,12 @@ export const CompetencyFrameworkList: FC = () => {
     setIsLoading(true);
     setErrorMessage('');
     try {
-      const response = await businessService.getFrameworks(0);
+      const response = await competencyService.getFrameworks(0);
       setFrameworks(response.items);
 
       // Tải chi tiết positions của từng framework để hiển thị badges chức danh
       const detailsList = await Promise.allSettled(
-        response.items.map((item) => businessService.getFramework(item.id)),
+        response.items.map((item) => competencyService.getFrameworkById(item.id)),
       );
 
       const map: Record<string, CompetencyFramework> = {};
@@ -68,6 +59,7 @@ export const CompetencyFrameworkList: FC = () => {
   useEffect(() => {
     void fetchFrameworks();
   }, [fetchFrameworks]);
+
 
   // Lọc dữ liệu
   const filteredFrameworks = frameworks.filter((fw) => {
@@ -95,7 +87,7 @@ export const CompetencyFrameworkList: FC = () => {
 
   const handleOpenViewModal = async (id: string) => {
     try {
-      const detail = frameworkDetailsMap[id] ?? (await businessService.getFramework(id));
+      const detail = frameworkDetailsMap[id] ?? (await competencyService.getFrameworkById(id));
       setViewingFramework(detail);
     } catch (err: unknown) {
       setErrorMessage(

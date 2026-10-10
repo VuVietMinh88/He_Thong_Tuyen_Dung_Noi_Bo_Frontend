@@ -1,9 +1,14 @@
 import { useState, useEffect, type FC, type FormEvent } from 'react';
 import {
   businessService,
-  type CompetencyFramework,
   type Position,
 } from '../../services/business.service';
+
+import {
+  competencyService,
+  type CompetencyFramework,
+} from '../../services/competencyService';
+
 import {
   calculateTotalWeight,
   isWeightValid,
@@ -42,7 +47,6 @@ export const CompetencyFrameworkFormModal: FC<CompetencyFrameworkFormModalProps>
   });
 
   const [availablePositions, setAvailablePositions] = useState<Position[]>([]);
-  const [initialPositionIds, setInitialPositionIds] = useState<string[]>([]);
   const [positionSearchTerm, setPositionSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -64,10 +68,10 @@ export const CompetencyFrameworkFormModal: FC<CompetencyFrameworkFormModalProps>
         }
 
         if (frameworkId) {
-          const frameworkData = await businessService.getFramework(frameworkId);
+          const frameworkData = await competencyService.getFrameworkById(frameworkId);
           if (isMounted) {
+
             const currentPositionIds = frameworkData.positions.map((pos) => pos.id);
-            setInitialPositionIds(currentPositionIds);
             setFormData({
               id: frameworkData.id,
               code: frameworkData.code,
@@ -87,8 +91,8 @@ export const CompetencyFrameworkFormModal: FC<CompetencyFrameworkFormModalProps>
         } else {
           // Tạo mới
           if (isMounted) {
-            setInitialPositionIds([]);
             setFormData({
+
               code: '',
               name: '',
               description: '',
@@ -195,8 +199,8 @@ export const CompetencyFrameworkFormModal: FC<CompetencyFrameworkFormModalProps>
     setIsSaving(true);
 
     try {
-      // 1. Lưu khung năng lực qua API
-      const savedFramework = await businessService.saveFramework(formData.id ?? null, {
+      const savedFramework = await competencyService.saveCompetencyFramework({
+        id: formData.id ?? null,
         code: formData.code.trim().toUpperCase(),
         name: formData.name.trim(),
         description: formData.description.trim() || null,
@@ -207,38 +211,10 @@ export const CompetencyFrameworkFormModal: FC<CompetencyFrameworkFormModalProps>
           description: c.description.trim() || null,
           weight: Number(c.weight),
         })),
+        positionIds: formData.assignedPositionIds,
       });
 
-      // 2. Đồng bộ các chức danh được gán cho khung năng lực này
-      const targetFrameworkId = savedFramework.id;
-      const currentSelected = new Set(formData.assignedPositionIds);
-      const initiallySelected = new Set(initialPositionIds);
-
-      // Các chức danh cần gán mới
-      const positionsToAssign = formData.assignedPositionIds.filter(
-        (id) => !initiallySelected.has(id),
-      );
-
-      // Các chức danh cần gỡ bỏ
-      const positionsToRemove = initialPositionIds.filter(
-        (id) => !currentSelected.has(id),
-      );
-
-      // Thực thi đồng bộ chức danh
-      const syncPromises: Promise<unknown>[] = [
-        ...positionsToAssign.map((posId) =>
-          businessService.assignPositionFramework(posId, targetFrameworkId),
-        ),
-        ...positionsToRemove.map((posId) =>
-          businessService.removePositionFramework(posId),
-        ),
-      ];
-
-      await Promise.allSettled(syncPromises);
-
-      // Tải lại chi tiết framework đã cập nhật chức danh để trả về
-      const refreshedFramework = await businessService.getFramework(targetFrameworkId);
-      onSuccess(refreshedFramework);
+      onSuccess(savedFramework);
       onClose();
     } catch (saveError: unknown) {
       setErrorMessage(
@@ -247,6 +223,7 @@ export const CompetencyFrameworkFormModal: FC<CompetencyFrameworkFormModalProps>
     } finally {
       setIsSaving(false);
     }
+
   };
 
   if (!isOpen) return null;
