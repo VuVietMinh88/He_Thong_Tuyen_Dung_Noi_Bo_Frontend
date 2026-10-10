@@ -1,10 +1,9 @@
-import React, { useState, useMemo } from 'react';
-import { differenceInDays, parseISO, isAfter, isBefore, startOfDay } from 'date-fns';
-import { AlertCircle, X, Edit, Copy } from 'lucide-react';
-import type { Requisition, Position, Department } from '../../services/business.service';
+import React, { useState, useMemo, useEffect } from 'react';
+import { differenceInDays, parseISO, startOfDay } from 'date-fns';
+import { AlertCircle, X, Edit, Copy, Inbox, RefreshCcw } from 'lucide-react';
+import { businessService, type Requisition, type Position, type Department } from '../../services/business.service';
 
 export interface RequisitionListProps {
-  items: Requisition[];
   positions: Position[];
   departments: Department[];
   editable: boolean;
@@ -12,8 +11,9 @@ export interface RequisitionListProps {
   onClone: (item: Requisition) => void;
 }
 
+const STATUSES = ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED', 'OPEN', 'CLOSED', 'CANCELLED'];
+
 export const RequisitionList: React.FC<RequisitionListProps> = ({
-  items,
   positions,
   departments,
   editable,
@@ -25,6 +25,36 @@ export const RequisitionList: React.FC<RequisitionListProps> = ({
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
 
+  const [data, setData] = useState<Requisition[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchRequisitions = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await businessService.getRequisitions({
+        status: filterStatus,
+        departmentId: filterDepartment,
+        startDate: dateFrom,
+        endDate: dateTo,
+      });
+      setData(response.items || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Đã có lỗi xảy ra khi tải dữ liệu.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      fetchRequisitions();
+    }, 500);
+    return () => clearTimeout(handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterStatus, filterDepartment, dateFrom, dateTo]);
+
   const clearFilters = () => {
     setFilterStatus('');
     setFilterDepartment('');
@@ -33,21 +63,9 @@ export const RequisitionList: React.FC<RequisitionListProps> = ({
   };
 
   const today = useMemo(() => startOfDay(new Date()), []);
-  const statuses = useMemo(() => Array.from(new Set(items.map(i => i.status))), [items]);
 
-  const filteredData = useMemo(() => {
-    return items.filter((req) => {
-      if (filterStatus && req.status !== filterStatus) return false;
-      if (filterDepartment && req.departmentId !== filterDepartment) return false;
-      
-      if (dateFrom || dateTo) {
-        if (!req.neededBy) return false;
-        const target = parseISO(req.neededBy);
-        if (dateFrom && isBefore(target, parseISO(dateFrom))) return false;
-        if (dateTo && isAfter(target, parseISO(dateTo))) return false;
-      }
-      return true;
-    }).map((req) => {
+  const processedData = useMemo(() => {
+    return data.map((req) => {
       let openDays: number | string = '-';
       let daysLeft: number | string = '-';
       let isOverdue = false;
@@ -73,7 +91,7 @@ export const RequisitionList: React.FC<RequisitionListProps> = ({
         departmentName: departments.find(d => d.id === req.departmentId)?.name ?? req.departmentId,
       };
     });
-  }, [items, filterStatus, filterDepartment, dateFrom, dateTo, today, positions, departments]);
+  }, [data, today, positions, departments]);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-4">
@@ -87,7 +105,7 @@ export const RequisitionList: React.FC<RequisitionListProps> = ({
               onChange={(e) => setFilterStatus(e.target.value)}
             >
               <option value="">Tất cả trạng thái</option>
-              {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           
@@ -135,7 +153,21 @@ export const RequisitionList: React.FC<RequisitionListProps> = ({
         )}
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto relative min-h-[200px]">
+        {error && (
+          <div className="absolute inset-0 z-10 bg-white/90 flex flex-col items-center justify-center p-6 text-center">
+            <AlertCircle className="w-10 h-10 text-red-500 mb-3" />
+            <h3 className="text-sm font-semibold text-slate-900 mb-1">Không thể tải dữ liệu</h3>
+            <p className="text-sm text-slate-500 mb-4">{error}</p>
+            <button 
+              onClick={fetchRequisitions}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors text-sm font-medium"
+            >
+              <RefreshCcw className="w-4 h-4" /> Thử lại
+            </button>
+          </div>
+        )}
+
         <table className="min-w-full text-left text-sm text-slate-600">
           <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-200">
             <tr>
@@ -150,17 +182,39 @@ export const RequisitionList: React.FC<RequisitionListProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filteredData.length === 0 ? (
+            {loading ? (
+              // Skeleton Loading
+              Array.from({ length: 5 }).map((_, idx) => (
+                <tr key={idx} className="animate-pulse">
+                  <td className="px-4 py-4"><div className="h-4 bg-slate-200 rounded w-3/4"></div></td>
+                  <td className="px-4 py-4"><div className="h-4 bg-slate-200 rounded w-1/2"></div></td>
+                  <td className="px-4 py-4"><div className="h-4 bg-slate-200 rounded w-8"></div></td>
+                  <td className="px-4 py-4"><div className="h-4 bg-slate-200 rounded w-20"></div></td>
+                  <td className="px-4 py-4"><div className="h-5 bg-slate-200 rounded-full w-16"></div></td>
+                  <td className="px-4 py-4"><div className="h-4 bg-slate-200 rounded w-24"></div></td>
+                  <td className="px-4 py-4"><div className="h-4 bg-slate-200 rounded w-16 ml-auto"></div></td>
+                  {editable && <td className="px-4 py-4"><div className="h-6 bg-slate-200 rounded w-12 ml-auto"></div></td>}
+                </tr>
+              ))
+            ) : processedData.length === 0 && !error ? (
+              // Empty State
               <tr>
-                <td colSpan={editable ? 8 : 7} className="px-4 py-8 text-center text-slate-500">
-                  Không tìm thấy yêu cầu tuyển dụng nào.
+                <td colSpan={editable ? 8 : 7} className="px-4 py-12">
+                  <div className="flex flex-col items-center justify-center text-slate-500">
+                    <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-3">
+                      <Inbox className="w-6 h-6 text-slate-400" />
+                    </div>
+                    <p className="text-sm font-medium text-slate-900">Không có dữ liệu</p>
+                    <p className="text-xs mt-1">Không tìm thấy yêu cầu tuyển dụng nào phù hợp với bộ lọc.</p>
+                  </div>
                 </td>
               </tr>
             ) : (
-              filteredData.map((req) => (
+              // Data Rows
+              processedData.map((req) => (
                 <tr 
                   key={req.id} 
-                  className={`hover:bg-slate-50 transition-colors ${req.isOverdue ? 'bg-red-50/50' : 'bg-white'}`}
+                  className={`hover:bg-slate-50 transition-colors ${req.isOverdue ? 'bg-red-50' : 'bg-white'}`}
                 >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5" title={req.isOverdue ? "Quá hạn" : ""}>
@@ -197,14 +251,14 @@ export const RequisitionList: React.FC<RequisitionListProps> = ({
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-2">
                         <button 
-                          className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded"
+                          className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
                           onClick={() => onEdit(req)}
                           title="Sửa nháp"
                         >
                           <Edit className="w-4 h-4" />
                         </button>
                         <button 
-                          className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded"
+                          className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
                           onClick={() => onClone(req)}
                           title="Sao chép"
                         >
