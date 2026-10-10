@@ -27,6 +27,7 @@ import DepartmentPage from "./pages/Department/DepartmentPage";
 import MasterDataManagement from "./pages/MasterData/MasterDataManagement";
 import HeadcountBudgetManagement from "./pages/Headcount/HeadcountBudgetManagement";
 import JobPostingForm from "./components/JobPosting/JobPostingForm";
+import JobPostingPreviewApproval from "./components/JobPosting/JobPostingPreviewApproval";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -217,6 +218,22 @@ function App() {
                 element={
                   <MainLayout>
                     <JobPostingForm />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/job-postings/:id/review"
+                element={
+                  <MainLayout>
+                    <JobPostingPreviewApproval />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/job-postings/review"
+                element={
+                  <MainLayout>
+                    <JobPostingPreviewApproval />
                   </MainLayout>
                 }
               />
