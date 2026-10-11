@@ -1,6 +1,18 @@
 import axios from "axios";
 import axiosClient from "../utils/axiosClient";
 import type { LoginResponse } from "../types/auth";
+import { DeviceStorageError, getLoginDeviceId } from './device.service';
+import { LOCK_DURATION_MS, recordServerLoginLock } from '../utils/loginState';
+
+export class LoginDeviceLockedError extends Error {
+  readonly retryAfterSeconds: number;
+
+  constructor(retryAfterSeconds: number) {
+    super('LOGIN_DEVICE_LOCKED');
+    this.name = 'LoginDeviceLockedError';
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
 
 type ApiFieldErrors = Record<string, string[] | string | undefined>;
 
@@ -82,7 +94,7 @@ export const authService = {
       const response = await axiosClient.post<unknown>('/auth/login', {
         email: email.trim().toLowerCase(),
         password,
-      });
+      }, { headers: { 'X-Device-Id': getLoginDeviceId() } });
 
       const data: unknown = response.data;
       const user = isRecord(data) ? data.user : undefined;
@@ -120,7 +132,7 @@ export const authService = {
         },
       };
     } catch (error) {
-      if (error instanceof InvalidLoginResponseError) throw error;
+      if (error instanceof InvalidLoginResponseError || error instanceof DeviceStorageError) throw error;
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
         if (status === 401) throw new Error('INVALID_CREDENTIALS');
@@ -128,6 +140,12 @@ export const authService = {
           const errorBody: unknown = error.response?.data;
           const fieldErrors = isRecord(errorBody) ? parseFieldErrors(errorBody.fieldErrors) : {};
           throw new LoginValidationError(fieldErrors);
+        }
+        if (status === 429 && error.response?.data?.code === 'LOGIN_DEVICE_LOCKED') {
+          const value = Number(error.response.headers?.['retry-after']);
+          const seconds = Number.isFinite(value) && value > 0 ? Math.ceil(value) : LOCK_DURATION_MS / 1000;
+          recordServerLoginLock(seconds);
+          throw new LoginDeviceLockedError(seconds);
         }
         if (status === 429) throw new Error('TOO_MANY_REQUESTS');
         if (!error.response) throw new Error('NETWORK_ERROR');
