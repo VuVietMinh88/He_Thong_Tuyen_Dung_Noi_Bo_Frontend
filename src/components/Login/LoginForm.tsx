@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   authService,
   InvalidLoginResponseError,
+  LoginDeviceLockedError,
   LoginValidationError,
 } from '../../services/auth.service';
 import { tokenService } from '../../services/token.service';
@@ -15,7 +16,6 @@ import {
   clearSuccessfulLoginState,
   getGenericLoginErrorMessage,
   getLockStatus,
-  registerFailedLoginAttempt,
 } from '../../utils/loginState';
 
 export const LoginForm = () => {
@@ -30,14 +30,18 @@ export const LoginForm = () => {
   const [submitError, setSubmitError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [lockVersion, setLockVersion] = useState(0);
-  const [lockStatus, setLockStatus] = useState(() => getLockStatus(email));
+  const [lockStatus, setLockStatus] = useState(() => getLockStatus());
 
   useEffect(() => {
-    const updateLockStatus = () => setLockStatus(getLockStatus(email.trim()));
+    const updateLockStatus = () => setLockStatus(getLockStatus());
     updateLockStatus();
     const intervalId = window.setInterval(updateLockStatus, 1000);
-    return () => window.clearInterval(intervalId);
-  }, [email, lockVersion]);
+    window.addEventListener('storage', updateLockStatus);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('storage', updateLockStatus);
+    };
+  }, [lockVersion]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -63,7 +67,7 @@ export const LoginForm = () => {
       setPasswordError('Mật khẩu phải có độ dài tối thiểu từ 8 ký tự trở lên');
       isValid = false;
     }
-    if (!isValid || lockStatus.isLocked) return;
+    if (!isValid || getLockStatus().isLocked || isLoading) return;
 
     setIsLoading(true);
     try {
@@ -76,7 +80,7 @@ export const LoginForm = () => {
         return;
       }
 
-      clearSuccessfulLoginState(normalizedEmail);
+      clearSuccessfulLoginState();
       setLockVersion((version) => version + 1);
       if (rememberMe) localStorage.setItem('rememberedEmail', normalizedEmail);
       else localStorage.removeItem('rememberedEmail');
@@ -103,15 +107,20 @@ export const LoginForm = () => {
         return;
       }
 
+      if (error instanceof LoginDeviceLockedError) {
+        setLockStatus(getLockStatus());
+        setLockVersion((version) => version + 1);
+        setSubmitError('Trình duyệt này bị tạm chặn đăng nhập do nhập sai nhiều lần. Tài khoản vẫn dùng được trên trình duyệt khác.');
+        return;
+      }
+
       const errorMessage = error instanceof Error ? error.message : 'LOGIN_REQUEST_FAILED';
       if (errorMessage === 'INVALID_CREDENTIALS') {
-        const lock = registerFailedLoginAttempt(normalizedEmail);
-        setLockVersion((version) => version + 1);
-        setSubmitError(
-          lock.isLocked
-            ? 'Tài khoản đã bị khóa tạm thời trong 15 phút. Vui lòng thử lại sau.'
-            : getGenericLoginErrorMessage(),
-        );
+        setSubmitError(getGenericLoginErrorMessage());
+        return;
+      }
+      if (errorMessage === 'DEVICE_STORAGE_UNAVAILABLE') {
+        setSubmitError('Không thể lưu mã nhận diện trình duyệt. Vui lòng cho phép trang web lưu dữ liệu rồi thử lại.');
         return;
       }
       if (errorMessage === 'TOO_MANY_REQUESTS') {
@@ -148,8 +157,8 @@ export const LoginForm = () => {
 
       {lockStatus.isLocked ? (
         <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-6 py-5 text-center text-red-700">
-          <p className="mb-1 text-lg font-semibold">Tài khoản bị khóa tạm thời!</p>
-          <p className="mb-3 text-sm">Bạn đã nhập sai quá {MAX_LOGIN_ATTEMPTS} lần.</p>
+          <p className="mb-1 text-lg font-semibold">Trình duyệt này bị tạm chặn đăng nhập</p>
+          <p className="mb-3 text-sm">Bạn đã nhập sai {MAX_LOGIN_ATTEMPTS} lần. Tài khoản vẫn dùng được trên trình duyệt khác.</p>
           <p className="text-sm">Vui lòng thử lại sau:</p>
           <p className="mt-1 animate-pulse text-2xl font-bold text-red-600">{minutes} phút {seconds} giây</p>
         </div>

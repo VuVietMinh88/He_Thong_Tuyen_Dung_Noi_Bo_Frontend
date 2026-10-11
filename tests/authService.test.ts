@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { postMock } = vi.hoisted(() => ({ postMock: vi.fn() }));
 
@@ -7,10 +7,21 @@ vi.mock('../src/utils/axiosClient', () => ({
 }));
 
 import { authService, InvalidLoginResponseError } from '../src/services/auth.service';
+import { getLockStatus } from '../src/utils/loginState';
+
+const deviceId = '12121212-1234-4567-8123-123456789abc';
 
 beforeEach(() => {
   postMock.mockReset();
+  const storage = new Map<string, string>([['loginDeviceId', deviceId]]);
+  vi.stubGlobal('window', { localStorage: {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => storage.set(key, value),
+    removeItem: (key: string) => storage.delete(key),
+  } });
 });
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe('Login API contract', () => {
   const loginResponse = {
@@ -35,7 +46,7 @@ describe('Login API contract', () => {
     expect(postMock).toHaveBeenCalledWith('/auth/login', {
       email: 'user@company.com',
       password: 'password123',
-    });
+    }, { headers: { 'X-Device-Id': deviceId } });
   });
 
   it('rejects a response missing required user data', async () => {
@@ -74,7 +85,7 @@ describe('Login API contract', () => {
     expect(postMock).toHaveBeenCalledWith('/auth/login', {
       email: 'user@company.com',
       password: 'password123',
-    });
+    }, { headers: { 'X-Device-Id': deviceId } });
   });
 
   it('maps backend validation errors to the matching form fields', async () => {
@@ -97,6 +108,38 @@ describe('Login API contract', () => {
 
     await expect(authService.login('user@company.com', 'password123'))
       .rejects.toThrow('NETWORK_ERROR');
+  });
+
+  it('does not create a browser lock from repeated 401 responses', async () => {
+    postMock.mockRejectedValue({ isAxiosError: true, response: { status: 401, data: { code: 'LOGIN_FAILED' } } });
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await expect(authService.login('user@company.com', 'wrong-password')).rejects.toThrow('INVALID_CREDENTIALS');
+    }
+    expect(getLockStatus().isLocked).toBe(false);
+  });
+
+  it('persists only the server device lock using its remaining Retry-After time', async () => {
+    postMock.mockRejectedValue({ isAxiosError: true, response: {
+      status: 429, data: { code: 'LOGIN_DEVICE_LOCKED' }, headers: { 'retry-after': '120' },
+    } });
+    await expect(authService.login('user@company.com', 'wrong-password')).rejects.toMatchObject({
+      message: 'LOGIN_DEVICE_LOCKED', retryAfterSeconds: 120,
+    });
+    expect(getLockStatus()).toEqual({ isLocked: true, remainingSeconds: 120 });
+  });
+
+  it('does not confuse another rate limit with a device lock', async () => {
+    postMock.mockRejectedValue({ isAxiosError: true, response: {
+      status: 429, data: { code: 'RATE_LIMITED' }, headers: { 'retry-after': '60' },
+    } });
+    await expect(authService.login('user@company.com', 'wrong-password')).rejects.toThrow('TOO_MANY_REQUESTS');
+    expect(getLockStatus().isLocked).toBe(false);
+  });
+
+  it('fails before sending credentials when a persistent device identifier cannot be stored', async () => {
+    vi.stubGlobal('window', { localStorage: { getItem: () => { throw new Error('Storage disabled'); } } });
+    await expect(authService.login('user@company.com', 'password123')).rejects.toThrow('DEVICE_STORAGE_UNAVAILABLE');
+    expect(postMock).not.toHaveBeenCalled();
   });
 
   it('does not report a password reset request as successful when the API fails', async () => {

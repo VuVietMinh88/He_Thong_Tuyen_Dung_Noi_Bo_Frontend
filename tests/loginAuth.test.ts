@@ -1,74 +1,81 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  MAX_LOGIN_ATTEMPTS,
   calculateLockRemainingSeconds,
   clearSuccessfulLoginState,
   getGenericLoginErrorMessage,
   getLockStatus,
-  registerFailedLoginAttempt,
-} from "../src/utils/loginState";
+  recordServerLoginLock,
+} from '../src/utils/loginState';
 
-const createLocalStorageMock = () => {
-  const store = new Map<string, string>();
-
+const createStorage = () => {
+  const values = new Map<string, string>();
   return {
-    getItem: vi.fn((key: string) => (store.has(key) ? store.get(key)! : null)),
-    setItem: vi.fn((key: string, value: string) => {
-      store.set(key, value);
-    }),
-    removeItem: vi.fn((key: string) => {
-      store.delete(key);
-    }),
-    clear: vi.fn(() => {
-      store.clear();
-    }),
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+    removeItem: (key: string) => values.delete(key),
   };
 };
 
-describe("login security flow", () => {
-  beforeEach(() => {
-    vi.stubGlobal("localStorage", createLocalStorageMock());
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+  vi.stubGlobal('window', { localStorage: createStorage() });
+});
+
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+describe('server-directed browser login lock', () => {
+  it('keeps credential failure messages generic', () => {
+    expect(getGenericLoginErrorMessage()).toBe('Email hoặc mật khẩu không chính xác.');
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
+  it('shares a server lock across accounts and tabs using the same browser storage', () => {
+    const sharedStorage = window.localStorage;
+    recordServerLoginLock(900);
+    vi.stubGlobal('window', { localStorage: sharedStorage });
+    expect(getLockStatus()).toEqual({ isLocked: true, remainingSeconds: 900 });
+    vi.advanceTimersByTime(60_000);
+    expect(getLockStatus()).toEqual({ isLocked: true, remainingSeconds: 840 });
   });
 
-  it("returns a generic error message when credentials are invalid", () => {
-    expect(getGenericLoginErrorMessage()).toBe(
-      "Email hoặc mật khẩu không chính xác.",
-    );
+  it('keeps a different browser unlocked', () => {
+    recordServerLoginLock(900);
+    vi.stubGlobal('window', { localStorage: createStorage() });
+    expect(getLockStatus()).toEqual({ isLocked: false, remainingSeconds: 0 });
   });
 
-  it("locks the account after 5 consecutive failed attempts", () => {
-    for (let attempt = 1; attempt < MAX_LOGIN_ATTEMPTS; attempt += 1) {
-      const result = registerFailedLoginAttempt();
-      expect(result.isLocked).toBe(false);
-      expect(result.remainingSeconds).toBe(0);
-    }
-
-    const lockState = registerFailedLoginAttempt();
-    expect(lockState.isLocked).toBe(true);
-    expect(lockState.remainingSeconds).toBeGreaterThan(0);
-    expect(getLockStatus().isLocked).toBe(true);
+  it('ends the display lock when the server retry delay elapses', () => {
+    recordServerLoginLock(120);
+    vi.advanceTimersByTime(120_000);
+    expect(getLockStatus()).toEqual({ isLocked: false, remainingSeconds: 0 });
+    expect(window.localStorage.getItem('loginDeviceLockUntil')).toBeNull();
   });
 
-  it("clears the lock state after a successful login", () => {
-    localStorage.setItem("lockUntil", String(Date.now() + 60_000));
-    localStorage.setItem("loginAttempts", "5");
-
+  it('clears a successful-login countdown while retaining device identity', () => {
+    window.localStorage.setItem('loginDeviceId', 'browser-id');
+    recordServerLoginLock(900);
     clearSuccessfulLoginState();
-
-    expect(localStorage.getItem("lockUntil")).toBeNull();
-    expect(localStorage.getItem("loginAttempts")).toBeNull();
+    expect(getLockStatus().isLocked).toBe(false);
+    expect(window.localStorage.getItem('loginDeviceId')).toBe('browser-id');
   });
 
-  it("calculates remaining lock time in seconds", () => {
-    const futureTime = Date.now() + 2 * 60 * 1000;
-    localStorage.setItem("lockUntil", String(futureTime));
+  it('ignores old account-specific locks because the server now owns throttling', () => {
+    window.localStorage.setItem('lockUntil:user@test.example', String(Date.now() + 900_000));
+    window.localStorage.setItem('loginAttempts:user@test.example', '5');
+    expect(getLockStatus().isLocked).toBe(false);
+  });
 
-    expect(calculateLockRemainingSeconds(futureTime)).toBeGreaterThan(0);
-    expect(getLockStatus().remainingSeconds).toBeGreaterThan(0);
+  it.each([NaN, Infinity, 0, -1])('ignores invalid retry delay %s', (value) => {
+    recordServerLoginLock(value);
+    expect(getLockStatus().isLocked).toBe(false);
+  });
+
+  it('clears malformed persisted deadlines', () => {
+    window.localStorage.setItem('loginDeviceLockUntil', 'Infinity');
+    expect(getLockStatus().isLocked).toBe(false);
+  });
+
+  it('rounds fractional remaining seconds upward', () => {
+    expect(calculateLockRemainingSeconds(Date.now() + 1500)).toBe(2);
   });
 });
