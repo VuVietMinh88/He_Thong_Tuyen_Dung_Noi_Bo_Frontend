@@ -33,6 +33,13 @@ export const LoginForm = () => {
   const [lockStatus, setLockStatus] = useState(() => getLockStatus());
 
   useEffect(() => {
+    if (new URLSearchParams(location.search).get('passwordChanged') === '1') {
+      // Notify after navigation has committed, avoiding a competing protected-route redirect.
+      window.dispatchEvent(new Event('auth:changed'));
+    }
+  }, [location.search]);
+
+  useEffect(() => {
     const updateLockStatus = () => setLockStatus(getLockStatus());
     updateLockStatus();
     const intervalId = window.setInterval(updateLockStatus, 1000);
@@ -143,6 +150,11 @@ export const LoginForm = () => {
   return (
     <div className="w-full max-w-md rounded-3xl border border-gray-100 bg-white p-10 shadow-2xl sm:p-12">
       <div className="mb-8 text-center">
+        {new URLSearchParams(location.search).get('passwordChanged') === '1' && (
+          <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left text-sm text-emerald-900" role="status">
+            Đổi mật khẩu thành công. Tất cả phiên đăng nhập đã kết thúc. Vui lòng đăng nhập lại bằng mật khẩu mới.
+          </p>
+        )}
         {new URLSearchParams(location.search).get('sessionExpired') === '1' && (
           <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-900" role="status">
             Phiên đăng nhập đã hết hạn. Đăng nhập lại để tiếp tục; dữ liệu biểu mẫu không nhạy cảm sẽ được khôi phục nếu có thể.

@@ -1,7 +1,9 @@
 import axios from "axios";
-import axiosClient from "../utils/axiosClient";
+import axiosClient, { type SessionRequestConfig } from "../utils/axiosClient";
 import type { LoginResponse } from "../types/auth";
 import { DeviceStorageError, getLoginDeviceId } from './device.service';
+import { tokenService } from './token.service';
+import { clearSessionExpiryReturnTo } from './sessionDraft.service';
 import { LOCK_DURATION_MS, recordServerLoginLock } from '../utils/loginState';
 
 export class LoginDeviceLockedError extends Error {
@@ -229,12 +231,21 @@ export const authService = {
   changePassword: async (
     currentPassword: string,
     newPassword: string,
-  ): Promise<void> => {
+  ): Promise<{ sessionEnded: boolean }> => {
+    const sessionId = tokenService.getSessionId();
+    const requestConfig: SessionRequestConfig = { _sessionId: sessionId };
     try {
       await axiosClient.post("/auth/change-password", {
         currentPassword,
         newPassword,
-      });
+      }, requestConfig);
+      if (!sessionId || tokenService.getSessionId() !== sessionId) {
+        return { sessionEnded: false };
+      }
+      // The backend has revoked every session, including the one making this request.
+      tokenService.clearAll();
+      clearSessionExpiryReturnTo();
+      return { sessionEnded: true };
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const payload = error.response?.data as BackendErrorPayload | undefined;
