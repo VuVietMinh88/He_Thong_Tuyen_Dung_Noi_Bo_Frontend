@@ -23,7 +23,6 @@ export const ChangePasswordForm: React.FC = () => {
   const [confirmPasswordError, setConfirmPasswordError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
 
   const validateForm = (): boolean => {
     let isValid = true;
@@ -75,8 +74,15 @@ export const ChangePasswordForm: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      await authService.changePassword(currentPassword, newPassword);
-      setIsSuccess(true);
+      const result = await authService.changePassword(currentPassword, newPassword);
+      if (!result.sessionEnded) {
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setSubmitError('Mật khẩu của phiên trước đã được đổi. Phiên đăng nhập hiện tại đã thay đổi; vui lòng kiểm tra tài khoản đang dùng.');
+        return;
+      }
+      navigate('/login?passwordChanged=1', { replace: true });
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "CHANGE_PASSWORD_FAILED";
@@ -104,46 +110,6 @@ export const ChangePasswordForm: React.FC = () => {
       setIsSubmitting(false);
     }
   };
-
-  if (isSuccess) {
-    return (
-      <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-8 shadow-2xl sm:p-10">
-        <div className="mb-6 flex items-center justify-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-3xl shadow-sm">
-            ✅
-          </div>
-        </div>
-
-        <div className="text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-slate-800">
-            Đổi mật khẩu thành công
-          </h2>
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            Mật khẩu của bạn đã được cập nhật thành công. Phiên đăng nhập hiện
-            tại vẫn hoạt động; các phiên đăng nhập khác đã được thu hồi.
-          </p>
-        </div>
-
-        <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-700">
-          <p className="font-medium">Lưu ý bảo mật:</p>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-emerald-700/90">
-            <li>Phiên đăng nhập hiện tại vẫn được giữ nguyên.</li>
-            <li>Các phiên đăng nhập khác đã được thu hồi.</li>
-          </ul>
-        </div>
-
-        <div className="mt-8">
-          <button
-            type="button"
-            onClick={() => navigate("/dashboard")}
-            className="flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:from-blue-700 hover:to-indigo-700"
-          >
-            Hoàn tất
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-8 shadow-2xl sm:p-10">

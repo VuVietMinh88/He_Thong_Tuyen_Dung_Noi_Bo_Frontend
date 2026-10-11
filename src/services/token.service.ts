@@ -3,6 +3,8 @@ import type { User } from '../types/auth';
 const ACCESS_TOKEN_KEY = 'accessToken';
 const REFRESH_TOKEN_KEY = 'refreshToken';
 const USER_DATA_KEY = 'userData';
+const SESSION_ID_KEY = 'authSessionId';
+let sessionRevision = 0;
 
 export type TokenUserData = User;
 
@@ -29,15 +31,55 @@ const isTokenUserData = (value: unknown): value is TokenUserData =>
   && value.roles.every((role) => typeof role === 'string');
 
 const clearPersistedTokens = (): void => {
+  sessionRevision += 1;
   try {
     window.localStorage.removeItem(ACCESS_TOKEN_KEY);
     window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+    window.localStorage.removeItem(SESSION_ID_KEY);
   } catch {
     // Browser storage can be unavailable in restricted contexts.
   }
 };
 
+const persistTokenPair = (accessToken: unknown, refreshToken?: unknown): boolean => {
+  if (!isValidToken(accessToken)
+    || (refreshToken !== undefined && refreshToken !== null && !isValidToken(refreshToken))) {
+    clearPersistedTokens();
+    return false;
+  }
+  try {
+    window.localStorage.setItem(ACCESS_TOKEN_KEY, accessToken.trim());
+    if (isValidToken(refreshToken)) window.localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken.trim());
+    else window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+    const saved = window.localStorage.getItem(ACCESS_TOKEN_KEY) === accessToken.trim()
+      && (!isValidToken(refreshToken) || window.localStorage.getItem(REFRESH_TOKEN_KEY) === refreshToken.trim());
+    if (!saved) clearPersistedTokens();
+    return saved;
+  } catch {
+    clearPersistedTokens();
+    return false;
+  }
+};
+
 export const tokenService = {
+  getSessionRevision(): number {
+    return sessionRevision;
+  },
+
+  getSessionId(): string | null {
+    if (!this.getAccessToken()) return null;
+    try {
+      let identity = window.localStorage.getItem(SESSION_ID_KEY);
+      if (!identity) {
+        // Upgrade already signed-in browsers without dropping their valid session.
+        identity = crypto.randomUUID();
+        window.localStorage.setItem(SESSION_ID_KEY, identity);
+      }
+      return window.localStorage.getItem(SESSION_ID_KEY) === identity ? identity : null;
+    } catch {
+      return null;
+    }
+  },
   getToken(): string | null {
     try {
       const token = window.localStorage.getItem(ACCESS_TOKEN_KEY);
@@ -152,30 +194,24 @@ export const tokenService = {
   },
 
   saveTokens(accessToken: unknown, refreshToken?: unknown): boolean {
-    if (
-      !isValidToken(accessToken)
-      || (refreshToken !== undefined && refreshToken !== null && !isValidToken(refreshToken))
-    ) {
-      clearPersistedTokens();
-      return false;
-    }
-
     try {
-      window.localStorage.setItem(ACCESS_TOKEN_KEY, accessToken.trim());
-      if (isValidToken(refreshToken)) {
-        window.localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken.trim());
-      } else {
-        window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+      sessionRevision += 1;
+      const identity = crypto.randomUUID();
+      window.localStorage.setItem(SESSION_ID_KEY, identity);
+      if (window.localStorage.getItem(SESSION_ID_KEY) !== identity) {
+        clearPersistedTokens();
+        return false;
       }
-      const saved = window.localStorage.getItem(ACCESS_TOKEN_KEY) === accessToken.trim()
-        && (!isValidToken(refreshToken)
-          || window.localStorage.getItem(REFRESH_TOKEN_KEY) === refreshToken.trim());
-      if (!saved) clearPersistedTokens();
-      return saved;
+      return persistTokenPair(accessToken, refreshToken);
     } catch {
       clearPersistedTokens();
       return false;
     }
+  },
+
+  rotateTokens(accessToken: unknown, refreshToken: unknown, sessionId: string): boolean {
+    if (this.getSessionId() !== sessionId) return false;
+    return persistTokenPair(accessToken, refreshToken);
   },
 
   removeInvalidStoredTokens(): void {
