@@ -684,16 +684,22 @@ export const jobPostingService = {
   },
 
   /**
-   * Yêu cầu chỉnh sửa tin tuyển dụng có kèm nội dung phản hồi (AC2 & AC3 - Task TKNHTTDNB1-306)
+   * Yêu cầu chỉnh sửa tin tuyển dụng có kèm nội dung phản hồi và expectedRevision (AC2 & AC3 - Task TKNHTTDNB1-306)
    */
-  async requestRevisionJobPosting(id: string, feedback: string): Promise<JobPostingData> {
+  async requestRevisionJobPosting(
+    id: string,
+    feedback: string,
+    expectedRevision?: string
+  ): Promise<JobPostingData> {
     const trimmedFeedback = feedback ? feedback.trim() : '';
-    if (!trimmedFeedback) {
+    const trimmedExpectedRevision = expectedRevision ? expectedRevision.trim() : trimmedFeedback;
+    if (!trimmedFeedback && !trimmedExpectedRevision) {
       throw new Error('Vui lòng cung cấp nội dung yêu cầu chỉnh sửa tin tuyển dụng.');
     }
 
     const payload = {
-      feedback: trimmedFeedback,
+      feedback: trimmedFeedback || trimmedExpectedRevision,
+      expectedRevision: trimmedExpectedRevision || trimmedFeedback,
       status: 'REVISION_REQUESTED' as const,
       requestedAt: new Date().toISOString(),
     };

@@ -202,7 +202,7 @@ export const JobPostingPreviewApproval: React.FC<JobPostingPreviewApprovalProps>
   };
 
   // Xử lý xác nhận trong Modal (AC2 & AC3)
-  const handleModalConfirm = async (reasonOrNote: string) => {
+  const handleModalConfirm = async (reasonOrNote: string, expectedRevision?: string) => {
     if (!posting.id) return;
 
     setIsSubmitting(true);
@@ -218,7 +218,7 @@ export const JobPostingPreviewApproval: React.FC<JobPostingPreviewApprovalProps>
         updated = await jobPostingService.rejectJobPosting(posting.id, reasonOrNote);
         showNotify('Đã từ chối tin tuyển dụng và lưu lý do thành công.', 'warning');
       } else {
-        updated = await jobPostingService.requestRevisionJobPosting(posting.id, reasonOrNote);
+        updated = await jobPostingService.requestRevisionJobPosting(posting.id, reasonOrNote, expectedRevision);
         showNotify('Đã gửi yêu cầu chỉnh sửa tới người soạn thảo thành công.', 'warning');
       }
 
@@ -408,18 +408,7 @@ export const JobPostingPreviewApproval: React.FC<JobPostingPreviewApprovalProps>
               </button>
             </div>
 
-            {/* Từ chối */}
-            <button
-              type="button"
-              onClick={() => handleOpenModal('REJECT')}
-              disabled={isSubmitting || posting.status === 'REJECTED'}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 active:scale-98 disabled:opacity-50 transition-all cursor-pointer"
-            >
-              <AlertCircle className="h-3.5 w-3.5" />
-              <span>Từ chối</span>
-            </button>
-
-            {/* Yêu cầu chỉnh sửa */}
+            {/* Yêu cầu chỉnh sửa (Thay thế nút Từ chối theo API mới) */}
             <button
               type="button"
               onClick={() => handleOpenModal('REQUEST_REVISION')}
@@ -427,7 +416,7 @@ export const JobPostingPreviewApproval: React.FC<JobPostingPreviewApprovalProps>
               className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100 active:scale-98 disabled:opacity-50 transition-all cursor-pointer"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              <span>Yêu cầu sửa</span>
+              <span>Yêu cầu chỉnh sửa</span>
             </button>
 
             {/* Duyệt xuất bản */}
