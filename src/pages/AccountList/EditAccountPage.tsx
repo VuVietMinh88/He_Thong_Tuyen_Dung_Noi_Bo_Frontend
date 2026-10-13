@@ -617,7 +617,7 @@ export const EditAccountPage: React.FC<EditAccountPageProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/60 py-8 px-4 sm:px-6 lg:px-8">
+    <div className="w-full min-h-full bg-slate-50/60 py-8 px-4 sm:px-6 lg:px-8">
       {content}
     </div>
   );

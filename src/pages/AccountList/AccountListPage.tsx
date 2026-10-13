@@ -17,7 +17,6 @@ import ManageRolesModal from "../../components/AccountList/ManageRolesModal";
 import LockAccountModal from "../../components/AccountList/LockAccountModal";
 import UnlockAccountModal from "../../components/AccountList/UnlockAccountModal";
 import ImportExcelUI from "../../components/Recruitment/ImportExcelUI";
-import Sidebar from "../../components/layout/Sidebar";
 import { usePermission } from "../../hooks/usePermission";
 import type { SessionDraftDialog } from "../../services/sessionDraft.service";
 
@@ -383,14 +382,9 @@ export const AccountListPage: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-slate-100/75">
-      {/* Shared Navigation Sidebar */}
-      <Sidebar />
-
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-x-hidden">
-        {/* Top Header */}
-        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/80 backdrop-blur-md px-6 py-4">
+    <div className="w-full">
+      {/* Top Header */}
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/80 backdrop-blur-md px-6 py-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <nav className="flex items-center gap-2 text-xs font-medium text-slate-500 mb-1">
@@ -515,7 +509,6 @@ export const AccountListPage: React.FC = () => {
             )}
           </div>
         </div>
-      </main>
 
       {/* Edit Account Modal */}
       <EditAccountModal

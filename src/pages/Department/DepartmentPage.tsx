@@ -132,7 +132,7 @@ export default function DepartmentPage() {
       }
       fetchDepartments();
       closeModal();
-    } catch (error) {
+    } catch {
       alert('Có lỗi xảy ra khi lưu phòng ban!');
     }
   };

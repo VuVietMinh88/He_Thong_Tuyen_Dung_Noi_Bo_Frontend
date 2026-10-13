@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -21,7 +21,7 @@ import UnauthorizedPage from "./pages/error/UnauthorizedPage";
 import ProtectedRoute from "./components/routes/ProtectedRoute";
 import PermissionProvider from "./components/routes/PermissionProvider";
 import SessionDraftRestorer from "./components/routes/SessionDraftRestorer";
-import Sidebar from "./components/layout/Sidebar";
+import MainLayout from "./components/layout/MainLayout";
 import { getHealth, type HealthResponse } from "./services/healthService";
 import { ROLES, type Role } from "./constants/roles";
 import JobTitlesPage from "./pages/JobTitle/JobTitlesPage";
@@ -32,17 +32,6 @@ import JobPostingForm from "./components/JobPosting/JobPostingForm";
 import JobPostingPreviewApproval from "./components/JobPosting/JobPostingPreviewApproval";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
-
-const MainLayout = ({ children }: { children: ReactNode }) => (
-  <div className="flex h-screen bg-gray-100">
-    <Sidebar />
-    <div className="flex flex-1 flex-col overflow-hidden">
-      <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-6">
-        {children}
-      </main>
-    </div>
-  </div>
-);
 
 function HealthCheck() {
   const [status, setStatus] = useState<HealthResponse | null>(null);
@@ -170,8 +159,22 @@ function App() {
                 <ProtectedRoute requiredPermissions={["USER_ADMIN_READ_ALL"]} />
               }
             >
-              <Route path="/users" element={<AccountListPage />} />
-              <Route path="/admin/users" element={<AccountListPage />} />
+              <Route
+                path="/users"
+                element={
+                  <MainLayout>
+                    <AccountListPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/admin/users"
+                element={
+                  <MainLayout>
+                    <AccountListPage />
+                  </MainLayout>
+                }
+              />
               <Route
                 path="/users/:id/edit"
                 element={
