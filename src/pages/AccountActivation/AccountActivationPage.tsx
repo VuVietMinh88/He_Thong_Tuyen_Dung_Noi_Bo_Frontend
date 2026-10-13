@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import axiosClient from "../../utils/axiosClient";
 import axios from "axios";
+import { EmailFooter } from "../../components/common/EmailFooter";
 
 export const AccountActivationPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -121,10 +122,14 @@ export const AccountActivationPage: React.FC = () => {
             </div>
           </>
         )}
+
+        {/* Thông tin hỗ trợ & Logo công ty */}
+        <EmailFooter />
       </div>
     </div>
   );
 };
 
 export default AccountActivationPage;
+
 

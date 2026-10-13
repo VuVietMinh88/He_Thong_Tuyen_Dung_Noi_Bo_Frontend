@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertCircle, AlertTriangle, CheckCircle2, MessageSquare, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, MessageSquare, X, Edit3 } from 'lucide-react';
 
 export type ApprovalModalMode = 'APPROVE' | 'REJECT' | 'REQUEST_REVISION';
 
@@ -8,7 +8,7 @@ export interface JobPostingApprovalModalProps {
   mode: ApprovalModalMode;
   jobTitle: string;
   isSubmitting?: boolean;
-  onConfirm: (reasonOrNote: string) => void;
+  onConfirm: (reasonOrNote: string, expectedRevision?: string) => void;
   onClose: () => void;
 }
 
@@ -41,6 +41,7 @@ export const JobPostingApprovalModal: React.FC<JobPostingApprovalModalProps> = (
   onClose,
 }) => {
   const [comment, setComment] = useState('');
+  const [expectedRevision, setExpectedRevision] = useState('');
   const [error, setError] = useState('');
 
   if (!isOpen) return null;
@@ -59,33 +60,49 @@ export const JobPostingApprovalModal: React.FC<JobPostingApprovalModalProps> = (
     ? 'Tin tuyển dụng sẽ được xuất bản công khai và gửi thông báo tới các ứng viên tiềm năng.'
     : isReject
     ? 'Vui lòng nêu rõ lý do từ chối để thông báo lại cho chuyên viên tuyển dụng nắm thông tin.'
-    : 'Nhập các góp ý hoặc nội dung cần điều chỉnh để người soạn thảo cập nhật lại trước khi duyệt.';
+    : 'Nhập nội dung cần chỉnh sửa (expectedRevision) để người soạn thảo cập nhật lại tin tuyển dụng theo chuẩn.';
 
   const handleApplyPreset = (reason: string) => {
-    setComment((prev) => (prev ? `${prev}\n- ${reason}` : `- ${reason}`));
+    if (isRevision) {
+      setExpectedRevision((prev) => (prev ? `${prev}\n- ${reason}` : `- ${reason}`));
+    } else {
+      setComment((prev) => (prev ? `${prev}\n- ${reason}` : `- ${reason}`));
+    }
     setError('');
   };
 
   const handleConfirm = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = comment.trim();
+    const trimmedComment = comment.trim();
+    const trimmedRevision = expectedRevision.trim();
 
-    if ((isReject || isRevision) && !trimmed) {
-      setError(
-        isReject
-          ? 'Vui lòng nhập lý do từ chối tin tuyển dụng.'
-          : 'Vui lòng nhập nội dung yêu cầu chỉnh sửa.'
-      );
+    if (isRevision) {
+      if (!trimmedRevision && !trimmedComment) {
+        setError('Vui lòng nhập nội dung yêu cầu chỉnh sửa (expectedRevision).');
+        return;
+      }
+      const mainContent = trimmedRevision || trimmedComment;
+      if (mainContent.length < 5) {
+        setError('Nội dung yêu cầu chỉnh sửa cần cụ thể hơn (tối thiểu 5 ký tự).');
+        return;
+      }
+      setError('');
+      onConfirm(trimmedComment || mainContent, mainContent);
       return;
     }
 
-    if ((isReject || isRevision) && trimmed.length < 5) {
-      setError('Lý do / phản hồi cần cụ thể hơn (tối thiểu 5 ký tự).');
+    if (isReject && !trimmedComment) {
+      setError('Vui lòng nhập lý do từ chối tin tuyển dụng.');
+      return;
+    }
+
+    if (isReject && trimmedComment.length < 5) {
+      setError('Lý do từ chối cần cụ thể hơn (tối thiểu 5 ký tự).');
       return;
     }
 
     setError('');
-    onConfirm(trimmed);
+    onConfirm(trimmedComment);
   };
 
   return (
@@ -123,7 +140,7 @@ export const JobPostingApprovalModal: React.FC<JobPostingApprovalModalProps> = (
               ) : isReject ? (
                 <AlertCircle className="h-5 w-5" />
               ) : (
-                <AlertTriangle className="h-5 w-5" />
+                <Edit3 className="h-5 w-5" />
               )}
             </div>
             <div>
@@ -149,7 +166,7 @@ export const JobPostingApprovalModal: React.FC<JobPostingApprovalModalProps> = (
           {/* Preset Suggestions */}
           <div>
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              {isApprove ? 'Ghi chú gợi ý (Tùy chọn)' : 'Lý do phổ biến (Bấm để thêm nhanh):'}
+              {isApprove ? 'Ghi chú gợi ý (Tùy chọn)' : 'Gợi ý nội dung chỉnh sửa (Bấm để thêm nhanh):'}
             </span>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {PRESET_REASONS[mode].map((preset) => (
@@ -165,6 +182,41 @@ export const JobPostingApprovalModal: React.FC<JobPostingApprovalModalProps> = (
             </div>
           </div>
 
+          {/* Ô nhập expectedRevision nếu là yêu cầu chỉnh sửa */}
+          {isRevision && (
+            <div>
+              <label
+                htmlFor="expected-revision-input"
+                className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Edit3 className="h-3.5 w-3.5 text-amber-600" />
+                  Nội dung yêu cầu chỉnh sửa (expectedRevision)
+                  <span className="text-rose-500 font-bold">*</span>
+                </span>
+                <span className="text-[10px] font-normal text-slate-400">
+                  {expectedRevision.length} ký tự
+                </span>
+              </label>
+
+              <textarea
+                id="expected-revision-input"
+                rows={3}
+                value={expectedRevision}
+                onChange={(e) => {
+                  setExpectedRevision(e.target.value);
+                  if (error) setError('');
+                }}
+                placeholder="Mô tả cụ thể những nội dung, tiêu chí cần người soạn thảo sửa lại..."
+                className={`w-full rounded-xl border p-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden transition-all ${
+                  error
+                    ? 'border-rose-400 bg-rose-50/30 focus:border-rose-500 ring-1 ring-rose-200'
+                    : 'border-amber-300 bg-amber-50/20 focus:border-amber-500 focus:ring-1 focus:ring-amber-200'
+                }`}
+              />
+            </div>
+          )}
+
           {/* Comment / Reason Input */}
           <div>
             <label
@@ -173,10 +225,12 @@ export const JobPostingApprovalModal: React.FC<JobPostingApprovalModalProps> = (
             >
               <span className="flex items-center gap-1.5">
                 <MessageSquare className="h-3.5 w-3.5 text-slate-500" />
-                {isApprove ? 'Ghi chú phê duyệt (Không bắt buộc)' : 'Lý do / Nội dung góp ý'}
-                {(isReject || isRevision) && (
-                  <span className="text-rose-500 font-bold">*</span>
-                )}
+                {isApprove
+                  ? 'Ghi chú phê duyệt (Không bắt buộc)'
+                  : isRevision
+                  ? 'Ghi chú thêm cho người soạn thảo (Tùy chọn)'
+                  : 'Lý do từ chối'}
+                {isReject && <span className="text-rose-500 font-bold">*</span>}
               </span>
               <span className="text-[10px] font-normal text-slate-400">
                 {comment.length} ký tự
@@ -185,7 +239,7 @@ export const JobPostingApprovalModal: React.FC<JobPostingApprovalModalProps> = (
 
             <textarea
               id="approval-comment-input"
-              rows={4}
+              rows={isRevision ? 2 : 4}
               value={comment}
               onChange={(e) => {
                 setComment(e.target.value);
@@ -194,12 +248,12 @@ export const JobPostingApprovalModal: React.FC<JobPostingApprovalModalProps> = (
               placeholder={
                 isApprove
                   ? 'Nhập ghi chú hoặc lời dặn dò bổ sung (nếu có)...'
-                  : isReject
-                  ? 'Nêu rõ lý do từ chối để thông báo tới người soạn tin...'
-                  : 'Liệt kê các mục cần bổ sung hoặc sửa đổi...'
+                  : isRevision
+                  ? 'Ghi chú thêm (deadline chỉnh sửa, liên hệ hỗ trợ...)...'
+                  : 'Nêu rõ lý do từ chối để thông báo tới người soạn tin...'
               }
               className={`w-full rounded-xl border p-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden transition-all ${
-                error
+                error && !isRevision
                   ? 'border-rose-400 bg-rose-50/30 focus:border-rose-500 ring-1 ring-rose-200'
                   : 'border-slate-300 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200'
               }`}

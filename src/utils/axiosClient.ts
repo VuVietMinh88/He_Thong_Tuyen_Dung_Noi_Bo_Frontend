@@ -133,6 +133,21 @@ axiosClient.interceptors.response.use(
       || !originalRequest
       || isAuthRequest(originalRequest.url)
     ) {
+      if (
+        typeof window !== 'undefined'
+        && typeof window.dispatchEvent === 'function'
+        && status
+        && status >= 500
+      ) {
+        window.dispatchEvent(
+          new CustomEvent('app:toast', {
+            detail: {
+              type: 'error',
+              message: 'Máy chủ phản hồi lỗi hệ thống. Vui lòng thử lại sau.',
+            },
+          }),
+        );
+      }
       return Promise.reject(error);
     }
 

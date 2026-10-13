@@ -168,9 +168,9 @@ const Sidebar: FC = () => {
 
       <aside
         className={[
-          'fixed left-0 top-0 z-40 flex h-screen w-72 flex-col bg-slate-900 text-white shadow-xl transition-transform',
+          'fixed left-0 top-0 z-40 w-64 h-full flex flex-col bg-slate-900 text-white shadow-xl transition-transform duration-200',
           isOpen ? 'translate-x-0' : '-translate-x-full',
-          'md:static md:translate-x-0 md:flex-shrink-0',
+          'md:static md:translate-x-0 md:shrink-0',
         ].join(' ')}
       >
         <div className="flex h-16 shrink-0 items-center justify-center border-b border-slate-800 bg-slate-950 px-4">
@@ -181,7 +181,7 @@ const Sidebar: FC = () => {
 
         <div className="shrink-0 border-b border-slate-800 bg-slate-800/50 p-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-lg font-bold">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-lg font-bold">
               {displayName.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
@@ -193,7 +193,7 @@ const Sidebar: FC = () => {
           </div>
         </div>
 
-        <nav className="custom-scrollbar flex-1 overflow-y-auto py-4">
+        <nav className="custom-scrollbar flex-1 min-h-0 overflow-y-auto pt-2 pb-4">
           <ul className="space-y-1 px-3">
             {visibleMenu.map((item) => (
               <li key={item.to}>
@@ -208,14 +208,14 @@ const Sidebar: FC = () => {
                   ].join(' ')}
                 >
                   <span className="mr-3 text-xl">{item.icon}</span>
-                  <span>{item.label}</span>
+                  <span className="truncate">{item.label}</span>
                 </NavLink>
               </li>
             ))}
           </ul>
         </nav>
 
-        <div className="shrink-0 border-t border-slate-800 bg-slate-950 p-4">
+        <div className="mt-auto shrink-0 border-t border-slate-800 bg-slate-950 p-4">
           <button
             type="button"
             className="w-full rounded-lg bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-red-600 hover:text-white"

@@ -62,7 +62,7 @@ export interface Requisition {
   neededBy: string | null;
   jobDescription: string | null;
   candidateRequirements: string | null;
-  status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'OPEN' | 'CLOSED' | 'CANCELLED' | string;
+  status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'OPEN' | 'FILLED' | 'CANCELLED' | string;
   createdAt: string;
   updatedAt: string;
 }

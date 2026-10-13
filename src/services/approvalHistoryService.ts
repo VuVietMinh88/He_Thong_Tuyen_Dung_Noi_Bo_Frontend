@@ -3,7 +3,7 @@ import axiosClient from '../utils/axiosClient';
 export interface ApprovalHistoryItem {
   stepName: string;
   approverName: string;
-  status: 'APPROVED' | 'REJECTED' | 'PENDING';
+  status: 'APPROVED' | 'REJECTED' | 'PENDING' | 'PENDING_APPROVAL';
   comment: string | null;
   actionDate: string | null;
 }

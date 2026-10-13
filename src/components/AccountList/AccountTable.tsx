@@ -7,7 +7,6 @@ interface AccountTableProps {
   accounts: UserAccount[];
   isLoading?: boolean;
   onEditAccount?: (account: UserAccount) => void;
-  onManageRoles?: (account: UserAccount) => void;
   onRequestLock?: (account: UserAccount) => void;
   onRequestUnlock?: (account: UserAccount) => void;
   onToggleStatus?: (account: UserAccount) => void;
@@ -18,7 +17,6 @@ export const AccountTable: React.FC<AccountTableProps> = ({
   accounts,
   isLoading = false,
   onEditAccount,
-  onManageRoles,
   onRequestLock,
   onRequestUnlock,
   onToggleStatus,
@@ -152,7 +150,6 @@ export const AccountTable: React.FC<AccountTableProps> = ({
                       <div className="h-10 w-10 rounded-xl bg-slate-200" />
                       <div className="space-y-1.5">
                         <div className="h-3.5 w-32 rounded bg-slate-200" />
-                        <div className="h-2.5 w-16 rounded bg-slate-100" />
                       </div>
                     </div>
                   </td>
@@ -275,19 +272,16 @@ export const AccountTable: React.FC<AccountTableProps> = ({
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs text-slate-400 font-mono">
-                            {account.id}
-                          </span>
-                          {activeJobsCount > 0 && (
+                        {activeJobsCount > 0 && (
+                          <div className="flex items-center gap-2 mt-0.5">
                             <span
                               className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 border border-amber-200 shadow-2xs"
                               title={`Đang phụ trách ${activeJobsCount} vị trí tuyển dụng: ${(account.assignedJobs || []).join(', ')}`}
                             >
                               🎯 {activeJobsCount} vị trí
                             </span>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -323,24 +317,9 @@ export const AccountTable: React.FC<AccountTableProps> = ({
                     {renderStatusBadge(account)}
                   </td>
 
-                  {/* Thao tác column: Phân quyền, Sửa, Khóa / Mở khóa */}
+                  {/* Thao tác column: Sửa, Khóa / Mở khóa */}
                   <td className="whitespace-nowrap px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      {/* Phân quyền vai trò button (User Story S1-09 / TKNHTTDNB1-152) */}
-                      {onManageRoles && (
-                        <button
-                          type="button"
-                          onClick={() => onManageRoles(account)}
-                          className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50/60 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 hover:border-indigo-300 shadow-xs"
-                          title="Gán và quản lý vai trò người dùng"
-                        >
-                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                          </svg>
-                          <span>Phân quyền</span>
-                        </button>
-                      )}
-
                       {/* Sửa button */}
                       {onEditAccount && <button
                         type="button"

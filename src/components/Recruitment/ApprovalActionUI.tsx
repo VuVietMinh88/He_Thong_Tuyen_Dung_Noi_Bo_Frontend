@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-import { CheckCircle, XCircle, X, Loader2 } from "lucide-react";
+import { CheckCircle, Edit3, X, Loader2 } from "lucide-react";
 import { approvalActionService, type ApprovalActionPayload } from "../../services/approvalActionService";
 
-type ActionType = "APPROVE" | "REJECT" | null;
+type ActionType = "APPROVE" | "REQUEST_REVISION" | null;
 
 export interface ApprovalActionUIProps {
   requestId: string | number;
@@ -13,12 +13,14 @@ export const ApprovalActionUI: React.FC<ApprovalActionUIProps> = ({ requestId, o
   const [isOpen, setIsOpen] = useState(false);
   const [actionType, setActionType] = useState<ActionType>(null);
   const [comment, setComment] = useState("");
+  const [expectedRevision, setExpectedRevision] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
   const handleOpenModal = (type: ActionType) => {
     setActionType(type);
     setComment("");
+    setExpectedRevision("");
     setApiError(null);
     setIsOpen(true);
   };
@@ -27,10 +29,12 @@ export const ApprovalActionUI: React.FC<ApprovalActionUIProps> = ({ requestId, o
     if (isSubmitting) return;
     setIsOpen(false);
     setActionType(null);
+    setExpectedRevision("");
   };
 
   const handleConfirm = async () => {
     if (!actionType || comment.trim() === "") return;
+    if (actionType === "REQUEST_REVISION" && expectedRevision.trim() === "") return;
 
     setIsSubmitting(true);
     setApiError(null);
@@ -39,9 +43,10 @@ export const ApprovalActionUI: React.FC<ApprovalActionUIProps> = ({ requestId, o
       const payload: ApprovalActionPayload = {
         action: actionType,
         comment: comment.trim(),
+        expectedRevision: actionType === "REQUEST_REVISION" ? expectedRevision.trim() : undefined,
       };
       await approvalActionService.submitAction(requestId, payload);
-      alert(`Đã thực hiện: ${actionType === "APPROVE" ? "Phê duyệt" : "Từ chối"} thành công!`);
+      alert(`Đã thực hiện: ${actionType === "APPROVE" ? "Phê duyệt" : "Yêu cầu chỉnh sửa"} thành công!`);
       if (onSuccess) onSuccess();
       handleCloseModal();
     } catch (error: any) {
@@ -50,6 +55,10 @@ export const ApprovalActionUI: React.FC<ApprovalActionUIProps> = ({ requestId, o
       setIsSubmitting(false);
     }
   };
+
+  const isFormValid =
+    comment.trim() !== "" &&
+    (actionType === "APPROVE" || (actionType === "REQUEST_REVISION" && expectedRevision.trim() !== ""));
 
   return (
     <div className="mx-auto w-full max-w-4xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -63,11 +72,11 @@ export const ApprovalActionUI: React.FC<ApprovalActionUIProps> = ({ requestId, o
 
         <div className="flex flex-wrap gap-3">
           <button
-            onClick={() => handleOpenModal("REJECT")}
-            className="inline-flex items-center gap-2 rounded-xl border-2 border-rose-100 bg-white px-5 py-2.5 text-sm font-semibold text-rose-600 transition-all hover:border-rose-200 hover:bg-rose-50 focus:outline-none focus:ring-4 focus:ring-rose-50"
+            onClick={() => handleOpenModal("REQUEST_REVISION")}
+            className="inline-flex items-center gap-2 rounded-xl border-2 border-amber-200 bg-white px-5 py-2.5 text-sm font-semibold text-amber-700 transition-all hover:border-amber-300 hover:bg-amber-50 focus:outline-none focus:ring-4 focus:ring-amber-50"
           >
-            <XCircle className="h-5 w-5" />
-            Từ chối
+            <Edit3 className="h-5 w-5" />
+            Yêu cầu chỉnh sửa
           </button>
           
           <button
@@ -89,7 +98,7 @@ export const ApprovalActionUI: React.FC<ApprovalActionUIProps> = ({ requestId, o
           >
             <div className="mb-6 flex items-center justify-between">
               <h3 className="text-xl font-bold text-slate-900">
-                {actionType === "APPROVE" ? "Xác nhận phê duyệt yêu cầu" : "Xác nhận từ chối yêu cầu"}
+                {actionType === "APPROVE" ? "Xác nhận phê duyệt yêu cầu" : "Yêu cầu chỉnh sửa form tuyển dụng"}
               </h3>
               <button
                 onClick={handleCloseModal}
@@ -105,28 +114,56 @@ export const ApprovalActionUI: React.FC<ApprovalActionUIProps> = ({ requestId, o
               </div>
             )}
 
-            <div className="mb-8">
-              <label htmlFor="comment" className="mb-2 block text-sm font-semibold text-slate-700">
-                Nhận xét / Lý do <span className="text-rose-500">*</span>
-              </label>
-              <textarea
-                id="comment"
-                rows={4}
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="Vui lòng nhập nhận xét của bạn..."
-                disabled={isSubmitting}
-                className={`w-full resize-none rounded-xl border p-4 text-sm outline-none transition focus:ring-2 ${
-                  comment.trim() === "" 
-                    ? "border-rose-300 bg-rose-50/30 text-rose-900 focus:border-rose-500 focus:ring-rose-200" 
-                    : "border-slate-300 bg-white text-slate-900 focus:border-indigo-500 focus:ring-indigo-100"
-                }`}
-              />
-              {comment.trim() === "" && (
-                <p className="mt-2 text-xs font-medium text-rose-500">
-                  Vui lòng nhập nhận xét trước khi xác nhận.
-                </p>
+            <div className="space-y-5 mb-8">
+              {actionType === "REQUEST_REVISION" && (
+                <div>
+                  <label htmlFor="expectedRevision" className="mb-2 block text-sm font-semibold text-slate-700">
+                    Nội dung yêu cầu chỉnh sửa (expectedRevision) <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    id="expectedRevision"
+                    rows={3}
+                    value={expectedRevision}
+                    onChange={(e) => setExpectedRevision(e.target.value)}
+                    placeholder="Mô tả cụ thể những nội dung, thông số cần được điều chỉnh lại trong form tuyển dụng..."
+                    disabled={isSubmitting}
+                    className={`w-full resize-none rounded-xl border p-4 text-sm outline-none transition focus:ring-2 ${
+                      expectedRevision.trim() === ""
+                        ? "border-amber-300 bg-amber-50/20 text-slate-900 focus:border-amber-500 focus:ring-amber-100"
+                        : "border-slate-300 bg-white text-slate-900 focus:border-indigo-500 focus:ring-indigo-100"
+                    }`}
+                  />
+                  {expectedRevision.trim() === "" && (
+                    <p className="mt-1.5 text-xs font-medium text-amber-700">
+                      Vui lòng nêu rõ các điểm cần chỉnh sửa trước khi gửi.
+                    </p>
+                  )}
+                </div>
               )}
+
+              <div>
+                <label htmlFor="comment" className="mb-2 block text-sm font-semibold text-slate-700">
+                  Nhận xét / Ghi chú <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  id="comment"
+                  rows={3}
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="Vui lòng nhập nhận xét hoặc giải thích chi tiết..."
+                  disabled={isSubmitting}
+                  className={`w-full resize-none rounded-xl border p-4 text-sm outline-none transition focus:ring-2 ${
+                    comment.trim() === "" 
+                      ? "border-rose-300 bg-rose-50/30 text-rose-900 focus:border-rose-500 focus:ring-rose-200" 
+                      : "border-slate-300 bg-white text-slate-900 focus:border-indigo-500 focus:ring-indigo-100"
+                  }`}
+                />
+                {comment.trim() === "" && (
+                  <p className="mt-1.5 text-xs font-medium text-rose-500">
+                    Vui lòng nhập nhận xét trước khi xác nhận.
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="flex flex-col-reverse justify-end gap-3 sm:flex-row">
@@ -139,15 +176,15 @@ export const ApprovalActionUI: React.FC<ApprovalActionUIProps> = ({ requestId, o
               </button>
               <button
                 onClick={handleConfirm}
-                disabled={comment.trim() === "" || isSubmitting}
+                disabled={!isFormValid || isSubmitting}
                 className={`inline-flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all focus:outline-none focus:ring-4 disabled:cursor-not-allowed disabled:opacity-50 ${
                   actionType === "APPROVE"
                     ? "bg-emerald-600 shadow-emerald-600/20 hover:bg-emerald-700 focus:ring-emerald-100"
-                    : "bg-rose-600 shadow-rose-600/20 hover:bg-rose-700 focus:ring-rose-100"
+                    : "bg-amber-600 shadow-amber-600/20 hover:bg-amber-700 focus:ring-amber-100"
                 }`}
               >
                 {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                Xác nhận
+                {actionType === "APPROVE" ? "Xác nhận duyệt" : "Gửi yêu cầu chỉnh sửa"}
               </button>
             </div>
           </div>

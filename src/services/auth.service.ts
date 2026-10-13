@@ -27,6 +27,15 @@ export class LoginValidationError extends Error {
   }
 }
 
+export class AccountBlockedError extends Error {
+  constructor(
+    message = 'Tài khoản của bạn đã bị chặn tạm thời do nhập sai quá 5 lần. Vui lòng liên hệ Admin.',
+  ) {
+    super(message);
+    this.name = 'AccountBlockedError';
+  }
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -136,6 +145,12 @@ export const authService = {
     }
   },
 
+  /**
+   * Yêu cầu liên kết đặt lại mật khẩu qua email công ty.
+   * Xử lý lỗi 5 lần nhập sai: Nếu Backend trả về lỗi do nhập sai email quá 5 lần
+   * (HTTP status 429, 403 hoặc mã lỗi TOO_MANY_ATTEMPTS/ACCOUNT_BLOCKED/RATE_LIMITED),
+   * ném AccountBlockedError để Frontend hiển thị thông báo chặn tạm thời màu đỏ.
+   */
   requestPasswordReset: async (email: string): Promise<void> => {
     try {
       const response = await axiosClient.post("/auth/forgot-password", { email });
@@ -147,23 +162,35 @@ export const authService = {
       throw new Error("PASSWORD_RESET_REQUEST_FAILED");
     } catch (error) {
       if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
         const payload = error.response?.data as BackendErrorPayload | undefined;
         const code = payload?.code;
+
+        // Bắt lỗi tài khoản bị chặn do nhập sai quá 5 lần (status 429, 403 hoặc mã code)
+        if (
+          status === 429 ||
+          status === 403 ||
+          code === "TOO_MANY_ATTEMPTS" ||
+          code === "ACCOUNT_BLOCKED" ||
+          code === "RATE_LIMITED"
+        ) {
+          throw new AccountBlockedError();
+        }
 
         if (code === "EMAIL_INVALID" || code === "VALIDATION_ERROR") {
           throw new Error("EMAIL_INVALID");
         }
 
-        if (error.response?.status === 429) {
-          throw new Error("RATE_LIMITED");
-        }
-
         if (
-          error.response?.status === 500 ||
-          error.response?.status === 503
+          status === 500 ||
+          status === 503
         ) {
           throw new Error("SERVER_UNAVAILABLE");
         }
+      }
+
+      if (error instanceof AccountBlockedError) {
+        throw error;
       }
 
       if (error instanceof Error && error.message === "PASSWORD_RESET_REQUEST_FAILED") {

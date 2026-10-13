@@ -14,7 +14,7 @@ const pathsToHide = [
 
 pathsToHide.forEach(path => {
   const safePath = path.replace(/\//g, '\\/');
-  const regex = new RegExp('  \\{[^}]*to: \\'' + safePath + \\''[^}]*\\},\\n?', 'g');
+  const regex = new RegExp('  \\{[^}]*to: \'' + safePath + '\'[^}]*\\},\\n?', 'g');
   content = content.replace(regex, '');
 });
 

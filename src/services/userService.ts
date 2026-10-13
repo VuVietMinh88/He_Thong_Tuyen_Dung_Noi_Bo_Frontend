@@ -168,6 +168,15 @@ export const userService = {
     }
   },
 
+  getUserById: async (id: string): Promise<UserAccount> => {
+    try {
+      const response = await axiosClient.get<unknown>(`/accounts/${id}`);
+      return mapBackendAccount(parseAccountView(response.data));
+    } catch (error) {
+      throw getErrorMessage(error, 'Không thể tải thông tin tài khoản.');
+    }
+  },
+
   updateUser: async (account: UserAccount): Promise<UserAccount> => {
     try {
       const response = await axiosClient.put<unknown>(`/accounts/${account.id}`, {

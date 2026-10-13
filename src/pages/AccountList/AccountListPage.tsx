@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useToast } from "../../components/notifications/useToast";
 import type {
   AccountFilterParams,
@@ -16,7 +17,6 @@ import ManageRolesModal from "../../components/AccountList/ManageRolesModal";
 import LockAccountModal from "../../components/AccountList/LockAccountModal";
 import UnlockAccountModal from "../../components/AccountList/UnlockAccountModal";
 import ImportExcelUI from "../../components/Recruitment/ImportExcelUI";
-import Sidebar from "../../components/layout/Sidebar";
 import { usePermission } from "../../hooks/usePermission";
 import type { SessionDraftDialog } from "../../services/sessionDraft.service";
 
@@ -30,6 +30,7 @@ const INITIAL_FILTERS: AccountFilterParams = {
 };
 
 export const AccountListPage: React.FC = () => {
+  const navigate = useNavigate();
   // Account list, counts and server pagination state
   const [accounts, setAccounts] = useState<UserAccount[]>([]);
   const [totalItems, setTotalItems] = useState<number>(0);
@@ -316,16 +317,9 @@ export const AccountListPage: React.FC = () => {
     }
   };
 
-  // Handler for opening edit modal
+  // Handler for opening edit page
   const handleOpenEditModal = (account: UserAccount) => {
-    setEditingAccount(account);
-    setIsEditModalOpen(true);
-  };
-
-  // Handler for opening manage roles modal (User Story S1-09)
-  const handleOpenManageRoles = (account: UserAccount) => {
-    setManagingRolesAccount(account);
-    setIsManageRolesModalOpen(true);
+    navigate(`/users/${account.id}/edit`);
   };
 
   // Handler for updating user roles via API (User Story S1-09)
@@ -388,14 +382,9 @@ export const AccountListPage: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-slate-100/75">
-      {/* Shared Navigation Sidebar */}
-      <Sidebar />
-
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-x-hidden">
-        {/* Top Header */}
-        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/80 backdrop-blur-md px-6 py-4">
+    <div className="w-full">
+      {/* Top Header */}
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/80 backdrop-blur-md px-6 py-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <nav className="flex items-center gap-2 text-xs font-medium text-slate-500 mb-1">
@@ -498,9 +487,6 @@ export const AccountListPage: React.FC = () => {
               onEditAccount={
                 canManageAccounts ? handleOpenEditModal : undefined
               }
-              onManageRoles={
-                canManageAccounts ? handleOpenManageRoles : undefined
-              }
               onRequestLock={canManageAccounts ? handleRequestLock : undefined}
               onRequestUnlock={
                 canManageAccounts ? handleRequestUnlock : undefined
@@ -523,7 +509,6 @@ export const AccountListPage: React.FC = () => {
             )}
           </div>
         </div>
-      </main>
 
       {/* Edit Account Modal */}
       <EditAccountModal

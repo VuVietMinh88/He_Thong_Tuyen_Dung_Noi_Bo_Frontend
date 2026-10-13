@@ -59,6 +59,7 @@ export const ApprovalHistoryTimeline: React.FC<ApprovalHistoryTimelineProps> = (
           icon: <XCircle className="h-6 w-6 text-rose-500 bg-white rounded-full" />,
           label: "Đã từ chối",
         };
+      case "PENDING_APPROVAL":
       case "PENDING":
       default:
         return {
