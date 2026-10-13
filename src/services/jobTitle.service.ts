@@ -61,7 +61,7 @@ export const jobTitleService = {
   },
 
   // Xóa chức danh 
-  // Lưu ý: Backend KHÔNG có API DELETE /positions/{id} để tránh mất lịch sử.
+
   // Mọi thao tác "Xóa" đều được thực hiện thông qua hàm updateJobTitle với trường active = false.
 };
 

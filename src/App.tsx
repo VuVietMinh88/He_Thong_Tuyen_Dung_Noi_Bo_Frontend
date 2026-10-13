@@ -12,6 +12,7 @@ import ResetPasswordPage from "./pages/ResetPassword/ResetPasswordPage";
 import AccountActivationPage from "./pages/AccountActivation/AccountActivationPage";
 import ChangePasswordPage from "./pages/ChangePassword/ChangePasswordPage";
 import AccountListPage from "./pages/AccountList/AccountListPage";
+import EditAccountPage from "./pages/AccountList/EditAccountPage";
 import ProfilePage from "./pages/Profile/ProfilePage";
 import RecruitmentPage from "./pages/Recruitment/RecruitmentPage";
 import RecruitmentAdminPage from "./pages/Recruitment/RecruitmentAdminPage";
@@ -171,6 +172,22 @@ function App() {
             >
               <Route path="/users" element={<AccountListPage />} />
               <Route path="/admin/users" element={<AccountListPage />} />
+              <Route
+                path="/users/:id/edit"
+                element={
+                  <MainLayout>
+                    <EditAccountPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/admin/users/:id/edit"
+                element={
+                  <MainLayout>
+                    <EditAccountPage />
+                  </MainLayout>
+                }
+              />
               <Route
                 path="/users/import"
                 element={

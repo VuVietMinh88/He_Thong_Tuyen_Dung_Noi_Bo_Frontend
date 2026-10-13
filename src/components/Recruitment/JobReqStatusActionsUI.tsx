@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { PauseCircle, CheckSquare, XOctagon, X, Loader2, AlertTriangle } from "lucide-react";
 import { jobReqStatusService } from "../../services/jobReqStatusService";
 
-type ActionType = "PAUSED" | "CLOSED" | "CANCELLED" | null;
+type ActionType = "PAUSED" | "FILLED" | "CANCELLED" | null;
 
 export interface JobReqStatusActionsUIProps {
   jobRequisitionId: string | number;
@@ -51,11 +51,12 @@ export const JobReqStatusActionsUI: React.FC<JobReqStatusActionsUIProps> = ({
     setIsSubmitting(true);
     setApiError(null);
     try {
-      await jobReqStatusService.updateStatus(jobRequisitionId, {
+      // Gọi API POST /requisitions/{id}/status-changes với mã trạng thái (VD: 'FILLED')
+      await jobReqStatusService.changeStatus(jobRequisitionId, {
         status: actionType,
         reason: reason.trim() || undefined,
       });
-      alert(`Đã cập nhật trạng thái thành công!`);
+      alert(`Đã cập nhật trạng thái yêu cầu tuyển dụng thành công!`);
       if (onSuccess) onSuccess();
       handleCloseModal();
     } catch (err: any) {
@@ -76,14 +77,14 @@ export const JobReqStatusActionsUI: React.FC<JobReqStatusActionsUIProps> = ({
           icon: <PauseCircle className="h-5 w-5" />,
           actionLabel: "Tạm dừng",
         };
-      case "CLOSED":
+      case "FILLED":
         return {
-          title: "Xác nhận đóng yêu cầu",
-          description: "Đóng yêu cầu khi đã tuyển đủ người hoặc không còn nhu cầu. Việc mở lại sẽ cần duyệt lại.",
-          buttonColor: "bg-slate-700 hover:bg-slate-800 focus:ring-slate-100 shadow-slate-700/20",
-          iconBg: "bg-slate-200 text-slate-700",
+          title: "Xác nhận hoàn thành yêu cầu (FILLED)",
+          description: "Chuyển trạng thái yêu cầu sang Hoàn thành (FILLED) khi đã tuyển đủ người. Hệ thống sẽ kết thúc nhận hồ sơ mới.",
+          buttonColor: "bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-100 shadow-emerald-600/20",
+          iconBg: "bg-emerald-100 text-emerald-700",
           icon: <CheckSquare className="h-5 w-5" />,
-          actionLabel: "Đóng yêu cầu",
+          actionLabel: "Hoàn thành tuyển dụng (FILLED)",
         };
       case "CANCELLED":
         return {
@@ -122,12 +123,12 @@ export const JobReqStatusActionsUI: React.FC<JobReqStatusActionsUIProps> = ({
           </button>
 
           <button
-            onClick={() => handleOpenAction("CLOSED")}
+            onClick={() => handleOpenAction("FILLED")}
             disabled={checkingAction !== null}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:border-slate-400 focus:outline-none focus:ring-4 focus:ring-slate-100 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 hover:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-50 disabled:opacity-50"
           >
-            {checkingAction === "CLOSED" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckSquare className="h-4 w-4" />}
-            Đóng
+            {checkingAction === "FILLED" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckSquare className="h-4 w-4" />}
+            Hoàn thành (FILLED)
           </button>
 
           <button
@@ -185,7 +186,7 @@ export const JobReqStatusActionsUI: React.FC<JobReqStatusActionsUIProps> = ({
                     <p className="font-bold">Cảnh báo quan trọng!</p>
                     <p className="mt-1 text-sm">
                       Hiện đang có <strong>{activeCandidatesCount} ứng viên</strong> trong quy trình tuyển dụng. 
-                      Bạn có chắc chắn muốn tiếp tục hành động này không?
+                      Bạn có chắc chắn muốn chuyển trạng thái yêu cầu tuyển dụng này?
                     </p>
                   </div>
                 </div>

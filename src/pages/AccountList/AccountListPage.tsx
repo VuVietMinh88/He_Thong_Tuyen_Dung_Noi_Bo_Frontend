@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useToast } from "../../components/notifications/useToast";
 import type {
   AccountFilterParams,
@@ -30,6 +31,7 @@ const INITIAL_FILTERS: AccountFilterParams = {
 };
 
 export const AccountListPage: React.FC = () => {
+  const navigate = useNavigate();
   // Account list, counts and server pagination state
   const [accounts, setAccounts] = useState<UserAccount[]>([]);
   const [totalItems, setTotalItems] = useState<number>(0);
@@ -316,16 +318,9 @@ export const AccountListPage: React.FC = () => {
     }
   };
 
-  // Handler for opening edit modal
+  // Handler for opening edit page
   const handleOpenEditModal = (account: UserAccount) => {
-    setEditingAccount(account);
-    setIsEditModalOpen(true);
-  };
-
-  // Handler for opening manage roles modal (User Story S1-09)
-  const handleOpenManageRoles = (account: UserAccount) => {
-    setManagingRolesAccount(account);
-    setIsManageRolesModalOpen(true);
+    navigate(`/users/${account.id}/edit`);
   };
 
   // Handler for updating user roles via API (User Story S1-09)
@@ -497,9 +492,6 @@ export const AccountListPage: React.FC = () => {
               isLoading={isLoading}
               onEditAccount={
                 canManageAccounts ? handleOpenEditModal : undefined
-              }
-              onManageRoles={
-                canManageAccounts ? handleOpenManageRoles : undefined
               }
               onRequestLock={canManageAccounts ? handleRequestLock : undefined}
               onRequestUnlock={

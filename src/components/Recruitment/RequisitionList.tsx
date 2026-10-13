@@ -12,7 +12,50 @@ export interface RequisitionListProps {
   onClone: (item: Requisition) => void;
 }
 
-const STATUSES = ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED', 'OPEN', 'CLOSED', 'CANCELLED'];
+const STATUSES = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'OPEN', 'FILLED', 'CANCELLED'];
+
+const getStatusBadge = (status: string) => {
+  switch (status) {
+    case 'PENDING_APPROVAL':
+    case 'PENDING':
+      return {
+        label: 'PENDING_APPROVAL',
+        className: 'bg-amber-100 text-amber-700 border border-amber-200',
+      };
+    case 'APPROVED':
+      return {
+        label: 'APPROVED',
+        className: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
+      };
+    case 'REJECTED':
+      return {
+        label: 'REJECTED',
+        className: 'bg-rose-100 text-rose-700 border border-rose-200',
+      };
+    case 'OPEN':
+      return {
+        label: 'OPEN',
+        className: 'bg-indigo-100 text-indigo-700 border border-indigo-200',
+      };
+    case 'FILLED':
+    case 'CLOSED':
+      return {
+        label: 'FILLED',
+        className: 'bg-blue-100 text-blue-700 border border-blue-200',
+      };
+    case 'CANCELLED':
+      return {
+        label: 'CANCELLED',
+        className: 'bg-slate-200 text-slate-700 border border-slate-300',
+      };
+    case 'DRAFT':
+    default:
+      return {
+        label: status === 'PENDING' ? 'PENDING_APPROVAL' : (status === 'CLOSED' ? 'FILLED' : status),
+        className: 'bg-slate-100 text-slate-700 border border-slate-200',
+      };
+  }
+};
 
 export const RequisitionList: React.FC<RequisitionListProps> = ({
   positions,
@@ -229,11 +272,14 @@ export const RequisitionList: React.FC<RequisitionListProps> = ({
                     {req.reason === 'NEW_HEADCOUNT' ? 'Tăng định biên' : 'Thay thế'}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-1 text-[11px] font-semibold rounded-full ${
-                      req.status === 'DRAFT' ? 'bg-slate-100 text-slate-700' : 'bg-indigo-100 text-indigo-700'
-                    }`}>
-                      {req.status}
-                    </span>
+                    {(() => {
+                      const badge = getStatusBadge(req.status);
+                      return (
+                        <span className={`inline-flex items-center px-2.5 py-1 text-[11px] font-semibold rounded-full ${badge.className}`}>
+                          {badge.label}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-slate-500">
                     <div>{req.createdAt ? new Date(req.createdAt).toLocaleDateString('vi-VN') : '-'}</div>

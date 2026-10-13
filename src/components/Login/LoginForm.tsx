@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useToast } from '../notifications/useToast';
 import {
   authService,
   InvalidLoginResponseError,
@@ -19,6 +20,7 @@ import {
 } from '../../utils/loginState';
 
 export const LoginForm = () => {
+  const { notify } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState(() => localStorage.getItem('rememberedEmail') ?? '');
@@ -81,6 +83,7 @@ export const LoginForm = () => {
       if (rememberMe) localStorage.setItem('rememberedEmail', normalizedEmail);
       else localStorage.removeItem('rememberedEmail');
       window.dispatchEvent(new Event('auth:changed'));
+      notify('Đăng nhập thành công!', 'success');
       const routeFromState = (location.state as { from?: { pathname?: unknown; search?: unknown; hash?: unknown } } | null)?.from;
       const fromPath = typeof routeFromState?.pathname === 'string'
         && routeFromState.pathname.startsWith('/')

@@ -1,8 +1,9 @@
 import axiosClient from '../utils/axiosClient';
 
 export interface ApprovalActionPayload {
-  action: 'APPROVE' | 'REJECT';
+  action: 'APPROVE' | 'REJECT' | 'REQUEST_REVISION';
   comment: string;
+  expectedRevision?: string;
 }
 
 export const approvalActionService = {

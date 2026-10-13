@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { authService } from "../../services/auth.service";
+import { authService, AccountBlockedError } from "../../services/auth.service";
 import axios from "axios";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -13,13 +13,20 @@ export const ForgotPasswordForm: React.FC = () => {
   const [isSubmitted, setIsSubmitted] = useState(false);
 
   const getSubmitErrorMessage = (error: unknown): string => {
+    if (
+      error instanceof AccountBlockedError ||
+      (error instanceof Error && error.name === "AccountBlockedError")
+    ) {
+      return "Tài khoản của bạn đã bị chặn tạm thời do nhập sai quá 5 lần. Vui lòng liên hệ Admin.";
+    }
+
     if (axios.isAxiosError(error)) {
       const status = error.response?.status;
+      if (status === 429 || status === 403) {
+        return "Tài khoản của bạn đã bị chặn tạm thời do nhập sai quá 5 lần. Vui lòng liên hệ Admin.";
+      }
       if (status === 400 || status === 404 || status === 422) {
         return "Email không hợp lệ hoặc không tồn tại trong hệ thống.";
-      }
-      if (status === 429) {
-        return "Bạn đã gửi yêu cầu quá nhiều lần. Vui lòng thử lại sau vài phút.";
       }
       if (status === 503 || status === 500) {
         return "Hệ thống đang bận. Vui lòng thử lại sau.";
@@ -28,9 +35,19 @@ export const ForgotPasswordForm: React.FC = () => {
     }
     
     if (error instanceof Error) {
+      if (error.message === "RATE_LIMITED" || error.message === "ACCOUNT_BLOCKED") {
+        return "Tài khoản của bạn đã bị chặn tạm thời do nhập sai quá 5 lần. Vui lòng liên hệ Admin.";
+      }
       if (error.message === "NETWORK_ERROR" || error.message.includes("Network Error")) {
         return "Không thể kết nối tới máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.";
       }
+      if (error.message === "EMAIL_INVALID") {
+        return "Email không hợp lệ hoặc không tồn tại trong hệ thống.";
+      }
+      if (error.message === "SERVER_UNAVAILABLE") {
+        return "Hệ thống đang bận. Vui lòng thử lại sau.";
+      }
+      return error.message;
     }
 
     return "Không thể kết nối tới máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.";
@@ -159,8 +176,14 @@ export const ForgotPasswordForm: React.FC = () => {
         </div>
 
         {submitError && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {submitError}
+          <div
+            role="alert"
+            className="flex items-start gap-3 rounded-xl border border-red-300 bg-red-50 p-4 text-sm font-medium text-red-800 shadow-sm"
+          >
+            <span className="text-lg leading-none shrink-0" aria-hidden="true">
+              ⚠️
+            </span>
+            <div className="flex-1">{submitError}</div>
           </div>
         )}
 
