@@ -20,7 +20,7 @@ import {
 } from '../../utils/loginState';
 
 export const LoginForm = () => {
-  const { notify } = useToast();
+  const { notify, addToast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState(() => localStorage.getItem('rememberedEmail') ?? '');
@@ -102,7 +102,9 @@ export const LoginForm = () => {
       if (error instanceof LoginValidationError) {
         setEmailError(error.fieldErrors.email?.[0] ?? '');
         setPasswordError(error.fieldErrors.password?.[0] ?? '');
-        setSubmitError('Dữ liệu đăng nhập không hợp lệ. Vui lòng kiểm tra lại.');
+        const msg = 'Dữ liệu đăng nhập không hợp lệ. Vui lòng kiểm tra lại.';
+        setSubmitError(msg);
+        addToast({ type: 'error', message: msg });
         return;
       }
 
@@ -110,22 +112,28 @@ export const LoginForm = () => {
       if (errorMessage === 'INVALID_CREDENTIALS') {
         const lock = registerFailedLoginAttempt(normalizedEmail);
         setLockVersion((version) => version + 1);
-        setSubmitError(
-          lock.isLocked
-            ? 'Tài khoản đã bị khóa tạm thời trong 15 phút. Vui lòng thử lại sau.'
-            : getGenericLoginErrorMessage(),
-        );
+        const msg = lock.isLocked
+          ? 'Tài khoản đã bị khóa tạm thời trong 15 phút. Vui lòng thử lại sau.'
+          : getGenericLoginErrorMessage();
+        setSubmitError(msg);
+        addToast({ type: 'error', message: msg });
         return;
       }
       if (errorMessage === 'TOO_MANY_REQUESTS') {
-        setSubmitError('Bạn đã thử quá nhiều lần. Vui lòng thử lại sau.');
+        const msg = 'Bạn đã thử quá nhiều lần. Vui lòng thử lại sau.';
+        setSubmitError(msg);
+        addToast({ type: 'warning', message: msg });
         return;
       }
       if (errorMessage === 'NETWORK_ERROR') {
-        setSubmitError('Không thể kết nối tới máy chủ. Vui lòng kiểm tra kết nối và thử lại.');
+        const msg = 'Không thể kết nối tới máy chủ. Vui lòng kiểm tra kết nối và thử lại.';
+        setSubmitError(msg);
+        addToast({ type: 'error', message: msg });
         return;
       }
-      setSubmitError('Không thể đăng nhập lúc này. Vui lòng thử lại sau.');
+      const genericMsg = 'Không thể đăng nhập lúc này. Vui lòng thử lại sau.';
+      setSubmitError(genericMsg);
+      addToast({ type: 'error', message: genericMsg });
     } finally {
       setIsLoading(false);
     }

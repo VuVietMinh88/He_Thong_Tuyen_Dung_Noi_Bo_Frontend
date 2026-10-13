@@ -1,11 +1,13 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { authService, AccountBlockedError } from "../../services/auth.service";
+import { useToast } from "../notifications/useToast";
 import axios from "axios";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const ForgotPasswordForm: React.FC = () => {
+  const { addToast } = useToast();
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState("");
   const [submitError, setSubmitError] = useState("");
@@ -59,15 +61,17 @@ export const ForgotPasswordForm: React.FC = () => {
     const normalizedEmail = email.trim();
 
     if (!normalizedEmail) {
-      setEmailError("Vui lòng nhập email công ty");
+      const msg = "Vui lòng nhập email công ty";
+      setEmailError(msg);
+      addToast({ type: "warning", message: msg });
       setSubmitError("");
       return;
     }
 
     if (!EMAIL_REGEX.test(normalizedEmail)) {
-      setEmailError(
-        "Email không hợp lệ. Vui lòng nhập đúng định dạng (vd: ten@congty.com)",
-      );
+      const msg = "Email không hợp lệ. Vui lòng nhập đúng định dạng (vd: ten@congty.com)";
+      setEmailError(msg);
+      addToast({ type: "warning", message: msg });
       setSubmitError("");
       return;
     }
@@ -79,8 +83,14 @@ export const ForgotPasswordForm: React.FC = () => {
     try {
       await authService.requestPasswordReset(normalizedEmail);
       setIsSubmitted(true);
+      addToast({
+        type: "success",
+        message: "Hệ thống đã gửi liên kết đặt lại mật khẩu về email của bạn!",
+      });
     } catch (error) {
-      setSubmitError(getSubmitErrorMessage(error));
+      const errorMessage = getSubmitErrorMessage(error);
+      setSubmitError(errorMessage);
+      addToast({ type: "error", message: errorMessage });
       setIsSubmitted(false);
     } finally {
       setIsSubmitting(false);
