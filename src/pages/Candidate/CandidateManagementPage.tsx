@@ -14,13 +14,18 @@ import {
   LayoutGrid,
   List,
   Flag,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import type {
   CandidateProfile,
   CvParsingStatus,
   CandidateFilterCriteria,
   CandidateStage,
+  CandidateSortOption,
 } from '../../types/candidate';
+import { DEFAULT_CANDIDATE_SORT_OPTION } from '../../types/candidate';
 import { candidateService } from '../../services/candidateService';
 import { CandidateDetailModal } from '../../components/Candidate/CandidateDetailModal';
 import CandidateKanbanBoard, {
@@ -28,7 +33,10 @@ import CandidateKanbanBoard, {
 } from '../../components/Candidate/CandidateKanbanBoard';
 import { MatchingScoreBadge } from '../../components/Candidate/MatchingScoreBadge';
 import { CriteriaQuickSummaryPopover } from '../../components/Candidate/CriteriaQuickSummaryPopover';
-import { resolveCandidateMatchingEvaluation } from '../../utils/candidateMatchingHelper';
+import {
+  resolveCandidateMatchingEvaluation,
+  sortCandidatesByMatchingScore,
+} from '../../utils/candidateMatchingHelper';
 import MoveStageModal from '../../components/Candidate/MoveStageModal';
 import RejectCandidateModal from '../../components/Candidate/RejectCandidateModal';
 import type { MoveCandidateStagePayload, RejectCandidatePayload } from '../../services/candidateStageService';
@@ -43,9 +51,21 @@ type PendingStageAction = {
   action: 'move' | 'reject';
 };
 
-export const CandidateManagementPage: React.FC = () => {
-  const [candidateList, setCandidateList] = useState<CandidateProfile[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+export interface CandidateManagementPageProps {
+  initialCandidates?: CandidateProfile[];
+  initialIsLoading?: boolean;
+}
+
+export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = ({
+  initialCandidates,
+  initialIsLoading,
+}) => {
+  const [candidateList, setCandidateList] = useState<CandidateProfile[]>(
+    () => initialCandidates || []
+  );
+  const [isLoading, setIsLoading] = useState<boolean>(
+    () => (initialIsLoading !== undefined ? initialIsLoading : !initialCandidates?.length)
+  );
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<
     CvParsingStatus | 'ALL'
@@ -53,6 +73,8 @@ export const CandidateManagementPage: React.FC = () => {
   const [selectedJobId, setSelectedJobId] = useState('ALL');
   const [onlyOverdueSla, setOnlyOverdueSla] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+  const [selectedSortOrder, setSelectedSortOrder] =
+    useState<CandidateSortOption>(DEFAULT_CANDIDATE_SORT_OPTION);
 
   // Quản lý Modal chi tiết hồ sơ & đối chiếu gợi ý CV
   const [selectedCandidate, setSelectedCandidate] =
@@ -66,15 +88,17 @@ export const CandidateManagementPage: React.FC = () => {
       const filterCriteria: CandidateFilterCriteria = {
         keyword: searchKeyword,
         cvParsingStatus: selectedStatusFilter,
+        sortBy: selectedSortOrder,
       };
       const resultList = await candidateService.getCandidates(filterCriteria);
       setCandidateList(resultList);
     } catch {
+      // Tại sao: Khi gọi API tải danh sách thất bại hoặc gặp lỗi mạng, đưa về mảng rỗng để UI không bị treo
       setCandidateList([]);
     } finally {
       setIsLoading(false);
     }
-  }, [searchKeyword, selectedStatusFilter]);
+  }, [searchKeyword, selectedStatusFilter, selectedSortOrder]);
 
   useEffect(() => {
     let isSubscribed = true;
@@ -84,12 +108,14 @@ export const CandidateManagementPage: React.FC = () => {
         const filterCriteria: CandidateFilterCriteria = {
           keyword: searchKeyword,
           cvParsingStatus: selectedStatusFilter,
+          sortBy: selectedSortOrder,
         };
         const resultList = await candidateService.getCandidates(filterCriteria);
         if (isSubscribed) {
           setCandidateList(resultList);
         }
       } catch {
+        // Tại sao: Bắt lỗi khi gọi API tải danh sách thất bại, đảm bảo an toàn cho giao diện người dùng
         if (isSubscribed) {
           setCandidateList([]);
         }
@@ -105,7 +131,7 @@ export const CandidateManagementPage: React.FC = () => {
     return () => {
       isSubscribed = false;
     };
-  }, [searchKeyword, selectedStatusFilter]);
+  }, [searchKeyword, selectedStatusFilter, selectedSortOrder]);
 
   const overdueCount = useMemo(() => {
     return slaService.filterOverdueCandidates(candidateList).length;
@@ -120,8 +146,19 @@ export const CandidateManagementPage: React.FC = () => {
     if (onlyOverdueSla) {
       list = slaService.filterOverdueCandidates(list);
     }
-    return list;
-  }, [candidateList, selectedJobId, onlyOverdueSla]);
+
+    // Áp dụng sắp xếp dữ liệu hiển thị (Task TKNHTTDNB1-411)
+    // Bảo toàn 100% hồ sơ ứng viên: Không ẩn/lọc bỏ bất kỳ ứng viên nào
+    return sortCandidatesByMatchingScore(list, selectedSortOrder);
+  }, [candidateList, selectedJobId, onlyOverdueSla, selectedSortOrder]);
+
+  const handleToggleScoreSort = () => {
+    if (selectedSortOrder === 'SCORE_DESC') {
+      setSelectedSortOrder('SCORE_ASC');
+    } else {
+      setSelectedSortOrder('SCORE_DESC');
+    }
+  };
 
   const jobOptions = Array.from(
     candidateList.reduce((jobs, candidate) => {
@@ -322,6 +359,36 @@ export const CandidateManagementPage: React.FC = () => {
             ))}
           </select>
 
+          {/* Bộ điều khiển sắp xếp theo Điểm phù hợp gợi ý (Task TKNHTTDNB1-411) */}
+          <div className="flex items-center gap-1.5">
+            <label
+              htmlFor="candidate-sort-select"
+              className="flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-gray-400"
+            >
+              <ArrowUpDown className="h-3.5 w-3.5 text-gray-400" />
+              <span>Sắp xếp:</span>
+            </label>
+            <select
+              id="candidate-sort-select"
+              data-testid="candidate-sort-select"
+              value={selectedSortOrder}
+              onChange={(event) =>
+                setSelectedSortOrder(event.target.value as CandidateSortOption)
+              }
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+            >
+              <option value="SCORE_DESC">
+                Điểm phù hợp: Cao đến thấp (Gợi ý đọc trước)
+              </option>
+              <option value="SCORE_ASC">
+                Điểm phù hợp: Thấp đến cao
+              </option>
+              <option value="APPLIED_AT_DESC">
+                Ngày nộp hồ sơ: Mới nhất
+              </option>
+            </select>
+          </div>
+
           {/* Bộ lọc nhanh: Hồ sơ quá hạn SLA (AC 2) */}
           <button
             type="button"
@@ -421,7 +488,24 @@ export const CandidateManagementPage: React.FC = () => {
                     Ứng viên
                   </th>
                   <th scope="col" className="px-5 py-3.5">
-                    Điểm phù hợp & Tiêu chí
+                    <button
+                      type="button"
+                      data-testid="sort-by-score-header-btn"
+                      onClick={handleToggleScoreSort}
+                      className="group inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-gray-700 hover:text-indigo-600 focus:outline-none dark:text-gray-300 dark:hover:text-indigo-400"
+                      title="Nhấp để thay đổi thứ tự sắp xếp theo điểm phù hợp"
+                    >
+                      <span>Điểm phù hợp & Tiêu chí</span>
+                      {selectedSortOrder === 'SCORE_DESC' && (
+                        <ArrowDown className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" aria-label="Đang sắp xếp điểm cao đến thấp" />
+                      )}
+                      {selectedSortOrder === 'SCORE_ASC' && (
+                        <ArrowUp className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" aria-label="Đang sắp xếp điểm thấp đến cao" />
+                      )}
+                      {selectedSortOrder !== 'SCORE_DESC' && selectedSortOrder !== 'SCORE_ASC' && (
+                        <ArrowUpDown className="h-3.5 w-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200" aria-label="Chưa kích hoạt sắp xếp theo điểm" />
+                      )}
+                    </button>
                   </th>
                   <th scope="col" className="px-5 py-3.5">
                     Vị trí ứng tuyển
@@ -433,7 +517,20 @@ export const CandidateManagementPage: React.FC = () => {
                     Trạng thái bóc tách CV
                   </th>
                   <th scope="col" className="px-5 py-3.5">
-                    Thời điểm nộp
+                    <button
+                      type="button"
+                      data-testid="sort-by-date-header-btn"
+                      onClick={() => setSelectedSortOrder('APPLIED_AT_DESC')}
+                      className="group inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-gray-700 hover:text-indigo-600 focus:outline-none dark:text-gray-300 dark:hover:text-indigo-400"
+                      title="Nhấp để sắp xếp theo ngày nộp mới nhất"
+                    >
+                      <span>Thời điểm nộp</span>
+                      {selectedSortOrder === 'APPLIED_AT_DESC' ? (
+                        <ArrowDown className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" aria-label="Đang sắp xếp ngày mới nhất" />
+                      ) : (
+                        <ArrowUpDown className="h-3.5 w-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200" aria-label="Chưa kích hoạt sắp xếp ngày" />
+                      )}
+                    </button>
                   </th>
                   <th scope="col" className="px-5 py-3.5 text-right">
                     Thao tác
@@ -486,19 +583,33 @@ export const CandidateManagementPage: React.FC = () => {
                       )}
                     </td>
 
-                    {/* Điểm tổng phù hợp và tóm tắt 3 tiêu chí bắt buộc (Task TKNHTTDNB1-410) */}
+                    {/* Điểm tổng phù hợp và tóm tắt 3 tiêu chí bắt buộc (Task TKNHTTDNB1-410 & TKNHTTDNB1-411) */}
                     <td className="px-5 py-4">
                       {(() => {
                         const matchingEvaluation =
                           candidateItem.matchingEvaluation ||
                           resolveCandidateMatchingEvaluation(candidateItem);
+                        const isRecommendedToReadFirst =
+                          selectedSortOrder === 'SCORE_DESC' &&
+                          matchingEvaluation.totalMatchingScore >= 80;
+
                         return (
                           <div className="flex flex-col gap-1.5 items-start">
-                            <MatchingScoreBadge
-                              totalMatchingScore={matchingEvaluation.totalMatchingScore}
-                              isOverallPassed={matchingEvaluation.isOverallPassed}
-                              variant="standard"
-                            />
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <MatchingScoreBadge
+                                totalMatchingScore={matchingEvaluation.totalMatchingScore}
+                                isOverallPassed={matchingEvaluation.isOverallPassed}
+                                variant="standard"
+                              />
+                              {isRecommendedToReadFirst && (
+                                <span
+                                  data-testid={`badge-read-first-${candidateItem.id}`}
+                                  className="inline-flex items-center rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700 ring-1 ring-inset ring-indigo-700/20 dark:bg-indigo-950/60 dark:text-indigo-300 dark:ring-indigo-800"
+                                >
+                                  Gợi ý đọc trước
+                                </span>
+                              )}
+                            </div>
                             <CriteriaQuickSummaryPopover
                               criteriaList={matchingEvaluation.criteriaList}
                             />
