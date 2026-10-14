@@ -138,14 +138,14 @@ export const JobCard: React.FC<JobCardProps> = ({
           <button
             type="button"
             onClick={() => onViewDetail(job)}
-            className="flex-1 md:flex-initial rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-xs transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200"
+            className="flex-1 md:flex-initial min-h-[44px] rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-xs transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200 active:scale-95"
           >
             Xem chi tiết
           </button>
           <button
             type="button"
             onClick={() => onApplyNow?.(job) || onViewDetail(job)}
-            className="flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            className="flex-1 md:flex-initial min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 active:scale-95"
           >
             <span>Ứng tuyển</span>
             <ArrowRight className="h-4 w-4" />
@@ -270,14 +270,14 @@ export const JobCard: React.FC<JobCardProps> = ({
         <button
           type="button"
           onClick={() => onViewDetail(job)}
-          className="flex-1 rounded-xl border border-slate-200 bg-white py-2 px-3 text-xs font-semibold text-slate-700 shadow-xs transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200"
+          className="flex-1 min-h-[44px] rounded-xl border border-slate-200 bg-white py-2 px-3 text-xs font-semibold text-slate-700 shadow-xs transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200 active:scale-95"
         >
           Xem chi tiết
         </button>
         <button
           type="button"
           onClick={() => onApplyNow?.(job) || onViewDetail(job)}
-          className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 py-2 px-3 text-xs font-semibold text-white shadow-xs transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+          className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 py-2 px-3 text-xs font-semibold text-white shadow-xs transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 active:scale-95"
         >
           <span>Ứng tuyển</span>
           <ArrowRight className="h-3.5 w-3.5" />

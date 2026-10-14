@@ -1072,6 +1072,21 @@ export const jobPostingService = {
   async getPublicJobs(params?: PublicJobFilterParams): Promise<PublicJobPostingsResponse> {
     return this.getPublicJobPostings(params);
   },
+
+  /**
+   * Service API lấy chi tiết một tin tuyển dụng công khai theo ID (User Story S3-02 / Task TKNHTTDNB1-318)
+   */
+  async getPublicJobById(id: string): Promise<JobPostingData | null> {
+    try {
+      const response = await axiosClient.get<JobPostingData>(`/api/job-postings/public/${id}`);
+      return response.data;
+    } catch {
+      // Fallback: Tìm trong danh sách mockPublicJobs
+      const response = await this.getPublicJobPostings({ pageSize: 50 });
+      const found = response.items.find((item) => item.id === id);
+      return found || null;
+    }
+  },
 };
 
 export interface PublicJobFilterParams {

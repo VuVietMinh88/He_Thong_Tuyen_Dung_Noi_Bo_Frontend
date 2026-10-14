@@ -31,6 +31,7 @@ import HeadcountBudgetManagement from "./pages/Headcount/HeadcountBudgetManageme
 import JobPostingForm from "./components/JobPosting/JobPostingForm";
 import JobPostingPreviewApproval from "./components/JobPosting/JobPostingPreviewApproval";
 import PublicJobListPage from "./pages/CareerPage/PublicJobListPage";
+import PublicJobDetailPage from "./pages/CareerPage/PublicJobDetailPage";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -102,7 +103,10 @@ function App() {
             <Route path="/" element={<Navigate to="/careers" replace />} />
             <Route path="/careers" element={<PublicJobListPage />} />
             <Route path="/careers/jobs" element={<PublicJobListPage />} />
+            <Route path="/careers/jobs/:id" element={<PublicJobDetailPage />} />
+            <Route path="/jobs/:id" element={<PublicJobDetailPage />} />
             <Route path="/public-jobs" element={<PublicJobListPage />} />
+            <Route path="/public-jobs/:id" element={<PublicJobDetailPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/health" element={<HealthCheck />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />

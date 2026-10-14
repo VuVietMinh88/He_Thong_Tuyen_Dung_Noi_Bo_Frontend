@@ -8,6 +8,9 @@ import {
   Send,
   FileText,
   Sparkles,
+  Share2,
+  Bookmark,
+  BookmarkCheck,
 } from 'lucide-react';
 import type { JobPostingData } from '../../services/jobPostingService';
 import {
@@ -41,6 +44,58 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
   const [isSubmittedSuccess, setIsSubmittedSuccess] = useState(false);
 
   const { notify } = useToast();
+
+  const [isSaved, setIsSaved] = useState<boolean>(() => {
+    try {
+      const savedJobs = JSON.parse(localStorage.getItem('saved_public_jobs') || '[]');
+      return Array.isArray(savedJobs) && job?.id ? savedJobs.includes(job.id) : false;
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleSave = () => {
+    if (!job?.id) return;
+    try {
+      const savedJobs: string[] = JSON.parse(localStorage.getItem('saved_public_jobs') || '[]');
+      let updated: string[];
+      if (isSaved) {
+        updated = savedJobs.filter((id) => id !== job.id);
+        setIsSaved(false);
+        notify('Đã bỏ lưu tin tuyển dụng khỏi danh sách quan tâm.', 'info');
+      } else {
+        updated = [...savedJobs, job.id];
+        setIsSaved(true);
+        notify('Đã lưu tin tuyển dụng thành công!', 'success');
+      }
+      localStorage.setItem('saved_public_jobs', JSON.stringify(updated));
+    } catch {
+      setIsSaved(!isSaved);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!job) return;
+    const shareData = {
+      title: `${job.title} | Tuyển dụng`,
+      text: `Ứng tuyển ngay vị trí ${job.title} - Mức lương: ${formatSalaryDisplay(job)}`,
+      url: window.location.href,
+    };
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        notify('Chia sẻ tin tuyển dụng thành công!', 'success');
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          navigator.clipboard.writeText(window.location.href);
+          notify('Đã sao chép liên kết tin tuyển dụng vào bộ nhớ tạm!', 'success');
+        }
+      }
+    } else {
+      navigator.clipboard.writeText(window.location.href);
+      notify('Đã sao chép liên kết tin tuyển dụng vào bộ nhớ tạm!', 'success');
+    }
+  };
 
   if (!isOpen || !job) return null;
 
@@ -130,14 +185,36 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition focus:outline-none"
-            aria-label="Đóng"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              data-testid="modal-share-button"
+              onClick={handleShare}
+              className="flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-indigo-600 transition active:scale-95"
+              aria-label="Chia sẻ tin tuyển dụng"
+            >
+              <Share2 className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              data-testid="modal-save-button"
+              onClick={handleToggleSave}
+              className={`flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full transition active:scale-95 ${
+                isSaved ? 'bg-rose-50 text-rose-600' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+              }`}
+              aria-label={isSaved ? 'Đã lưu tin' : 'Lưu tin tuyển dụng'}
+            >
+              {isSaved ? <BookmarkCheck className="h-5 w-5 fill-rose-600" /> : <Bookmark className="h-5 w-5" />}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition active:scale-95"
+              aria-label="Đóng"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
@@ -347,18 +424,31 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                 hr@company.com
               </a>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <button
+                type="button"
+                data-testid="modal-footer-save-button"
+                onClick={handleToggleSave}
+                aria-label={isSaved ? 'Đã lưu tin' : 'Lưu tin'}
+                className={`flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border transition active:scale-95 ${
+                  isSaved
+                    ? 'border-rose-200 bg-rose-50 text-rose-600'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {isSaved ? <BookmarkCheck className="h-5 w-5 fill-rose-600" /> : <Bookmark className="h-5 w-5" />}
+              </button>
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-xs hover:bg-slate-50"
+                className="min-h-[44px] rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-xs hover:bg-slate-50 active:scale-95 transition"
               >
                 Đóng
               </button>
               <button
                 type="button"
                 onClick={() => setIsApplying(true)}
-                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-md shadow-indigo-600/30 hover:bg-indigo-700"
+                className="inline-flex min-h-[48px] items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-2.5 text-sm font-bold text-white shadow-md shadow-indigo-600/30 hover:from-indigo-700 hover:to-violet-700 active:scale-95 transition"
               >
                 <Send className="h-4 w-4" />
                 Ứng tuyển vị trí này
