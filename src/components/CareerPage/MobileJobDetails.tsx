@@ -25,6 +25,7 @@ import {
   formatEmploymentType,
   formatJobLevel,
   getDeadlineStatus,
+  isJobApplicationUnavailable,
 } from '../../services/jobPostingService';
 import { toast } from '../notifications';
 import JobDeadlineBadge from './JobDeadlineBadge';
@@ -65,6 +66,7 @@ export const MobileJobDetails: React.FC<MobileJobDetailsProps> = ({
   const employmentTypeText = formatEmploymentType(job.employmentType);
   const levelText = formatJobLevel(job.level);
   const deadlineInfo = getDeadlineStatus(job.deadline);
+  const applicationUnavailable = isJobApplicationUnavailable(job);
 
   // Toggle Lưu tin tuyển dụng
   const handleToggleSave = () => {
@@ -209,7 +211,11 @@ export const MobileJobDetails: React.FC<MobileJobDetailsProps> = ({
               {employmentTypeText}
             </span>
             {/* Huy hiệu trạng thái hạn nộp hồ sơ (AC1) */}
-            <JobDeadlineBadge deadline={job.deadline} size="sm" />
+            <JobDeadlineBadge
+              deadline={job.deadline}
+              size="sm"
+              customText={job.status === 'CLOSED' || job.publishCareerPage === false ? 'Đã gỡ' : undefined}
+            />
           </div>
 
           {/* Job Title */}
@@ -521,17 +527,21 @@ export const MobileJobDetails: React.FC<MobileJobDetailsProps> = ({
           <button
             type="button"
             data-testid="bottom-apply-button"
-            data-disabled={deadlineInfo.isExpired}
-            disabled={deadlineInfo.isExpired}
-            onClick={() => !deadlineInfo.isExpired && setIsApplyDrawerOpen(true)}
+            data-disabled={applicationUnavailable}
+            disabled={applicationUnavailable}
+            onClick={() => !applicationUnavailable && setIsApplyDrawerOpen(true)}
             className={`flex h-12 min-h-[48px] flex-1 items-center justify-center gap-2 rounded-2xl px-5 text-sm sm:text-base font-extrabold transition ${
-              deadlineInfo.isExpired
+              applicationUnavailable
                 ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none active:scale-100'
                 : 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-600/30 transition hover:from-indigo-700 hover:to-violet-700 active:scale-[0.98]'
             }`}
           >
             <Send className="h-4 w-4" />
-            {deadlineInfo.isExpired ? 'Đã hết hạn ứng tuyển' : 'Ứng tuyển ngay'}
+            {applicationUnavailable
+              ? job.status === 'CLOSED' || job.publishCareerPage === false
+                ? 'Tin đã được gỡ'
+                : 'Đã hết hạn ứng tuyển'
+              : 'Ứng tuyển ngay'}
           </button>
         </div>
       </aside>

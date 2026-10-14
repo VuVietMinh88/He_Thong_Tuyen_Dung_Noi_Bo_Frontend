@@ -13,6 +13,7 @@ import {
   formatEmploymentType,
   formatJobLevel,
   getDeadlineStatus,
+  isJobApplicationUnavailable,
 } from '../../services/jobPostingService';
 import JobDeadlineBadge from './JobDeadlineBadge';
 
@@ -33,6 +34,10 @@ export const JobCard: React.FC<JobCardProps> = ({
   const employmentTypeText = formatEmploymentType(job.employmentType);
   const levelText = formatJobLevel(job.level);
   const deadlineInfo = getDeadlineStatus(job.deadline);
+  const applicationUnavailable = isJobApplicationUnavailable(job);
+  const unavailableLabel = job.status === 'CLOSED' || job.publishCareerPage === false
+    ? 'Đã gỡ'
+    : 'Hết hạn';
 
   // Badge màu sắc tùy biến theo hình thức làm việc
   const getEmploymentBadgeStyle = (type?: string) => {
@@ -73,7 +78,11 @@ export const JobCard: React.FC<JobCardProps> = ({
               {levelText}
             </span>
             {/* Huy hiệu trạng thái hạn nộp (AC1) */}
-            <JobDeadlineBadge deadline={job.deadline} size="sm" />
+            <JobDeadlineBadge
+              deadline={job.deadline}
+              size="sm"
+              customText={job.status === 'CLOSED' || job.publishCareerPage === false ? 'Đã gỡ' : undefined}
+            />
           </div>
 
           {/* Job Title */}
@@ -141,16 +150,16 @@ export const JobCard: React.FC<JobCardProps> = ({
           <button
             type="button"
             data-testid={`job-card-apply-${job.id}`}
-            disabled={deadlineInfo.isExpired}
-            onClick={() => !deadlineInfo.isExpired && (onApplyNow?.(job) || onViewDetail(job))}
+            disabled={applicationUnavailable}
+            onClick={() => !applicationUnavailable && (onApplyNow?.(job) || onViewDetail(job))}
             className={`flex-1 md:flex-initial min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl px-5 py-2.5 text-sm font-semibold transition ${
-              deadlineInfo.isExpired
+              applicationUnavailable
                 ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
                 : 'bg-indigo-600 text-white shadow-xs hover:bg-indigo-700 active:scale-95'
             }`}
           >
-            <span>{deadlineInfo.isExpired ? 'Đã hết hạn' : 'Ứng tuyển'}</span>
-            {!deadlineInfo.isExpired && <ArrowRight className="h-4 w-4" />}
+            <span>{applicationUnavailable ? unavailableLabel : 'Ứng tuyển'}</span>
+            {!applicationUnavailable && <ArrowRight className="h-4 w-4" />}
           </button>
         </div>
       </article>
@@ -182,7 +191,11 @@ export const JobCard: React.FC<JobCardProps> = ({
           </div>
 
           {/* Huy hiệu trạng thái hạn nộp (AC1) */}
-          <JobDeadlineBadge deadline={job.deadline} size="sm" />
+          <JobDeadlineBadge
+            deadline={job.deadline}
+            size="sm"
+            customText={job.status === 'CLOSED' || job.publishCareerPage === false ? 'Đã gỡ' : undefined}
+          />
         </div>
 
         {/* Job Title */}
@@ -275,16 +288,16 @@ export const JobCard: React.FC<JobCardProps> = ({
         <button
           type="button"
           data-testid={`job-card-apply-${job.id}`}
-          disabled={deadlineInfo.isExpired}
-          onClick={() => !deadlineInfo.isExpired && (onApplyNow?.(job) || onViewDetail(job))}
+          disabled={applicationUnavailable}
+          onClick={() => !applicationUnavailable && (onApplyNow?.(job) || onViewDetail(job))}
           className={`flex-1 min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl py-2 px-3 text-xs font-semibold transition ${
-            deadlineInfo.isExpired
+            applicationUnavailable
               ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
               : 'bg-indigo-600 text-white shadow-xs hover:bg-indigo-700 active:scale-95'
           }`}
         >
-          <span>{deadlineInfo.isExpired ? 'Đã hết hạn' : 'Ứng tuyển'}</span>
-          {!deadlineInfo.isExpired && <ArrowRight className="h-3.5 w-3.5" />}
+          <span>{applicationUnavailable ? unavailableLabel : 'Ứng tuyển'}</span>
+          {!applicationUnavailable && <ArrowRight className="h-3.5 w-3.5" />}
         </button>
       </div>
     </article>

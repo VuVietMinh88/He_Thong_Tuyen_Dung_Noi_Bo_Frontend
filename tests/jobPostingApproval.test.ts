@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import axiosClient from '../src/utils/axiosClient';
 import {
+  isJobApplicationUnavailable,
   jobPostingService,
   type JobPostingData,
   type JobPostingStatus,
@@ -95,6 +96,53 @@ describe('Job Posting Preview & Approval (Task TKNHTTDNB1-306)', () => {
   });
 
   describe('AC2: Nhóm thao tác Duyệt xuất bản, Từ chối, Yêu cầu chỉnh sửa', () => {
+    it('lấy danh sách tin có thể quản lý từ API', async () => {
+      const publishedPosting = { ...mockPendingPosting, status: 'PUBLISHED' as const };
+      const getSpy = vi.spyOn(axiosClient, 'get').mockResolvedValueOnce({
+        data: { items: [publishedPosting] },
+      });
+
+      await expect(jobPostingService.getManageableJobPostings()).resolves.toEqual([publishedPosting]);
+      expect(getSpy).toHaveBeenCalledWith('/job-postings', { params: { size: 100 } });
+    });
+
+    it('gỡ tin tuyển dụng qua API và báo lỗi thay vì giả lập thành công khi API thất bại', async () => {
+      const postSpy = vi.spyOn(axiosClient, 'post').mockResolvedValueOnce({
+        data: { ...mockPendingPosting, status: 'CLOSED', publishCareerPage: false },
+      });
+
+      const result = await jobPostingService.unpublishJobPosting('jp-pending-101');
+      expect(postSpy).toHaveBeenCalledWith('/job-postings/jp-pending-101/unpublish');
+      expect(result.status).toBe('CLOSED');
+
+      vi.spyOn(axiosClient, 'post').mockRejectedValueOnce(new Error('Server unavailable'));
+      await expect(jobPostingService.unpublishJobPosting('jp-pending-101'))
+        .rejects.toThrow('Server unavailable');
+    });
+
+    it('blocks applications for expired, unpublished, and closed postings', () => {
+      expect(isJobApplicationUnavailable({
+        deadline: '2025-01-01',
+        status: 'PUBLISHED',
+        publishCareerPage: true,
+      })).toBe(true);
+      expect(isJobApplicationUnavailable({
+        deadline: '2026-12-31',
+        status: 'PUBLISHED',
+        publishCareerPage: false,
+      })).toBe(true);
+      expect(isJobApplicationUnavailable({
+        deadline: '2026-12-31',
+        status: 'CLOSED',
+        publishCareerPage: true,
+      })).toBe(true);
+      expect(isJobApplicationUnavailable({
+        deadline: '2026-12-31',
+        status: 'PUBLISHED',
+        publishCareerPage: true,
+      })).toBe(false);
+    });
+
     it('thao tác Duyệt xuất bản (approveJobPosting) gọi API và chuyển trạng thái sang PUBLISHED', async () => {
       const postSpy = vi.spyOn(axiosClient, 'post').mockResolvedValueOnce({
         data: {

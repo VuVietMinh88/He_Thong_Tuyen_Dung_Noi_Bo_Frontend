@@ -18,6 +18,7 @@ import {
   formatEmploymentType,
   formatJobLevel,
   getDeadlineStatus,
+  isJobApplicationUnavailable,
 } from '../../services/jobPostingService';
 import { useToast } from '../notifications/useToast';
 import JobDeadlineBadge from './JobDeadlineBadge';
@@ -99,6 +100,10 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
   const employmentTypeText = formatEmploymentType(job.employmentType);
   const levelText = formatJobLevel(job.level);
   const deadlineInfo = getDeadlineStatus(job.deadline);
+  const applicationUnavailable = isJobApplicationUnavailable(job);
+  const applicationUnavailableText = job.status === 'CLOSED' || job.publishCareerPage === false
+    ? 'Tin tuyển dụng đã được gỡ.'
+    : 'Vị trí tuyển dụng này đã đóng, vui lòng tham khảo các vị trí khác.';
 
 
 
@@ -124,7 +129,11 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                 {levelText}
               </span>
               {/* Huy hiệu trạng thái hạn nộp hồ sơ (AC1) */}
-              <JobDeadlineBadge deadline={job.deadline} size="sm" />
+              <JobDeadlineBadge
+                deadline={job.deadline}
+                size="sm"
+                customText={job.status === 'CLOSED' || job.publishCareerPage === false ? 'Đã gỡ' : undefined}
+              />
             </div>
 
             <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
@@ -182,8 +191,8 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
         {/* Modal Body */}
         <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-8">
           {/* Banner thông báo khi tin hết hạn (AC2) */}
-          {deadlineInfo.isExpired && (
-            <JobExpiredBanner message="Vị trí tuyển dụng này đã đóng, vui lòng tham khảo các vị trí khác." />
+          {applicationUnavailable && (
+            <JobExpiredBanner message={applicationUnavailableText} />
           )}
           {isApplying ? (
             <PublicJobApplyForm
@@ -282,16 +291,20 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
               <button
                 type="button"
                 data-testid="modal-apply-button"
-                disabled={deadlineInfo.isExpired}
-                onClick={() => !deadlineInfo.isExpired && setIsApplying(true)}
+                disabled={applicationUnavailable}
+                onClick={() => !applicationUnavailable && setIsApplying(true)}
                 className={`inline-flex min-h-[48px] items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold transition ${
-                  deadlineInfo.isExpired
+                  applicationUnavailable
                     ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none active:scale-100'
                     : 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/30 hover:from-indigo-700 hover:to-violet-700 active:scale-95'
                 }`}
               >
                 <Send className="h-4 w-4" />
-                {deadlineInfo.isExpired ? 'Đã hết hạn ứng tuyển' : 'Ứng tuyển vị trí này'}
+                {applicationUnavailable
+                  ? job.status === 'CLOSED' || job.publishCareerPage === false
+                    ? 'Tin đã được gỡ'
+                    : 'Đã hết hạn ứng tuyển'
+                  : 'Ứng tuyển vị trí này'}
               </button>
             </div>
           </div>

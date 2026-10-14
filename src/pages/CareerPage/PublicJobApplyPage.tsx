@@ -6,6 +6,7 @@ import {
   formatSalaryDisplay,
   formatEmploymentType,
   getDeadlineStatus,
+  isJobApplicationUnavailable,
 } from '../../services/jobPostingService';
 import PublicJobApplyForm from '../../components/CareerPage/PublicJobApplyForm';
 import JobExpiredBanner from '../../components/CareerPage/JobExpiredBanner';
@@ -43,10 +44,15 @@ export const PublicJobApplyPage: React.FC = () => {
       try {
         const found = await jobPostingService.getPublicJobById(id);
         if (isMounted) {
-          if (found) {
+          if (found && !isJobApplicationUnavailable(found)) {
             setJob(found);
           } else {
-            setError('Tin tuyển dụng không tồn tại hoặc đã hết hạn đăng ký.');
+            setJob(null);
+            setError(found
+              ? found.status === 'CLOSED' || found.publishCareerPage === false
+                ? 'Tin tuyển dụng đã được gỡ và hiện không nhận hồ sơ.'
+                : 'Tin tuyển dụng đã hết hạn nhận hồ sơ.'
+              : 'Tin tuyển dụng không tồn tại hoặc đã hết hạn đăng ký.');
           }
         }
       } catch {
@@ -95,7 +101,7 @@ export const PublicJobApplyPage: React.FC = () => {
               <AlertCircle className="h-8 w-8" />
             </div>
             <h2 className="text-xl font-black text-slate-900">
-              Không tìm thấy tin tuyển dụng
+              Tin tuyển dụng không khả dụng
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
               {error || 'Tin tuyển dụng này có thể đã bị gỡ xuống hoặc địa chỉ liên kết không chính xác.'}
