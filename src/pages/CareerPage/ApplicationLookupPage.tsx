@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { AxiosError } from 'axios';
 import {
   AlertCircle,
   ArrowRight,
@@ -15,6 +14,7 @@ import PublicFooter from '../../components/CareerPage/PublicFooter';
 import PublicJobHeader from '../../components/CareerPage/PublicJobHeader';
 import {
   applicationLookupService,
+  ApplicationLookupError,
   type ApplicationLookupMethod,
   type ApplicationLookupResult,
   type ApplicationStatus,
@@ -89,7 +89,6 @@ export const ApplicationLookupPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notFound, setNotFound] = useState(false);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -99,21 +98,19 @@ export const ApplicationLookupPage: React.FC = () => {
         ? 'Vui lòng nhập mã tra cứu.'
         : 'Vui lòng nhập email hoặc số điện thoại.');
       setResult(null);
-      setNotFound(false);
       setHasSearched(false);
       return;
     }
 
     setIsLoading(true);
     setError(null);
-    setNotFound(false);
     setHasSearched(true);
     setResult(null);
     try {
       setResult(await applicationLookupService.lookup(method, query));
     } catch (requestError: unknown) {
-      if (requestError instanceof AxiosError && requestError.response?.status === 404) {
-        setNotFound(true);
+      if (requestError instanceof ApplicationLookupError) {
+        setError('Thông tin tra cứu không chính xác hoặc không tồn tại trong hệ thống.');
       } else {
         console.error('Error looking up application status:', requestError);
         setError('Chưa thể tra cứu hồ sơ lúc này. Vui lòng thử lại sau.');
@@ -175,6 +172,8 @@ export const ApplicationLookupPage: React.FC = () => {
                       setMethod('applicationCode');
                       setValue('');
                       setError(null);
+                      setResult(null);
+                      setHasSearched(false);
                     }}
                     aria-pressed={method === 'applicationCode'}
                     className={`min-h-11 rounded-lg px-3 text-sm font-semibold transition ${
@@ -191,6 +190,8 @@ export const ApplicationLookupPage: React.FC = () => {
                       setMethod('contact');
                       setValue('');
                       setError(null);
+                      setResult(null);
+                      setHasSearched(false);
                     }}
                     aria-pressed={method === 'contact'}
                     className={`min-h-11 rounded-lg px-3 text-sm font-semibold transition ${
@@ -215,7 +216,12 @@ export const ApplicationLookupPage: React.FC = () => {
                   autoComplete={method === 'applicationCode' ? 'off' : 'email'}
                   inputMode={method === 'contact' ? 'email' : 'text'}
                   value={value}
-                  onChange={(event) => setValue(event.target.value)}
+                  onChange={(event) => {
+                    setValue(event.target.value);
+                    setError(null);
+                    setResult(null);
+                    setHasSearched(false);
+                  }}
                   placeholder={method === 'applicationCode' ? 'Ví dụ: APP-2026-00125' : 'Nhập email hoặc số điện thoại đã đăng ký'}
                   aria-invalid={Boolean(error)}
                   aria-describedby={error ? 'lookup-error' : 'lookup-hint'}
@@ -365,19 +371,7 @@ export const ApplicationLookupPage: React.FC = () => {
             </section>
           )}
 
-          {!isLoading && !result && notFound && (
-            <section role="status" className="mt-6 rounded-3xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm" aria-live="polite">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
-                <FileSearch className="h-7 w-7" aria-hidden="true" />
-              </div>
-              <h2 className="mt-4 text-lg font-bold text-slate-900">Chưa tìm thấy hồ sơ</h2>
-              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
-                Vui lòng kiểm tra lại mã tra cứu hoặc thông tin liên hệ. Nếu bạn vừa nộp hồ sơ, hệ thống có thể cần ít phút để cập nhật.
-              </p>
-            </section>
-          )}
-
-          {!isLoading && !result && !notFound && !error && !hasSearched && (
+          {!isLoading && !result && !error && !hasSearched && (
             <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white/70 px-6 py-8 text-center">
               <CheckCircle2 className="mx-auto h-6 w-6 text-slate-400" aria-hidden="true" />
               <p className="mt-2 text-sm font-medium text-slate-600">
