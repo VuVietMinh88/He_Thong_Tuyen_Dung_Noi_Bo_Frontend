@@ -316,7 +316,7 @@ export const CvSuggestionConfirmBox: React.FC<CvSuggestionConfirmBoxProps> = ({
                 </span>
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Đối chiếu thông tin hiện tại với dữ liệu trích xuất từ CV. Bạn có thể sửa trực tiếp ô gợi ý trước khi áp dụng.
+                Đối chiếu thông tin hiện tại với dữ liệu trích xuất từ CV. Dữ liệu gốc được bảo vệ an toàn và chỉ cập nhật khi bạn bấm "Xác nhận áp dụng".
               </p>
             </div>
           </div>
@@ -356,7 +356,9 @@ export const CvSuggestionConfirmBox: React.FC<CvSuggestionConfirmBoxProps> = ({
               <span className="text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                 Thông tin hồ sơ hiện tại
               </span>
-              <span className="text-xs text-gray-400">Chỉ đọc</span>
+              <span className="rounded-sm bg-gray-200/70 px-1.5 py-0.5 text-[10px] font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                Không tự động ghi đè
+              </span>
             </div>
 
             <div className="space-y-3.5">
