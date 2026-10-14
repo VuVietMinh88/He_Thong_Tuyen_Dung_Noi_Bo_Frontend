@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Briefcase, Menu, X, LogIn, Sparkles, Building2 } from 'lucide-react';
+import { Briefcase, Menu, X, LogIn, Sparkles, Building2, SearchCheck } from 'lucide-react';
 
 export interface PublicJobHeaderProps {
   onScrollToJobs?: () => void;
@@ -40,6 +40,13 @@ export const PublicJobHeader: React.FC<PublicJobHeaderProps> = ({
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-8">
+          <Link
+            to="/careers/applications/lookup"
+            className="flex items-center gap-1.5 text-sm font-semibold text-slate-700 transition-colors hover:text-indigo-600"
+          >
+            <SearchCheck className="h-4 w-4 text-indigo-600" />
+            Tra cứu hồ sơ
+          </Link>
           <button
             type="button"
             onClick={onScrollToJobs}
@@ -98,6 +105,14 @@ export const PublicJobHeader: React.FC<PublicJobHeaderProps> = ({
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
         <div className="md:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-6 space-y-3 animate-in fade-in slide-in-from-top-2">
+          <Link
+            to="/careers/applications/lookup"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-indigo-50 hover:text-indigo-600"
+          >
+            <SearchCheck className="h-4 w-4" />
+            Tra cứu hồ sơ
+          </Link>
           <button
             type="button"
             onClick={() => {
