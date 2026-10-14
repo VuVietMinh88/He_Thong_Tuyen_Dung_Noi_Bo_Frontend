@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Star,
   Tag,
@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Check,
   RotateCcw,
+  AlertCircle,
 } from 'lucide-react';
 import type {
   CandidateTag,
@@ -24,6 +25,7 @@ import {
   STAR_RATING_DESCRIPTIONS,
   DEFAULT_SCREENING_CATALOG_TAGS,
 } from '../../types/candidate';
+import { candidateService } from '../../services/candidateService';
 
 export interface CandidateScreeningWidgetProps {
   candidateId?: string;
@@ -60,10 +62,26 @@ export const CandidateScreeningWidget: React.FC<CandidateScreeningWidgetProps> =
   // Trạng thái hover sao để tạo phản hồi thị giác tức thì (Instant Visual Feedback)
   const [hoverStarRating, setHoverStarRating] = useState<number | null>(null);
   const [isUpdatingRating, setIsUpdatingRating] = useState<boolean>(false);
+  const [ratingErrorMessage, setRatingErrorMessage] = useState<string | null>(null);
 
-  // Trạng thái thêm nhãn tùy chỉnh ngoài danh mục
+  // Danh mục nhãn sàng lọc & trạng thái tải từ API (Subtask TKNHTTDNB1-385 / AC 1)
+  const [apiCatalogTags, setApiCatalogTags] = useState<ScreeningCatalogTag[]>([]);
+  const [isLoadingCatalogTags, setIsLoadingCatalogTags] = useState<boolean>(false);
+  const [catalogTagsErrorMessage, setCatalogTagsErrorMessage] = useState<string | null>(null);
+
+  // Ưu tiên danh mục nhãn từ props truyền vào, nếu không dùng dữ liệu tải từ API hoặc fallback mặc định
+  const availableCatalogTags: ScreeningCatalogTag[] =
+    catalogTags && catalogTags.length > 0
+      ? catalogTags
+      : apiCatalogTags.length > 0
+        ? apiCatalogTags
+        : DEFAULT_SCREENING_CATALOG_TAGS;
+
+  // Trạng thái gắn nhãn & thêm nhãn tùy chỉnh ngoài danh mục
   const [customTagInput, setCustomTagInput] = useState<string>('');
   const [isAddingCustomTag, setIsAddingCustomTag] = useState<boolean>(false);
+  const [isUpdatingTags, setIsUpdatingTags] = useState<boolean>(false);
+  const [tagsErrorMessage, setTagsErrorMessage] = useState<string | null>(null);
 
   // Trạng thái nhập ghi chú nội bộ mới
   const [internalNoteContent, setInternalNoteContent] = useState<string>('');
@@ -71,6 +89,40 @@ export const CandidateScreeningWidget: React.FC<CandidateScreeningWidgetProps> =
     useState<CandidateInternalNote['category']>('SCREENING');
   const [isSubmittingNote, setIsSubmittingNote] = useState<boolean>(false);
   const [noteValidationError, setNoteValidationError] = useState<string | null>(null);
+
+  // Tự động tải danh sách nhãn khai báo trong danh mục từ API (AC 1)
+  useEffect(() => {
+    let isSubscribed = true;
+
+    const fetchScreeningCatalogTags = async () => {
+      try {
+        setIsLoadingCatalogTags(true);
+        setCatalogTagsErrorMessage(null);
+        const tagsFromApi = await candidateService.getCatalogTags();
+        if (isSubscribed && Array.isArray(tagsFromApi) && tagsFromApi.length > 0) {
+          setApiCatalogTags(tagsFromApi);
+        }
+      } catch (fetchError: unknown) {
+        if (isSubscribed) {
+          const errorMessage =
+            fetchError instanceof Error
+              ? fetchError.message
+              : 'Không thể tải danh mục nhãn sàng lọc từ máy chủ.';
+          setCatalogTagsErrorMessage(errorMessage);
+        }
+      } finally {
+        if (isSubscribed) {
+          setIsLoadingCatalogTags(false);
+        }
+      }
+    };
+
+    fetchScreeningCatalogTags();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, []);
 
   // Định dạng thời gian Việt Nam chuẩn hóa
   const formatVietnamDateTime = (dateIsoString: string): string => {
@@ -102,8 +154,16 @@ export const CandidateScreeningWidget: React.FC<CandidateScreeningWidgetProps> =
     const finalRating = candidateStarRating === targetRating ? 0 : targetRating;
 
     setIsUpdatingRating(true);
+    setRatingErrorMessage(null);
     try {
       await onRatingChange(finalRating);
+    } catch (ratingError: unknown) {
+      // Hiển thị thông báo lỗi rõ ràng cho Recruiter khi lưu đánh giá thất bại (AC 2)
+      const errorMessage =
+        ratingError instanceof Error
+          ? ratingError.message
+          : 'Không thể cập nhật mức đánh giá sao. Vui lòng thử lại.';
+      setRatingErrorMessage(errorMessage);
     } finally {
       setIsUpdatingRating(false);
     }
@@ -116,7 +176,7 @@ export const CandidateScreeningWidget: React.FC<CandidateScreeningWidgetProps> =
     mouseEvent: React.MouseEvent<HTMLButtonElement>
   ) => {
     mouseEvent.preventDefault();
-    if (!onTagsChange) return;
+    if (!onTagsChange || isUpdatingTags) return;
 
     const isAlreadySelected = selectedScreeningTags.some(
       (existingTag) =>
@@ -138,7 +198,20 @@ export const CandidateScreeningWidget: React.FC<CandidateScreeningWidgetProps> =
       updatedTags = [...selectedScreeningTags, newTag];
     }
 
-    await onTagsChange(updatedTags);
+    setIsUpdatingTags(true);
+    setTagsErrorMessage(null);
+    try {
+      await onTagsChange(updatedTags);
+    } catch (tagsError: unknown) {
+      // Bắt lỗi và hiển thị thông báo lỗi khi cập nhật nhãn thất bại (AC 2)
+      const errorMessage =
+        tagsError instanceof Error
+          ? tagsError.message
+          : 'Không thể cập nhật danh sách nhãn hồ sơ. Vui lòng thử lại.';
+      setTagsErrorMessage(errorMessage);
+    } finally {
+      setIsUpdatingTags(false);
+    }
   };
 
   const handleRemoveScreeningTag = async (
@@ -146,25 +219,37 @@ export const CandidateScreeningWidget: React.FC<CandidateScreeningWidgetProps> =
     mouseEvent: React.MouseEvent<HTMLButtonElement>
   ) => {
     mouseEvent.preventDefault();
-    if (!onTagsChange) return;
+    if (!onTagsChange || isUpdatingTags) return;
 
     const updatedTags = selectedScreeningTags.filter(
       (existingTag) => existingTag.id !== tagIdToRemove
     );
-    await onTagsChange(updatedTags);
+
+    setIsUpdatingTags(true);
+    setTagsErrorMessage(null);
+    try {
+      await onTagsChange(updatedTags);
+    } catch (tagsError: unknown) {
+      const errorMessage =
+        tagsError instanceof Error
+          ? tagsError.message
+          : 'Không thể gỡ nhãn hồ sơ. Vui lòng thử lại.';
+      setTagsErrorMessage(errorMessage);
+    } finally {
+      setIsUpdatingTags(false);
+    }
   };
 
   const handleAddCustomTag = async (formEvent?: React.FormEvent<HTMLFormElement>) => {
     if (formEvent) formEvent.preventDefault();
     const trimmedTagName = customTagInput.trim();
-    if (!trimmedTagName || !onTagsChange) return;
+    if (!trimmedTagName || !onTagsChange || isUpdatingTags) return;
 
     const isDuplicate = selectedScreeningTags.some(
       (existingTag) => existingTag.name.toLowerCase() === trimmedTagName.toLowerCase()
     );
     if (isDuplicate) {
-      setCustomTagInput('');
-      setIsAddingCustomTag(false);
+      setTagsErrorMessage('Nhãn này đã được gắn trên hồ sơ ứng viên.');
       return;
     }
 
@@ -175,9 +260,21 @@ export const CandidateScreeningWidget: React.FC<CandidateScreeningWidgetProps> =
     };
 
     const updatedTags = [...selectedScreeningTags, newTag];
-    await onTagsChange(updatedTags);
-    setCustomTagInput('');
-    setIsAddingCustomTag(false);
+    setIsUpdatingTags(true);
+    setTagsErrorMessage(null);
+    try {
+      await onTagsChange(updatedTags);
+      setCustomTagInput('');
+      setIsAddingCustomTag(false);
+    } catch (tagsError: unknown) {
+      const errorMessage =
+        tagsError instanceof Error
+          ? tagsError.message
+          : 'Không thể thêm nhãn mới. Vui lòng thử lại.';
+      setTagsErrorMessage(errorMessage);
+    } finally {
+      setIsUpdatingTags(false);
+    }
   };
 
   // 3. XỬ LÝ THÊM GHI CHÚ NỘI BỘ (INTERNAL NOTES)
@@ -197,7 +294,16 @@ export const CandidateScreeningWidget: React.FC<CandidateScreeningWidgetProps> =
       if (onAddNote) {
         await onAddNote(trimmedContent, selectedNoteCategory);
       }
+      // Chỉ khi lưu thành công mới xóa nội dung ô nhập
       setInternalNoteContent('');
+      setNoteValidationError(null);
+    } catch (saveNoteError: unknown) {
+      // Giữ nguyên nội dung ghi chú mà Recruiter đang gõ trong ô nhập nếu lưu thất bại để Recruiter không bị mất chữ và có thể bấm thử lại (AC 2)
+      const errorMessage =
+        saveNoteError instanceof Error
+          ? saveNoteError.message
+          : 'Không thể lưu ghi chú nội bộ. Vui lòng thử lại.';
+      setNoteValidationError(errorMessage);
     } finally {
       setIsSubmittingNote(false);
     }
@@ -305,6 +411,28 @@ export const CandidateScreeningWidget: React.FC<CandidateScreeningWidgetProps> =
               </span>
             )}
           </div>
+
+          {/* Hiển thị lỗi cập nhật mức đánh giá sao (AC 2) */}
+          {ratingErrorMessage && (
+            <div
+              role="alert"
+              id="rating-error-message"
+              className="mt-2.5 flex items-center justify-between gap-2 rounded-lg bg-rose-50 px-3 py-1.5 text-xs text-rose-700 ring-1 ring-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900"
+            >
+              <div className="flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                <span>{ratingErrorMessage}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRatingErrorMessage(null)}
+                className="text-rose-500 hover:text-rose-700"
+                aria-label="Đóng thông báo lỗi đánh giá sao"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* PHẦN 2: GẮN NHÃN HỒ SƠ (MULTI-SELECT TAGS TỪ DANH MỤC) */}
@@ -330,13 +458,49 @@ export const CandidateScreeningWidget: React.FC<CandidateScreeningWidgetProps> =
             </button>
           </div>
 
-          {/* Danh mục nhãn chuẩn bị sẵn (Catalog Pills) - Nhấp để chọn/bỏ chọn ngay */}
+          {/* Hiển thị lỗi cập nhật nhãn (AC 2) */}
+          {tagsErrorMessage && (
+            <div
+              role="alert"
+              id="tags-error-message"
+              className="mb-2.5 flex items-center justify-between gap-2 rounded-lg bg-rose-50 px-3 py-1.5 text-xs text-rose-700 ring-1 ring-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900"
+            >
+              <div className="flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                <span>{tagsErrorMessage}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTagsErrorMessage(null)}
+                className="text-rose-500 hover:text-rose-700"
+                aria-label="Đóng thông báo lỗi nhãn"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+
+          {/* Danh mục nhãn chuẩn bị sẵn (Catalog Pills) - Tải từ API (AC 1) */}
           <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-800/40">
             <span className="mb-2 block text-[11px] font-semibold text-gray-500 dark:text-gray-400">
               Nhãn danh mục gợi ý nhanh (Click để gắn/bỏ):
             </span>
+
+            {isLoadingCatalogTags && (
+              <div className="mb-2 flex items-center gap-1.5 text-xs text-indigo-600">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>Đang tải danh mục nhãn sàng lọc...</span>
+              </div>
+            )}
+
+            {catalogTagsErrorMessage && (
+              <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-50 px-2.5 py-1 text-xs text-amber-800 ring-1 ring-amber-200">
+                <span>{catalogTagsErrorMessage}</span>
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-1.5">
-              {catalogTags.map((catalogTagItem) => {
+              {availableCatalogTags.map((catalogTagItem) => {
                 const isSelected = selectedScreeningTags.some(
                   (existingTag) =>
                     existingTag.name.trim().toLowerCase() ===
@@ -353,7 +517,7 @@ export const CandidateScreeningWidget: React.FC<CandidateScreeningWidgetProps> =
                     className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
                       isSelected
                         ? 'border border-indigo-600 bg-indigo-600 text-white shadow-2xs'
-                        : 'border border-gray-200 bg-white text-gray-700 hover:border-indigo-300 hover:bg-indigo-50/50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+                        : 'border border-gray-200 bg-white text-gray-700 hover:border-indigo-300 hover:bg-indigo-50/50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-750'
                     }`}
                   >
                     {isSelected && <Check className="h-3 w-3" />}
@@ -446,14 +610,30 @@ export const CandidateScreeningWidget: React.FC<CandidateScreeningWidgetProps> =
           {/* Form nhập ghi chú mới */}
           <form onSubmit={handleAddInternalNote} className="space-y-2">
             {noteValidationError && (
-              <div className="rounded-md bg-rose-50 px-3 py-1.5 text-xs text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
-                {noteValidationError}
+              <div
+                role="alert"
+                id="note-error-message"
+                className="flex items-center justify-between gap-2 rounded-lg bg-rose-50 px-3 py-1.5 text-xs text-rose-700 ring-1 ring-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900"
+              >
+                <div className="flex items-center gap-1.5">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  <span>{noteValidationError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setNoteValidationError(null)}
+                  className="text-rose-500 hover:text-rose-700"
+                  aria-label="Đóng thông báo lỗi ghi chú"
+                >
+                  <X className="h-3 w-3" />
+                </button>
               </div>
             )}
 
             <div className="relative">
               <textarea
                 id="screening-internal-note-textarea"
+                aria-label="Nội dung ghi chú nội bộ"
                 rows={isCompact ? 2 : 3}
                 value={internalNoteContent}
                 onChange={(changeEvent) =>

@@ -1,3 +1,4 @@
+import axios from 'axios';
 import axiosClient from '../utils/axiosClient';
 import type {
   CandidateProfile,
@@ -6,7 +7,9 @@ import type {
   UnifiedCandidate,
   CandidateTag,
   InternalNote,
+  CandidateInternalNote,
   ScreeningCatalogTag,
+  CandidateScreeningUpdatePayload,
 } from '../types/candidate';
 import { DEFAULT_SCREENING_CATALOG_TAGS } from '../types/candidate';
 
@@ -566,13 +569,26 @@ export const candidateService = {
   },
 
   /**
-   * Cập nhật đánh giá nhanh thang điểm 1 - 5 sao
+   * Cập nhật đánh giá nhanh thang điểm 1 - 5 sao (Subtask TKNHTTDNB1-384 / TKNHTTDNB1-385)
    */
   async updateCandidateRating(candidateId: string, rating: number): Promise<number> {
     try {
       await axiosClient.patch(`/candidates/${candidateId}/rating`, { rating });
-    } catch {
-      // Offline fallback
+    } catch (networkOrServerError: unknown) {
+      // Bắt lỗi cụ thể và hiển thị thông báo rõ ràng khi gọi API thất bại (AC 2)
+      if (axios.isAxiosError(networkOrServerError) && networkOrServerError.response) {
+        const errorStatusCode = networkOrServerError.response.status;
+        if (errorStatusCode === 403) {
+          throw new Error('Bạn không có quyền cập nhật mức đánh giá sao cho hồ sơ này (403 Forbidden).');
+        }
+        if (errorStatusCode >= 500) {
+          throw new Error('Máy chủ gặp sự cố khi lưu mức đánh giá sao (500 Internal Server Error). Vui lòng thử lại sau.');
+        }
+        const serverErrorMessage = (networkOrServerError.response.data as { message?: string })?.message;
+        if (serverErrorMessage) {
+          throw new Error(serverErrorMessage);
+        }
+      }
     }
 
     try {
@@ -600,14 +616,24 @@ export const candidateService = {
   },
 
   /**
-   * Lấy danh mục các nhãn gợi ý có sẵn cho sàng lọc nhanh (Subtask TKNHTTDNB1-384)
+   * Lấy danh mục các nhãn gợi ý có sẵn cho sàng lọc nhanh từ API (Subtask TKNHTTDNB1-384 / TKNHTTDNB1-385)
    */
-  getCatalogTags(): ScreeningCatalogTag[] {
+  async getCatalogTags(): Promise<ScreeningCatalogTag[]> {
+    try {
+      const apiResponse = await axiosClient.get<ScreeningCatalogTag[]>(
+        '/recruitment/screening-catalog-tags'
+      );
+      if (Array.isArray(apiResponse.data) && apiResponse.data.length > 0) {
+        return apiResponse.data;
+      }
+    } catch {
+      // Fallback danh mục mặc định khi chạy offline hoặc backend chưa hoàn thiện endpoint
+    }
     return DEFAULT_SCREENING_CATALOG_TAGS;
   },
 
   /**
-   * Cập nhật toàn bộ danh sách nhãn (Multi-select Tags) cho hồ sơ ứng viên
+   * Cập nhật toàn bộ danh sách nhãn (Multi-select Tags) cho hồ sơ ứng viên (Subtask TKNHTTDNB1-384 / TKNHTTDNB1-385)
    */
   async updateCandidateTags(
     candidateId: string,
@@ -615,8 +641,21 @@ export const candidateService = {
   ): Promise<CandidateTag[]> {
     try {
       await axiosClient.put(`/candidates/${candidateId}/tags`, { tags: tagsList });
-    } catch {
-      // Offline fallback
+    } catch (networkOrServerError: unknown) {
+      // Bắt lỗi cụ thể và hiển thị thông báo rõ ràng khi gọi API thất bại (AC 2)
+      if (axios.isAxiosError(networkOrServerError) && networkOrServerError.response) {
+        const errorStatusCode = networkOrServerError.response.status;
+        if (errorStatusCode === 403) {
+          throw new Error('Bạn không có quyền cập nhật nhãn phân loại cho hồ sơ này (403 Forbidden).');
+        }
+        if (errorStatusCode >= 500) {
+          throw new Error('Máy chủ gặp sự cố khi lưu nhãn phân loại (500 Internal Server Error). Vui lòng thử lại sau.');
+        }
+        const serverErrorMessage = (networkOrServerError.response.data as { message?: string })?.message;
+        if (serverErrorMessage) {
+          throw new Error(serverErrorMessage);
+        }
+      }
     }
 
     try {
@@ -641,6 +680,73 @@ export const candidateService = {
     }
 
     return tagsList;
+  },
+
+  /**
+   * Cập nhật tổng thể đánh giá sàng lọc (Nhãn, Sao, Ghi chú mới) - Subtask TKNHTTDNB1-385
+   */
+  async updateCandidateScreening(
+    candidateId: string,
+    screeningUpdatePayload: CandidateScreeningUpdatePayload
+  ): Promise<CandidateProfile> {
+    try {
+      await axiosClient.patch(
+        `/candidates/${candidateId}/screening`,
+        screeningUpdatePayload
+      );
+    } catch (networkOrServerError: unknown) {
+      if (axios.isAxiosError(networkOrServerError) && networkOrServerError.response) {
+        const errorStatusCode = networkOrServerError.response.status;
+        if (errorStatusCode === 403) {
+          throw new Error('Bạn không có quyền cập nhật đánh giá sàng lọc cho hồ sơ này (403 Forbidden).');
+        }
+        if (errorStatusCode >= 500) {
+          throw new Error('Máy chủ gặp sự cố khi lưu đánh giá sàng lọc (500 Internal Server Error). Vui lòng thử lại sau.');
+        }
+        const serverErrorMessage = (networkOrServerError.response.data as { message?: string })?.message;
+        if (serverErrorMessage) {
+          throw new Error(serverErrorMessage);
+        }
+      }
+    }
+
+    const candidateList = loadCandidateProfilesFromStorage();
+    const targetCandidateIndex = candidateList.findIndex(
+      (candidateItem) => candidateItem.id === candidateId
+    );
+    if (targetCandidateIndex === -1) {
+      throw new Error(`Không tìm thấy hồ sơ ứng viên với mã: ${candidateId}`);
+    }
+
+    const targetCandidate = candidateList[targetCandidateIndex];
+
+    if (screeningUpdatePayload.rating !== undefined) {
+      targetCandidate.rating = screeningUpdatePayload.rating;
+    }
+
+    if (screeningUpdatePayload.tags !== undefined) {
+      targetCandidate.tags = screeningUpdatePayload.tags;
+    }
+
+    if (screeningUpdatePayload.newNote) {
+      const createdNote: CandidateInternalNote = {
+        id: `note-${Date.now()}`,
+        content: screeningUpdatePayload.newNote.content.trim(),
+        authorName: screeningUpdatePayload.newNote.authorName || 'Chuyên viên Tuyển dụng',
+        authorRole: screeningUpdatePayload.newNote.authorRole || 'Recruiter',
+        createdAt: new Date().toISOString(),
+        category: screeningUpdatePayload.newNote.category || 'SCREENING',
+      };
+      if (!targetCandidate.notes) {
+        targetCandidate.notes = [];
+      }
+      targetCandidate.notes.unshift(createdNote);
+    }
+
+    targetCandidate.updatedAt = new Date().toISOString();
+    saveCandidateProfilesToStorage(candidateList);
+
+    return targetCandidate;
   },
 
   /**
@@ -787,8 +893,20 @@ export const candidateService = {
 
     try {
       await axiosClient.post(`/candidates/${candidateId}/notes`, newNote);
-    } catch {
-      // Offline fallback
+    } catch (networkOrServerError: unknown) {
+      if (axios.isAxiosError(networkOrServerError) && networkOrServerError.response) {
+        const errorStatusCode = networkOrServerError.response.status;
+        if (errorStatusCode === 403) {
+          throw new Error('Bạn không có quyền thêm ghi chú nội bộ cho hồ sơ này (403 Forbidden).');
+        }
+        if (errorStatusCode >= 500) {
+          throw new Error('Máy chủ gặp sự cố khi lưu ghi chú nội bộ (500 Internal Server Error). Vui lòng thử lại sau.');
+        }
+        const serverErrorMessage = (networkOrServerError.response.data as { message?: string })?.message;
+        if (serverErrorMessage) {
+          throw new Error(serverErrorMessage);
+        }
+      }
     }
 
     try {
@@ -816,6 +934,19 @@ export const candidateService = {
     }
 
     return newNote;
+  },
+
+  /**
+   * Tạo ghi chú nội bộ mới cho hồ sơ ứng viên (Subtask TKNHTTDNB1-385)
+   */
+  async createCandidateInternalNote(
+    candidateId: string,
+    content: string,
+    authorName: string,
+    authorRole?: string,
+    category?: CandidateInternalNote['category']
+  ): Promise<CandidateInternalNote> {
+    return this.addInternalNote(candidateId, content, authorName, authorRole, category);
   },
 
   /**

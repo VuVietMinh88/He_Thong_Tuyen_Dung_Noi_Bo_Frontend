@@ -76,6 +76,45 @@ const isLookupMismatch = (error: unknown): boolean => {
   return Boolean(message && /application.*(not found|mismatch|not match)|email.*(mismatch|not match)|contact.*(mismatch|not match)|(?:không tồn tại|không khớp)/i.test(message));
 };
 
+/**
+ * Bộ lọc bảo mật kênh ứng viên (Security Sanitizer - AC 3)
+ * Tuyệt đối loại bỏ mọi dữ liệu nhạy cảm nội bộ (ghi chú nội bộ, mức đánh giá sao, nhãn nội bộ)
+ * trước khi trả về cho giao diện tra cứu của ứng viên xem.
+ */
+export const sanitizePublicApplicationResult = (
+  rawResponseData: unknown
+): ApplicationLookupResult => {
+  if (!rawResponseData || typeof rawResponseData !== 'object') {
+    throw new Error('Dữ liệu hồ sơ trả về từ máy chủ không hợp lệ.');
+  }
+
+  const rawRecord = rawResponseData as Record<string, unknown>;
+
+  // Đảm bảo chỉ trích xuất các trường được phép công khai cho ứng viên xem
+  const sanitizedResult: ApplicationLookupResult = {
+    applicationCode: String(rawRecord.applicationCode || ''),
+    jobTitle: String(rawRecord.jobTitle || ''),
+    submittedAt: String(rawRecord.submittedAt || ''),
+    status: rawRecord.status as ApplicationStatus,
+  };
+
+  if (Array.isArray(rawRecord.timeline)) {
+    sanitizedResult.timeline = rawRecord.timeline.map((eventItem: unknown) => {
+      if (!eventItem || typeof eventItem !== 'object') {
+        return { status: 'RECEIVED' as ApplicationStatus };
+      }
+      const rawEvent = eventItem as Record<string, unknown>;
+      return {
+        status: rawEvent.status as ApplicationStatus,
+        occurredAt: typeof rawEvent.occurredAt === 'string' ? rawEvent.occurredAt : undefined,
+        note: typeof rawEvent.note === 'string' ? rawEvent.note : undefined,
+      };
+    });
+  }
+
+  return sanitizedResult;
+};
+
 export const applicationLookupService = {
   async lookup(
     method: ApplicationLookupMethod,
@@ -86,7 +125,8 @@ export const applicationLookupService = {
         '/public/applications/lookup',
         { params: { method, value: value.trim() } },
       );
-      return response.data;
+      // Áp dụng bộ lọc bảo mật: Tuyệt đối không để lộ ghi chú nội bộ hay dữ liệu đánh giá sao của Recruiter (AC 3)
+      return sanitizePublicApplicationResult(response.data);
     } catch (error: unknown) {
       if (isLookupMismatch(error)) {
         throw new ApplicationLookupError(
