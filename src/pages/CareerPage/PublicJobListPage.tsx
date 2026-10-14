@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Briefcase,
   Users,
@@ -14,6 +15,7 @@ import type { JobPostingData } from '../../services/jobPostingService';
 import { jobPostingService } from '../../services/jobPostingService';
 import type { CareerPageConfig } from '../../services/careerPageService';
 import { careerPageService } from '../../services/careerPageService';
+import { useDebounce } from '../../hooks/useDebounce';
 import PublicJobHeader from '../../components/CareerPage/PublicJobHeader';
 import PublicJobHero from '../../components/CareerPage/PublicJobHero';
 import PublicJobFilterBar, { type FilterState } from '../../components/CareerPage/PublicJobFilterBar';
@@ -58,6 +60,16 @@ const DEFAULT_LOCATIONS = [
 ];
 
 export const PublicJobListPage: React.FC = () => {
+  // 1. URL Query Params synchronization (AC2)
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const initialKeyword = searchParams.get('keyword') || '';
+  const initialDepartment = searchParams.get('department') || searchParams.get('departmentId') || 'ALL';
+  const initialLocation = searchParams.get('location') || searchParams.get('workLocation') || 'ALL';
+  const initialWorkType = searchParams.get('workType') || searchParams.get('employmentType') || 'ALL';
+  const initialLevel = searchParams.get('level') || 'ALL';
+  const initialPage = Number(searchParams.get('page')) > 0 ? Number(searchParams.get('page')) : 1;
+
   // Page Configuration & Culture state
   const [careerConfig, setCareerConfig] = useState<CareerPageConfig | null>(null);
 
@@ -66,11 +78,24 @@ export const PublicJobListPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(1);
-  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [currentPage, setCurrentPage] = useState<number>(initialPage);
   const [pageSize] = useState<number>(6);
 
+  // Local Keyword input state for instant user typing (zero lag)
+  const [keywordInput, setKeywordInput] = useState<string>(initialKeyword);
+
+  // 2. Debounce Keyword (450ms) per AC2
+  const debouncedKeyword = useDebounce(keywordInput, 450);
+  const isSearching = keywordInput.trim() !== debouncedKeyword.trim();
+
   // Filters State
-  const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
+  const [filters, setFilters] = useState<FilterState>({
+    keyword: initialKeyword,
+    departmentId: initialDepartment,
+    workLocation: initialLocation,
+    employmentType: initialWorkType,
+    level: initialLevel,
+  });
   const [layout, setLayout] = useState<'grid' | 'list'>('grid');
 
   // Modal Detail State
@@ -83,6 +108,41 @@ export const PublicJobListPage: React.FC = () => {
   const aboutSectionRef = useRef<HTMLElement>(null);
   const benefitsSectionRef = useRef<HTMLElement>(null);
 
+  // Sync debounced keyword into filters
+  useEffect(() => {
+    setFilters((prev) => {
+      if (prev.keyword !== debouncedKeyword) {
+        return { ...prev, keyword: debouncedKeyword };
+      }
+      return prev;
+    });
+  }, [debouncedKeyword]);
+
+  // Sync state to URL Query Parameters (AC2)
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (debouncedKeyword.trim()) {
+      params.set('keyword', debouncedKeyword.trim());
+    }
+    if (filters.departmentId !== 'ALL') {
+      params.set('department', filters.departmentId);
+    }
+    if (filters.workLocation !== 'ALL') {
+      params.set('location', filters.workLocation);
+    }
+    if (filters.employmentType !== 'ALL') {
+      params.set('workType', filters.employmentType);
+    }
+    if (filters.level !== 'ALL') {
+      params.set('level', filters.level);
+    }
+    if (currentPage > 1) {
+      params.set('page', String(currentPage));
+    }
+
+    setSearchParams(params, { replace: true });
+  }, [debouncedKeyword, filters.departmentId, filters.workLocation, filters.employmentType, filters.level, currentPage, setSearchParams]);
+
   // Load Career Page Configuration (Hero, Culture, Benefits)
   useEffect(() => {
     let isMounted = true;
@@ -92,7 +152,6 @@ export const PublicJobListPage: React.FC = () => {
         if (isMounted) setCareerConfig(data);
       })
       .catch(() => {
-        // Fallback default mock configuration
         if (isMounted) {
           setCareerConfig({
             title: 'Gia nhập gia đình SmartRecruit',
@@ -118,15 +177,15 @@ export const PublicJobListPage: React.FC = () => {
     };
   }, []);
 
-  // Fetch Jobs Function
+  // 3. Fetch Jobs via getPublicJobs (AC3)
   const fetchJobs = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await jobPostingService.getPublicJobPostings({
-        keyword: filters.keyword,
-        departmentId: filters.departmentId,
-        workLocation: filters.workLocation,
-        employmentType: filters.employmentType,
+      const response = await jobPostingService.getPublicJobs({
+        keyword: debouncedKeyword,
+        department: filters.departmentId,
+        location: filters.workLocation,
+        workType: filters.employmentType,
         level: filters.level,
         page: currentPage,
         pageSize,
@@ -143,7 +202,7 @@ export const PublicJobListPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [filters, currentPage, pageSize]);
+  }, [debouncedKeyword, filters.departmentId, filters.workLocation, filters.employmentType, filters.level, currentPage, pageSize]);
 
   useEffect(() => {
     fetchJobs();
@@ -151,17 +210,23 @@ export const PublicJobListPage: React.FC = () => {
 
   // Handler for filter field change
   const handleFilterChange = (key: keyof FilterState, value: string) => {
-    setFilters((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-    setCurrentPage(1); // Reset to page 1 on filter change
+    if (key === 'keyword') {
+      setKeywordInput(value);
+    } else {
+      setFilters((prev) => ({
+        ...prev,
+        [key]: value,
+      }));
+    }
+    setCurrentPage(1);
   };
 
-  // Reset all filters
+  // Reset all filters to default (AC1)
   const handleResetFilters = () => {
+    setKeywordInput('');
     setFilters(INITIAL_FILTERS);
     setCurrentPage(1);
+    setSearchParams({}, { replace: true });
   };
 
   // Scroll Helpers
@@ -206,7 +271,7 @@ export const PublicJobListPage: React.FC = () => {
           title={careerConfig?.title}
           slogan={careerConfig?.slogan}
           coverImageUrl={careerConfig?.coverImageUrl}
-          searchKeyword={filters.keyword}
+          searchKeyword={keywordInput}
           onSearchChange={(val) => handleFilterChange('keyword', val)}
           selectedLocation={filters.workLocation}
           onLocationChange={(val) => handleFilterChange('workLocation', val)}
@@ -246,7 +311,7 @@ export const PublicJobListPage: React.FC = () => {
           {/* Filter Bar */}
           <div className="mb-8">
             <PublicJobFilterBar
-              filters={filters}
+              filters={{ ...filters, keyword: keywordInput }}
               onFilterChange={handleFilterChange}
               onResetFilters={handleResetFilters}
               layout={layout}
@@ -254,6 +319,7 @@ export const PublicJobListPage: React.FC = () => {
               totalResults={totalCount}
               departments={DEFAULT_DEPARTMENTS}
               locations={DEFAULT_LOCATIONS}
+              isSearching={isSearching || isLoading}
             />
           </div>
 

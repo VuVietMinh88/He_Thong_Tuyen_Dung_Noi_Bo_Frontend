@@ -1029,20 +1029,23 @@ export const jobPostingService = {
       );
     }
 
-    if (params?.departmentId && params.departmentId !== 'ALL') {
+    const targetDept = params?.department || params?.departmentId;
+    if (targetDept && targetDept !== 'ALL') {
       filtered = filtered.filter(
-        (job) => job.departmentId === params.departmentId || job.departmentName === params.departmentId
+        (job) => job.departmentId === targetDept || job.departmentName === targetDept
       );
     }
 
-    if (params?.workLocation && params.workLocation !== 'ALL') {
+    const targetLocation = params?.location || params?.workLocation;
+    if (targetLocation && targetLocation !== 'ALL') {
       filtered = filtered.filter((job) =>
-        job.workLocation.toLowerCase().includes(params.workLocation!.toLowerCase())
+        job.workLocation.toLowerCase().includes(targetLocation.toLowerCase())
       );
     }
 
-    if (params?.employmentType && params.employmentType !== 'ALL') {
-      filtered = filtered.filter((job) => job.employmentType === params.employmentType);
+    const targetWorkType = params?.workType || params?.employmentType;
+    if (targetWorkType && targetWorkType !== 'ALL') {
+      filtered = filtered.filter((job) => job.employmentType === targetWorkType);
     }
 
     if (params?.level && params.level !== 'ALL') {
@@ -1062,12 +1065,22 @@ export const jobPostingService = {
       totalPages,
     };
   },
+
+  /**
+   * Service API tìm kiếm và lọc danh sách việc làm công khai (User Story S3-01 / Task TKNHTTDNB1-313 AC3)
+   */
+  async getPublicJobs(params?: PublicJobFilterParams): Promise<PublicJobPostingsResponse> {
+    return this.getPublicJobPostings(params);
+  },
 };
 
 export interface PublicJobFilterParams {
   keyword?: string;
+  department?: string;
   departmentId?: string;
+  location?: string;
   workLocation?: string;
+  workType?: string;
   employmentType?: string;
   level?: string;
   page?: number;

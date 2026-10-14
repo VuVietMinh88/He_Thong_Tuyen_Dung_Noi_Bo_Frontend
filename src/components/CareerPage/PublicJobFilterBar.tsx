@@ -28,6 +28,7 @@ export interface PublicJobFilterBarProps {
   totalResults: number;
   departments: { id: string; name: string }[];
   locations: string[];
+  isSearching?: boolean;
 }
 
 export const PublicJobFilterBar: React.FC<PublicJobFilterBarProps> = ({
@@ -39,6 +40,7 @@ export const PublicJobFilterBar: React.FC<PublicJobFilterBarProps> = ({
   totalResults,
   departments,
   locations,
+  isSearching = false,
 }) => {
   const isFiltered =
     Boolean(filters.keyword.trim()) ||
@@ -51,19 +53,27 @@ export const PublicJobFilterBar: React.FC<PublicJobFilterBarProps> = ({
     departments.find((d) => d.id === filters.departmentId)?.name || filters.departmentId;
 
   return (
-    <div className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">
+    <div
+      data-testid="public-job-filter-bar"
+      className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs"
+    >
       {/* Top Search & Filter Dropdowns Grid */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-12">
         {/* Search Keyword */}
         <div className="relative lg:col-span-4">
           <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
-            <Search className="h-4 w-4 text-slate-400" />
+            {isSearching ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
+            ) : (
+              <Search className="h-4 w-4 text-slate-400" />
+            )}
           </div>
           <input
+            data-testid="search-input"
             type="text"
             value={filters.keyword}
             onChange={(e) => onFilterChange('keyword', e.target.value)}
-            placeholder="Tìm theo chức danh, kỹ năng..."
+            placeholder="Tìm theo chức danh, kỹ năng (debounce 450ms)..."
             className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-10 pr-9 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
           />
           {filters.keyword && (
@@ -72,6 +82,7 @@ export const PublicJobFilterBar: React.FC<PublicJobFilterBarProps> = ({
               onClick={() => onFilterChange('keyword', '')}
               className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600"
               title="Xóa tìm kiếm"
+              data-testid="clear-search-btn"
             >
               <X className="h-4 w-4" />
             </button>
@@ -84,6 +95,7 @@ export const PublicJobFilterBar: React.FC<PublicJobFilterBarProps> = ({
             <Building2 className="h-4 w-4 text-slate-400" />
           </div>
           <select
+            data-testid="department-select"
             value={filters.departmentId}
             onChange={(e) => onFilterChange('departmentId', e.target.value)}
             className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-9 pr-7 text-xs font-medium text-slate-700 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
@@ -103,6 +115,7 @@ export const PublicJobFilterBar: React.FC<PublicJobFilterBarProps> = ({
             <MapPin className="h-4 w-4 text-slate-400" />
           </div>
           <select
+            data-testid="location-select"
             value={filters.workLocation}
             onChange={(e) => onFilterChange('workLocation', e.target.value)}
             className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-9 pr-7 text-xs font-medium text-slate-700 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
@@ -122,6 +135,7 @@ export const PublicJobFilterBar: React.FC<PublicJobFilterBarProps> = ({
             <Briefcase className="h-4 w-4 text-slate-400" />
           </div>
           <select
+            data-testid="work-type-select"
             value={filters.employmentType}
             onChange={(e) => onFilterChange('employmentType', e.target.value)}
             className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-9 pr-7 text-xs font-medium text-slate-700 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
@@ -141,6 +155,7 @@ export const PublicJobFilterBar: React.FC<PublicJobFilterBarProps> = ({
             <Layers className="h-4 w-4 text-slate-400" />
           </div>
           <select
+            data-testid="level-select"
             value={filters.level}
             onChange={(e) => onFilterChange('level', e.target.value)}
             className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-9 pr-7 text-xs font-medium text-slate-700 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
@@ -236,6 +251,7 @@ export const PublicJobFilterBar: React.FC<PublicJobFilterBarProps> = ({
 
           {isFiltered && (
             <button
+              data-testid="reset-filters-btn"
               type="button"
               onClick={onResetFilters}
               className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition"
@@ -249,6 +265,7 @@ export const PublicJobFilterBar: React.FC<PublicJobFilterBarProps> = ({
         {/* Layout Switch Buttons */}
         <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
           <button
+            data-testid="grid-view-btn"
             type="button"
             onClick={() => onLayoutChange('grid')}
             className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${
@@ -262,6 +279,7 @@ export const PublicJobFilterBar: React.FC<PublicJobFilterBarProps> = ({
             <LayoutGrid className="h-4 w-4" />
           </button>
           <button
+            data-testid="list-view-btn"
             type="button"
             onClick={() => onLayoutChange('list')}
             className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${
