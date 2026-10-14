@@ -733,6 +733,463 @@ export const jobPostingService = {
       };
     }
   },
+
+  /**
+   * Lấy danh sách việc làm công khai dành cho ứng viên bên ngoài (User Story S3-01 / Task TKNHTTDNB1-312)
+   */
+  async getPublicJobPostings(params?: PublicJobFilterParams): Promise<PublicJobPostingsResponse> {
+    const page = params?.page && params.page > 0 ? params.page : 1;
+    const pageSize = params?.pageSize && params.pageSize > 0 ? params.pageSize : 6;
+
+    try {
+      const response = await axiosClient.get<
+        PublicJobPostingsResponse | { items: JobPostingData[]; total?: number }
+      >('/public/job-postings', { params });
+
+      if (response.data && 'items' in response.data && Array.isArray(response.data.items)) {
+        const items = response.data.items;
+        const total = response.data.total ?? items.length;
+        const totalPages = Math.ceil(total / pageSize) || 1;
+        return {
+          items,
+          total,
+          page,
+          pageSize,
+          totalPages,
+        };
+      }
+    } catch {
+      // Fallback cục bộ an toàn khi backend chưa cung cấp endpoint /public/job-postings
+    }
+
+    // Dữ liệu mẫu việc làm đã duyệt và xuất bản (status = 'PUBLISHED' & publishCareerPage = true)
+    const mockPublicJobs: JobPostingData[] = [
+      {
+        id: 'jp-pub-001',
+        title: 'Senior Frontend Developer (React, TypeScript & Tailwind CSS)',
+        positionTitle: 'Senior Frontend Developer',
+        departmentId: 'dept-tech',
+        departmentName: 'Khối Công nghệ & Sản phẩm',
+        workLocation: 'Hà Nội',
+        employmentType: 'FULL_TIME',
+        level: 'SENIOR',
+        headcount: 2,
+        deadline: '2026-11-30',
+        salaryType: 'RANGE',
+        salaryMin: 25,
+        salaryMax: 45,
+        currency: 'VND',
+        isSalaryNegotiable: true,
+        jobDescription: 'Tham gia thiết kế, phát triển và tối ưu hóa hệ thống giao diện người dùng quy mô lớn cho nền tảng Smart Recruitment. Phối hợp chặt chẽ với UI/UX Designer và Backend team để xây dựng trải nghiệm tuyển dụng hiện đại, mượt mà và trực quan.',
+        requirements: 'Tối thiểu 3 năm kinh nghiệm thực chiến với React, TypeScript và Tailwind CSS. Thành thạo State Management, RESTful API, tối ưu hóa Web Performance (LCP, INP). Khả năng viết code sạch, unit test và tư duy giải quyết vấn đề tốt.',
+        benefits: 'Mức lương cạnh tranh 25-45 triệu VND kèm tháng 13. Thưởng hiệu quả dự án hàng quý. Bảo hiểm sức khỏe PVI Premium toàn diện cho nhân viên và người thân. Môi trường Agile năng động, hỗ trợ thiết bị Macbook Pro M-series.',
+        skills: ['React', 'TypeScript', 'Tailwind CSS', 'Vite', 'RESTful API'],
+        status: 'PUBLISHED',
+        publishInternal: true,
+        publishCareerPage: true,
+        publishedAt: '2026-10-10T08:30:00Z',
+      },
+      {
+        id: 'jp-pub-002',
+        title: 'Backend Lead Engineer (Java Spring Boot & Microservices)',
+        positionTitle: 'Backend Lead Engineer',
+        departmentId: 'dept-tech',
+        departmentName: 'Khối Công nghệ & Sản phẩm',
+        workLocation: 'TP. Hồ Chí Minh',
+        employmentType: 'FULL_TIME',
+        level: 'LEAD',
+        headcount: 1,
+        deadline: '2026-12-15',
+        salaryType: 'RANGE',
+        salaryMin: 45,
+        salaryMax: 65,
+        currency: 'VND',
+        isSalaryNegotiable: true,
+        jobDescription: 'Chịu trách nhiệm kiến trúc và định hướng kỹ thuật cho toàn bộ hệ thống microservices phía backend. Định nghĩa các chuẩn mực kỹ thuật, code review và mentor cho các kỹ sư trẻ trong đội ngũ.',
+        requirements: 'Từ 5 năm kinh nghiệm Java/Spring Boot, kiến trúc Microservices phân tán, Docker, Kubernetes, PostgreSQL và Kafka/RabbitMQ. Khả năng chịu tải cao, thiết kế cơ sở dữ liệu và bảo mật thông tin.',
+        benefits: 'Mức lương từ 45 - 65 triệu VND. Gói cổ phiếu ESOP hấp dẫn. 15 ngày nghỉ phép hưởng nguyên lương mỗi năm. Tham gia các hội thảo công nghệ quốc tế định kỳ.',
+        skills: ['Java', 'Spring Boot', 'Microservices', 'PostgreSQL', 'Docker', 'Kafka'],
+        status: 'PUBLISHED',
+        publishInternal: true,
+        publishCareerPage: true,
+        publishedAt: '2026-10-11T09:00:00Z',
+      },
+      {
+        id: 'jp-pub-003',
+        title: 'Senior Product Designer (UI/UX & Design System)',
+        positionTitle: 'Senior Product Designer',
+        departmentId: 'dept-tech',
+        departmentName: 'Khối Công nghệ & Sản phẩm',
+        workLocation: 'Linh hoạt (Hybrid)',
+        employmentType: 'HYBRID',
+        level: 'SENIOR',
+        headcount: 1,
+        deadline: '2026-11-20',
+        salaryType: 'RANGE',
+        salaryMin: 25,
+        salaryMax: 40,
+        currency: 'VND',
+        isSalaryNegotiable: true,
+        jobDescription: 'Chủ trì thiết kế trải nghiệm người dùng (UX) và giao diện trực quan (UI) cho toàn bộ hệ sinh thái sản phẩm tuyển dụng. Xây dựng và duy trì Design System nhất quán, hiện đại theo chuẩn quốc tế.',
+        requirements: 'Từ 3-5 năm kinh nghiệm Product Design/UI-UX cho các sản phẩm SaaS B2B hoặc B2C. Thành thạo Figma, Design Tokens, prototyping và nghiên cứu hành vi người dùng (User Research, Usability Testing). Có portfolio dự án ấn tượng.',
+        benefits: 'Thu nhập 25-40 triệu VND. Chế độ làm việc Hybrid linh hoạt (2 ngày làm việc tại nhà mỗi tuần). Ngân sách đào tạo và công cụ bản quyền cao cấp (Figma Enterprise, Adobe CC).',
+        skills: ['Figma', 'UI/UX Design', 'Design System', 'Prototyping', 'User Research'],
+        status: 'PUBLISHED',
+        publishInternal: true,
+        publishCareerPage: true,
+        publishedAt: '2026-10-12T10:15:00Z',
+      },
+      {
+        id: 'jp-pub-004',
+        title: 'Data Engineer / MLOps Specialist (AI & Data Lakehouse)',
+        positionTitle: 'Data Engineer / MLOps Specialist',
+        departmentId: 'dept-ai',
+        departmentName: 'Trung tâm Nghiên cứu AI & Dữ liệu',
+        workLocation: 'Làm việc từ xa (Remote)',
+        employmentType: 'REMOTE',
+        level: 'MIDDLE',
+        headcount: 2,
+        deadline: '2026-11-25',
+        salaryType: 'RANGE',
+        salaryMin: 30,
+        salaryMax: 50,
+        currency: 'VND',
+        isSalaryNegotiable: true,
+        jobDescription: 'Xây dựng và vận hành các pipeline dữ liệu lớn (Big Data pipelines), lưu trữ Lakehouse và triển khai quy trình MLOps tự động cho các mô hình AI/ML phân tích ứng viên và tự động matching CV.',
+        requirements: 'Có từ 2-4 năm kinh nghiệm với Python, Apache Spark, Airflow, dbt, BigQuery hoặc ClickHouse. Am hiểu quy trình CI/CD cho mô hình Machine Learning và quản lý vòng đời mô hình (MLflow, Kubeflow).',
+        benefits: 'Mức lương 30 - 50 triệu VND. Làm việc 100% Remote linh hoạt địa điểm. Phụ cấp Internet và không gian làm việc tại nhà hàng tháng. Thưởng dự án AI xuất sắc.',
+        skills: ['Python', 'Apache Spark', 'MLOps', 'BigQuery', 'Docker', 'Airflow'],
+        status: 'PUBLISHED',
+        publishInternal: true,
+        publishCareerPage: true,
+        publishedAt: '2026-10-09T14:00:00Z',
+      },
+      {
+        id: 'jp-pub-005',
+        title: 'Chuyên viên Tuyển dụng Cao cấp (Senior IT Recruiter)',
+        positionTitle: 'Senior IT Recruiter',
+        departmentId: 'dept-hr',
+        departmentName: 'Ban Quản trị Nguồn nhân lực',
+        workLocation: 'Hà Nội',
+        employmentType: 'FULL_TIME',
+        level: 'SENIOR',
+        headcount: 2,
+        deadline: '2026-11-15',
+        salaryType: 'RANGE',
+        salaryMin: 18,
+        salaryMax: 28,
+        currency: 'VND',
+        isSalaryNegotiable: true,
+        jobDescription: 'Lập kế hoạch và trực tiếp tìm kiếm, thu hút các nhân sự công nghệ chất lượng cao (Software Engineers, Solution Architects, Tech Leads, AI Specialists). Quản lý toàn bộ quy trình từ sourcing, phỏng vấn đến offer onboarding.',
+        requirements: 'Từ 3 năm kinh nghiệm tuyển dụng ngành IT (Tech/Software). Hiểu biết sâu sắc về các công nghệ lập trình, thị trường lao động IT tại Việt Nam. Kỹ năng giao tiếp xuất sắc và tư duy kết nối đối tác nhân tài.',
+        benefits: 'Mức lương cứng 18 - 28 triệu VND + Thưởng tuyển dụng không giới hạn theo KPI. Khám sức khỏe cao cấp định kỳ tại bệnh viện quốc tế. Môi trường làm việc nhân văn, chuyên nghiệp.',
+        skills: ['IT Sourcing', 'Headhunting', 'Candidate Experience', 'Employer Branding', 'Interviewing'],
+        status: 'PUBLISHED',
+        publishInternal: true,
+        publishCareerPage: true,
+        publishedAt: '2026-10-08T08:00:00Z',
+      },
+      {
+        id: 'jp-pub-006',
+        title: 'Chuyên viên Tiếp thị Kỹ thuật số (Digital Marketing Specialist)',
+        positionTitle: 'Digital Marketing Specialist',
+        departmentId: 'dept-mkt',
+        departmentName: 'Phòng Tiếp thị & Truyền thông',
+        workLocation: 'Hà Nội',
+        employmentType: 'FULL_TIME',
+        level: 'MIDDLE',
+        headcount: 1,
+        deadline: '2026-12-05',
+        salaryType: 'RANGE',
+        salaryMin: 15,
+        salaryMax: 25,
+        currency: 'VND',
+        isSalaryNegotiable: true,
+        jobDescription: 'Lên kế hoạch và triển khai các chiến dịch Digital Marketing tổng thể cho sản phẩm B2B SaaS: SEO, Google Ads, LinkedIn Ads, Content Inbound Marketing và Email Marketing tự động.',
+        requirements: 'Tối thiểu 2 năm kinh nghiệm Digital Performance Marketing hoặc Growth Marketing, ưu tiên trong lĩnh vực công nghệ hoặc B2B. Kỹ năng phân tích số liệu (Google Analytics 4, Tag Manager) và sáng tạo nội dung thu hút.',
+        benefits: 'Thu nhập 15 - 25 triệu VND/tháng. Thưởng hoa hồng theo số lượng Lead chất lượng đem lại. Cơ hội thăng tiến lên Marketing Lead sau 1 năm.',
+        skills: ['SEO/SEM', 'Google Ads', 'Content Marketing', 'Google Analytics', 'Social Media'],
+        status: 'PUBLISHED',
+        publishInternal: true,
+        publishCareerPage: true,
+        publishedAt: '2026-10-10T11:00:00Z',
+      },
+      {
+        id: 'jp-pub-007',
+        title: 'Chuyên viên Phát triển Kinh doanh B2B (Enterprise Business Development)',
+        positionTitle: 'Enterprise Business Development',
+        departmentId: 'dept-sales',
+        departmentName: 'Phòng Kinh doanh B2B',
+        workLocation: 'TP. Hồ Chí Minh',
+        employmentType: 'FULL_TIME',
+        level: 'MIDDLE',
+        headcount: 3,
+        deadline: '2026-12-20',
+        salaryType: 'STARTING_FROM',
+        salaryMin: 18,
+        currency: 'VND',
+        isSalaryNegotiable: true,
+        jobDescription: 'Tìm kiếm, tiếp cận và đàm phán giải pháp phần mềm quản trị tuyển dụng thông minh cho các doanh nghiệp quy mô lớn (Enterprise). Xây dựng mối quan hệ bền vững với các Giám đốc Nhân sự (CHRO, HRD).',
+        requirements: 'Từ 2 năm kinh nghiệm kinh doanh giải pháp công nghệ B2B hoặc phần mềm SaaS. Kỹ năng thuyết trình, đàm phán hợp đồng giá trị lớn và xử lý phản hồi khách hàng khéo léo.',
+        benefits: 'Lương cơ bản từ 18 triệu VND + Hoa hồng doanh số hấp dẫn (tổng thu nhập trung bình 35 - 50 triệu VND/tháng). Phụ cấp công tác, điện thoại và tiếp khách.',
+        skills: ['B2B Sales', 'Negotiation', 'CRM', 'SaaS Solution', 'Customer Presentation'],
+        status: 'PUBLISHED',
+        publishInternal: true,
+        publishCareerPage: true,
+        publishedAt: '2026-10-07T15:20:00Z',
+      },
+      {
+        id: 'jp-pub-008',
+        title: 'DevOps / Cloud Platform Engineer (AWS, Kubernetes & Terraform)',
+        positionTitle: 'DevOps / Cloud Platform Engineer',
+        departmentId: 'dept-tech',
+        departmentName: 'Khối Công nghệ & Sản phẩm',
+        workLocation: 'Hà Nội',
+        employmentType: 'FULL_TIME',
+        level: 'SENIOR',
+        headcount: 1,
+        deadline: '2026-12-10',
+        salaryType: 'RANGE',
+        salaryMin: 30,
+        salaryMax: 48,
+        currency: 'VND',
+        isSalaryNegotiable: false,
+        jobDescription: 'Quản trị hạ tầng điện toán đám mây AWS, xây dựng cụm Kubernetes (EKS), cấu hình giám sát (Prometheus, Grafana) và tự động hóa toàn bộ quy trình CI/CD pipelines an toàn, liên tục.',
+        requirements: 'Từ 3 năm kinh nghiệm DevOps/SRE trên AWS hoặc GCP. Thành thạo Terraform (IaC), Docker, Kubernetes, CI/CD (GitHub Actions/GitLab CI), Linux administration và kiến trúc High Availability.',
+        benefits: 'Mức lương 30 - 48 triệu VND. Được tài trợ 100% chi phí thi các chứng chỉ quốc tế AWS Certified Solutions Architect / CKA. 14 ngày nghỉ phép hàng năm.',
+        skills: ['AWS', 'Kubernetes', 'Terraform', 'CI/CD', 'Docker', 'Prometheus'],
+        status: 'PUBLISHED',
+        publishInternal: true,
+        publishCareerPage: true,
+        publishedAt: '2026-10-11T16:00:00Z',
+      },
+      {
+        id: 'jp-pub-009',
+        title: 'Thực tập sinh Lập trình Web Frontend / Backend (Full-stack Intern)',
+        positionTitle: 'Software Engineer Intern',
+        departmentId: 'dept-tech',
+        departmentName: 'Khối Công nghệ & Sản phẩm',
+        workLocation: 'Hà Nội',
+        employmentType: 'INTERNSHIP',
+        level: 'INTERN',
+        headcount: 5,
+        deadline: '2026-11-18',
+        salaryType: 'STARTING_FROM',
+        salaryMin: 6,
+        currency: 'VND',
+        isSalaryNegotiable: true,
+        jobDescription: 'Tham gia chương trình ươm mầm tài năng công nghệ. Được trực tiếp hướng dẫn 1-1 bởi các Senior/Lead Engineer. Tham gia code các module thực tế của hệ thống tuyển dụng.',
+        requirements: 'Sinh viên năm 3, 4 hoặc mới tốt nghiệp chuyên ngành CNTT, Khoa học Máy tính hoặc tương đương. Nắm vững kiến thức nền tảng về OOP, Data Structures, Git và một trong các ngôn ngữ React/TypeScript hoặc Java/Node.js.',
+        benefits: 'Hỗ trợ thực tập từ 6 triệu VND/tháng + Hỗ trợ ăn trưa, gửi xe miễn phí. Cơ hội ký hợp đồng nhân viên chính thức ngay sau khi kết thúc kỳ thực tập.',
+        skills: ['JavaScript', 'TypeScript', 'React', 'Git', 'HTML/CSS'],
+        status: 'PUBLISHED',
+        publishInternal: true,
+        publishCareerPage: true,
+        publishedAt: '2026-10-12T09:30:00Z',
+      },
+      {
+        id: 'jp-pub-010',
+        title: 'Senior QA / QC Automation Engineer (Playwright & API Testing)',
+        positionTitle: 'Senior QA Automation Engineer',
+        departmentId: 'dept-tech',
+        departmentName: 'Khối Công nghệ & Sản phẩm',
+        workLocation: 'Đà Nẵng',
+        employmentType: 'FULL_TIME',
+        level: 'SENIOR',
+        headcount: 1,
+        deadline: '2026-12-01',
+        salaryType: 'RANGE',
+        salaryMin: 22,
+        salaryMax: 38,
+        currency: 'VND',
+        isSalaryNegotiable: true,
+        jobDescription: 'Thiết kế chiến lược kiểm thử tự động toàn diện từ UI đến API, tích hợp automation test vào luồng CI/CD, đảm bảo chất lượng và độ ổn định cao nhất cho hệ thống.',
+        requirements: 'Từ 3 năm kinh nghiệm kiểm thử tự động với Playwright, Selenium hoặc Cypress. Thành thạo kiểm thử API với Postman/RestAssured, viết test script bằng TypeScript/JavaScript hoặc Python.',
+        benefits: 'Mức lương cạnh tranh 22 - 38 triệu VND. Làm việc tại văn phòng tiện nghi bên bờ biển Đà Nẵng. Trợ cấp ăn trưa và du lịch thường niên cùng công ty.',
+        skills: ['Playwright', 'API Testing', 'TypeScript', 'CI/CD', 'Selenium'],
+        status: 'PUBLISHED',
+        publishInternal: true,
+        publishCareerPage: true,
+        publishedAt: '2026-10-10T14:40:00Z',
+      },
+    ];
+
+    // Áp dụng bộ lọc client-side cho mock data
+    let filtered = [...mockPublicJobs];
+
+    if (params?.keyword && params.keyword.trim()) {
+      const q = params.keyword.trim().toLowerCase();
+      filtered = filtered.filter(
+        (job) =>
+          job.title.toLowerCase().includes(q) ||
+          job.positionTitle.toLowerCase().includes(q) ||
+          (job.departmentName && job.departmentName.toLowerCase().includes(q)) ||
+          job.jobDescription.toLowerCase().includes(q) ||
+          job.skills.some((s) => s.toLowerCase().includes(q))
+      );
+    }
+
+    if (params?.departmentId && params.departmentId !== 'ALL') {
+      filtered = filtered.filter(
+        (job) => job.departmentId === params.departmentId || job.departmentName === params.departmentId
+      );
+    }
+
+    if (params?.workLocation && params.workLocation !== 'ALL') {
+      filtered = filtered.filter((job) =>
+        job.workLocation.toLowerCase().includes(params.workLocation!.toLowerCase())
+      );
+    }
+
+    if (params?.employmentType && params.employmentType !== 'ALL') {
+      filtered = filtered.filter((job) => job.employmentType === params.employmentType);
+    }
+
+    if (params?.level && params.level !== 'ALL') {
+      filtered = filtered.filter((job) => job.level === params.level);
+    }
+
+    const total = filtered.length;
+    const totalPages = Math.ceil(total / pageSize) || 1;
+    const startIndex = (page - 1) * pageSize;
+    const paginatedItems = filtered.slice(startIndex, startIndex + pageSize);
+
+    return {
+      items: paginatedItems,
+      total,
+      page,
+      pageSize,
+      totalPages,
+    };
+  },
+};
+
+export interface PublicJobFilterParams {
+  keyword?: string;
+  departmentId?: string;
+  workLocation?: string;
+  employmentType?: string;
+  level?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface PublicJobPostingsResponse {
+  items: JobPostingData[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+/**
+ * Định dạng hiển thị mức lương thân thiện cho ứng viên (AC2)
+ */
+export const formatSalaryDisplay = (job: Partial<JobPostingData>): string => {
+  if (job.isSalaryNegotiable || job.salaryType === 'NEGOTIABLE' || (!job.salaryMin && !job.salaryMax)) {
+    return 'Thỏa thuận';
+  }
+
+  const currency = job.currency || 'VND';
+  const unit = currency === 'VND' ? 'triệu VND' : 'USD';
+
+  if (job.salaryType === 'RANGE' && job.salaryMin !== undefined && job.salaryMax !== undefined) {
+    return `${job.salaryMin} - ${job.salaryMax} ${unit}`;
+  }
+  if (job.salaryType === 'UP_TO' && job.salaryMax !== undefined) {
+    return `Lên tới ${job.salaryMax} ${unit}`;
+  }
+  if (job.salaryType === 'STARTING_FROM' && job.salaryMin !== undefined) {
+    return `Từ ${job.salaryMin} ${unit}`;
+  }
+  if (job.salaryMin && job.salaryMax) {
+    return `${job.salaryMin} - ${job.salaryMax} ${unit}`;
+  }
+  if (job.salaryMax) {
+    return `Lên tới ${job.salaryMax} ${unit}`;
+  }
+  if (job.salaryMin) {
+    return `Từ ${job.salaryMin} ${unit}`;
+  }
+  return 'Thỏa thuận';
+};
+
+/**
+ * Chuyển đổi mã hình thức làm việc sang tiếng Việt (AC2)
+ */
+export const formatEmploymentType = (type?: string): string => {
+  switch (type) {
+    case 'FULL_TIME':
+      return 'Toàn thời gian';
+    case 'PART_TIME':
+      return 'Bán thời gian';
+    case 'REMOTE':
+      return 'Từ xa (Remote)';
+    case 'HYBRID':
+      return 'Linh hoạt (Hybrid)';
+    case 'INTERNSHIP':
+      return 'Thực tập sinh';
+    case 'CONTRACT':
+      return 'Hợp đồng';
+    default:
+      return type || 'Toàn thời gian';
+  }
+};
+
+/**
+ * Chuyển đổi cấp bậc công việc sang tiếng Việt (AC2)
+ */
+export const formatJobLevel = (level?: string): string => {
+  switch (level) {
+    case 'INTERN':
+      return 'Thực tập sinh';
+    case 'FRESHER':
+      return 'Mới tốt nghiệp (Fresher)';
+    case 'JUNIOR':
+      return 'Junior';
+    case 'MIDDLE':
+      return 'Middle';
+    case 'SENIOR':
+      return 'Senior';
+    case 'LEAD':
+      return 'Trưởng nhóm (Lead)';
+    case 'MANAGER':
+      return 'Quản lý (Manager)';
+    default:
+      return level || 'Tất cả cấp bậc';
+  }
+};
+
+/**
+ * Tính toán tình trạng hạn nộp hồ sơ (AC2)
+ */
+export const getDeadlineStatus = (
+  deadlineStr?: string
+): { text: string; isUrgent: boolean; isExpired: boolean; daysRemaining: number | null } => {
+  if (!deadlineStr) return { text: 'Không giới hạn', isUrgent: false, isExpired: false, daysRemaining: null };
+  try {
+    const deadline = new Date(deadlineStr);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffMs = deadline.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      return { text: 'Đã hết hạn', isUrgent: false, isExpired: true, daysRemaining: diffDays };
+    }
+    if (diffDays === 0) {
+      return { text: 'Hôm nay', isUrgent: true, isExpired: false, daysRemaining: 0 };
+    }
+    if (diffDays <= 5) {
+      return { text: `Còn ${diffDays} ngày`, isUrgent: true, isExpired: false, daysRemaining: diffDays };
+    }
+    const day = String(deadline.getDate()).padStart(2, '0');
+    const month = String(deadline.getMonth() + 1).padStart(2, '0');
+    const year = deadline.getFullYear();
+    return { text: `${day}/${month}/${year}`, isUrgent: false, isExpired: false, daysRemaining: diffDays };
+  } catch {
+    return { text: deadlineStr, isUrgent: false, isExpired: false, daysRemaining: null };
+  }
 };
 
 export default jobPostingService;

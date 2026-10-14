@@ -30,6 +30,7 @@ import MasterDataManagement from "./pages/MasterData/MasterDataManagement";
 import HeadcountBudgetManagement from "./pages/Headcount/HeadcountBudgetManagement";
 import JobPostingForm from "./components/JobPosting/JobPostingForm";
 import JobPostingPreviewApproval from "./components/JobPosting/JobPostingPreviewApproval";
+import PublicJobListPage from "./pages/CareerPage/PublicJobListPage";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -98,7 +99,10 @@ function App() {
         <PermissionProvider>
           <SessionDraftRestorer />
           <Routes>
-            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/" element={<Navigate to="/careers" replace />} />
+            <Route path="/careers" element={<PublicJobListPage />} />
+            <Route path="/careers/jobs" element={<PublicJobListPage />} />
+            <Route path="/public-jobs" element={<PublicJobListPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/health" element={<HealthCheck />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
