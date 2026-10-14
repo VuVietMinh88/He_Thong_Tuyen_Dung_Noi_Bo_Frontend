@@ -845,6 +845,7 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
           candidateName={candidate.fullName}
           applicationId={activeApplication.id}
           currentStage={activeApplication.stage}
+          allowException
           onClose={() => setIsMoveStageModalOpen(false)}
           onSuccess={(payload) => handleApplicationStageUpdated(payload.toStage, payload)}
         />
