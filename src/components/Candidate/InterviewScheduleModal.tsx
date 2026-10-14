@@ -25,6 +25,7 @@ import {
   calculateEndTime,
   generateMeetingLink,
 } from '../../services/interviewService';
+import { interviewConflictService } from '../../services/interviewConflictService';
 import type {
   InterviewFormat,
   InterviewRoundType,
@@ -32,6 +33,7 @@ import type {
   InterviewSchedulePayload,
   CreateInterviewSchedulePayload,
   InterviewConflictCheckResult,
+  OverrideInterviewPayload,
 } from '../../types/interview';
 import {
   DEFAULT_INTERVIEW_ROUNDS,
@@ -109,10 +111,11 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [hasCopiedLink, setHasCopiedLink] = useState<boolean>(false);
 
-  // Conflict modal state (TKNHTTDNB1-439)
+  // Conflict modal state (TKNHTTDNB1-439 & TKNHTTDNB1-440)
   const [conflictData, setConflictData] = useState<InterviewConflictCheckResult | null>(null);
   const [isConflictModalOpen, setIsConflictModalOpen] = useState<boolean>(false);
   const [isOverriding, setIsOverriding] = useState<boolean>(false);
+  const [overrideError, setOverrideError] = useState<string | null>(null);
 
   const todayVN = useMemo(() => getVietnamTodayString(), []);
 
@@ -252,11 +255,12 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
     setTimeout(() => setHasCopiedLink(false), 2000);
   };
 
-  // Xử lý xác nhận ghi đè khi phát hiện xung đột (TKNHTTDNB1-439)
+  // Xử lý xác nhận ghi đè khi phát hiện xung đột (TKNHTTDNB1-440)
   const handleConfirmOverride = async (reason: string) => {
     try {
       setIsOverriding(true);
-      const payload: CreateInterviewSchedulePayload = {
+      setOverrideError(null);
+      const payload: OverrideInterviewPayload = {
         applicationId: applicationId || 'app-current',
         candidateId,
         candidateName,
@@ -274,14 +278,14 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
         format,
         locationOrLink: locationOrLink.trim(),
         interviewerIds: selectedInterviewers.map((i) => i.id),
-        interviewers: selectedInterviewers,
         notes: notes.trim(),
         status: 'SCHEDULED',
+        overrideConflict: true,
         isOverride: true,
         overrideReason: reason,
       };
 
-      const result = await interviewService.createInterviewSchedule(payload);
+      const result = await interviewConflictService.overrideInterviewConflict(payload);
 
       addToast({
         message: `Đã ghi đè và xếp lịch ${effectiveRoundName} cho ứng viên ${candidateName} thành công.`,
@@ -289,6 +293,7 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
       });
 
       setIsConflictModalOpen(false);
+      setOverrideError(null);
       if (onSuccess) {
         onSuccess(result);
       }
@@ -296,6 +301,7 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : 'Không thể ghi đè lịch phỏng vấn.';
+      setOverrideError(message);
       addToast({
         message,
         type: 'error',
@@ -1008,13 +1014,17 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
         </form>
       </div>
 
-      {/* Modal chi tiết xung đột lịch phỏng vấn (TKNHTTDNB1-439) */}
+      {/* Modal chi tiết xung đột lịch phỏng vấn (TKNHTTDNB1-439 & TKNHTTDNB1-440) */}
       <InterviewConflictModal
         isOpen={isConflictModalOpen}
-        onClose={() => setIsConflictModalOpen(false)}
+        onClose={() => {
+          setIsConflictModalOpen(false);
+          setOverrideError(null);
+        }}
         conflictResult={conflictData}
         onConfirmOverride={handleConfirmOverride}
         isSubmitting={isOverriding}
+        errorMessage={overrideError}
       />
     </div>
   );

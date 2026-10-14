@@ -11,6 +11,8 @@ import {
   ShieldAlert,
   ArrowRight,
   RotateCcw,
+  Loader2,
+  CheckCircle2,
 } from 'lucide-react';
 import type {
   InterviewConflictCheckResult,
@@ -23,6 +25,7 @@ export interface InterviewConflictModalProps {
   conflictResult: InterviewConflictCheckResult | null;
   onConfirmOverride: (reason: string) => Promise<void> | void;
   isSubmitting?: boolean;
+  errorMessage?: string | null;
 }
 
 export const InterviewConflictModal: React.FC<InterviewConflictModalProps> = ({
@@ -31,6 +34,7 @@ export const InterviewConflictModal: React.FC<InterviewConflictModalProps> = ({
   conflictResult,
   onConfirmOverride,
   isSubmitting = false,
+  errorMessage = null,
 }) => {
   const [isOverrideConfirmed, setIsOverrideConfirmed] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
@@ -393,7 +397,7 @@ export const InterviewConflictModal: React.FC<InterviewConflictModalProps> = ({
                   className="mt-0.5 w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
                 />
                 <span className="text-xs sm:text-sm font-semibold text-slate-800">
-                  Tôi xác nhận vẫn muốn lên lịch phỏng vấn này và chịu trách nhiệm về xung đột lịch trình.
+                  Tôi hiểu và muốn ghi đè lịch phỏng vấn bị trùng
                 </span>
               </label>
             </div>
@@ -428,6 +432,17 @@ export const InterviewConflictModal: React.FC<InterviewConflictModalProps> = ({
               </div>
             )}
           </div>
+
+          {/* Error Message Notice Banner (e.g. 403 Forbidden / Validation Error) */}
+          {errorMessage && (
+            <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-rose-900 text-xs flex items-start gap-2.5 animate-in fade-in duration-200">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <p className="font-bold text-rose-800">Không thể thực hiện ghi đè ngoại lệ:</p>
+                <p className="text-rose-700 leading-relaxed">{errorMessage}</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Modal Footer */}
@@ -454,14 +469,24 @@ export const InterviewConflictModal: React.FC<InterviewConflictModalProps> = ({
               type="button"
               onClick={handleOverrideSubmit}
               disabled={!canSubmitOverride}
-              className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold shadow-sm transition ${
+              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold shadow-sm transition ${
                 canSubmitOverride
                   ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-200 cursor-pointer'
                   : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed opacity-70'
               }`}
             >
-              <span>{isSubmitting ? 'Đang ghi đè...' : 'Xác nhận ghi đè & Lưu lịch'}</span>
-              <ArrowRight className="w-4 h-4" />
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Đang ghi đè...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Xác nhận lưu lịch</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </div>
         </div>
