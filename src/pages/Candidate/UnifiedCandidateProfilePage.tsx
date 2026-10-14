@@ -19,6 +19,7 @@ import {
   ChevronDown,
   ChevronUp,
   Share2,
+  Calendar,
 } from 'lucide-react';
 import { tokenService } from '../../services/token.service';
 import usePermission from '../../hooks/usePermission';
@@ -49,6 +50,7 @@ import { resolveCandidateMatchingEvaluation } from '../../utils/candidateMatchin
 import CandidateInteractionTimeline from '../../components/Candidate/CandidateInteractionTimeline';
 import MoveStageModal from '../../components/Candidate/MoveStageModal';
 import RejectCandidateModal from '../../components/Candidate/RejectCandidateModal';
+import InterviewScheduleModal from '../../components/Candidate/InterviewScheduleModal';
 import type {
   MoveCandidateStagePayload,
   RejectCandidatePayload,
@@ -78,6 +80,7 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
   const [contentTab, setContentTab] = useState<'overview' | 'history' | 'notes' | 'timeline'>('overview');
   const [isMoveStageModalOpen, setIsMoveStageModalOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [isInterviewModalOpen, setIsInterviewModalOpen] = useState(false);
 
   // Duplicate candidate & Merge history states (AC 1, AC 2, AC 4)
   const [duplicateComparison, setDuplicateComparison] = useState<DuplicateCandidateComparison | null>(null);
@@ -604,6 +607,14 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
               <div className="mt-4 flex flex-wrap justify-end gap-2">
                 <button
                   type="button"
+                  onClick={() => setIsInterviewModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100"
+                >
+                  <Calendar className="w-4 h-4" />
+                  Đặt lịch phỏng vấn
+                </button>
+                <button
+                  type="button"
                   onClick={() => setIsMoveStageModalOpen(true)}
                   className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700"
                 >
@@ -879,6 +890,20 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
           applicationId={activeApplication.id}
           onClose={() => setIsRejectModalOpen(false)}
           onSuccess={(payload) => handleApplicationStageUpdated('REJECTED', payload)}
+        />
+      )}
+      {candidate && isInterviewModalOpen && (
+        <InterviewScheduleModal
+          isOpen={isInterviewModalOpen}
+          onClose={() => setIsInterviewModalOpen(false)}
+          candidateId={candidate.id}
+          candidateName={candidate.fullName}
+          candidateEmail={candidate.email}
+          applicationId={activeApplication?.id}
+          jobTitle={activeApplication?.jobTitle}
+          onSuccess={() => {
+            fetchCandidate();
+          }}
         />
       )}
     </div>
