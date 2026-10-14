@@ -35,6 +35,9 @@ export interface CandidateProfile {
   cvSuggestedInfo?: CvSuggestedCandidateInfo;
   cvParsingErrorMessage?: string;
   coverLetter?: string;
+  rating?: number;
+  tags?: CandidateTag[];
+  notes?: CandidateInternalNote[];
   appliedAt?: string;
   updatedAt?: string;
 }
@@ -43,6 +46,83 @@ export interface CandidateFilterCriteria {
   keyword?: string;
   jobId?: string;
   cvParsingStatus?: CvParsingStatus | 'ALL';
+}
+
+/**
+ * Constants & Types cho Sàng lọc nhanh hồ sơ (Subtask TKNHTTDNB1-384 / Story TKNHTTDNB1-52)
+ */
+
+export const MIN_STAR_RATING = 1;
+export const MAX_STAR_RATING = 5;
+
+export const STAR_RATING_DESCRIPTIONS: Record<number, string> = {
+  1: 'Chưa đạt yêu cầu tối thiểu',
+  2: 'Cần xem xét thêm / Thiếu kinh nghiệm then chốt',
+  3: 'Đạt tiêu chuẩn yêu cầu cơ bản',
+  4: 'Rất tiềm năng / Phù hợp văn hóa và chuyên môn',
+  5: 'Xuất sắc / Ứng viên ưu tiên tuyển dụng ngay',
+};
+
+export interface ScreeningCatalogTag {
+  id: string;
+  name: string;
+  colorClass: string;
+  category?: 'SKILL' | 'EXPERIENCE' | 'LANGUAGE' | 'CULTURE' | 'AVAILABILITY';
+}
+
+export const DEFAULT_SCREENING_CATALOG_TAGS: ScreeningCatalogTag[] = [
+  {
+    id: 'catalog-tag-react-strong',
+    name: 'React/TS Vững',
+    colorClass: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    category: 'SKILL',
+  },
+  {
+    id: 'catalog-tag-english-fluent',
+    name: 'Tiếng Anh Tốt',
+    colorClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    category: 'LANGUAGE',
+  },
+  {
+    id: 'catalog-tag-lead-experience',
+    name: 'Kinh nghiệm Lead',
+    colorClass: 'bg-purple-50 text-purple-700 border-purple-200',
+    category: 'EXPERIENCE',
+  },
+  {
+    id: 'catalog-tag-onboard-immediate',
+    name: 'Onboard ngay',
+    colorClass: 'bg-blue-50 text-blue-700 border-blue-200',
+    category: 'AVAILABILITY',
+  },
+  {
+    id: 'catalog-tag-culture-fit',
+    name: 'Văn hóa phù hợp',
+    colorClass: 'bg-amber-50 text-amber-700 border-amber-200',
+    category: 'CULTURE',
+  },
+  {
+    id: 'catalog-tag-salary-match',
+    name: 'Lương kỳ vọng khớp',
+    colorClass: 'bg-teal-50 text-teal-700 border-teal-200',
+    category: 'EXPERIENCE',
+  },
+  {
+    id: 'catalog-tag-high-potential',
+    name: 'Tiềm năng cao',
+    colorClass: 'bg-rose-50 text-rose-700 border-rose-200',
+    category: 'CULTURE',
+  },
+];
+
+export interface CandidateInternalNote {
+  id: string;
+  content: string;
+  authorName: string;
+  authorRole?: string;
+  authorAvatar?: string;
+  createdAt: string; // ISO 8601
+  category?: 'GENERAL' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'CULTURE';
 }
 
 /**

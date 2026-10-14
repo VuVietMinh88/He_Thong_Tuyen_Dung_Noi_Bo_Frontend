@@ -6,7 +6,9 @@ import type {
   UnifiedCandidate,
   CandidateTag,
   InternalNote,
+  ScreeningCatalogTag,
 } from '../types/candidate';
+import { DEFAULT_SCREENING_CATALOG_TAGS } from '../types/candidate';
 
 const STORAGE_KEY_CANDIDATE_PROFILES = 'smart_recruit_candidate_profiles';
 const STORAGE_KEY_CANDIDATES = 'smart_recruit_unified_candidates';
@@ -583,26 +585,36 @@ export const candidateService = {
       // Bỏ qua
     }
 
+    // Đồng bộ vào danh sách CandidateProfile
+    const candidateList = loadCandidateProfilesFromStorage();
+    const targetCandidateIndex = candidateList.findIndex(
+      (candidateItem) => candidateItem.id === candidateId
+    );
+    if (targetCandidateIndex !== -1) {
+      candidateList[targetCandidateIndex].rating = rating;
+      candidateList[targetCandidateIndex].updatedAt = new Date().toISOString();
+      saveCandidateProfilesToStorage(candidateList);
+    }
+
     return rating;
   },
 
   /**
-   * Thêm nhãn (Tag) cho hồ sơ ứng viên
+   * Lấy danh mục các nhãn gợi ý có sẵn cho sàng lọc nhanh (Subtask TKNHTTDNB1-384)
    */
-  async addCandidateTag(candidateId: string, tagName: string): Promise<CandidateTag> {
-    const trimmed = tagName.trim();
-    if (!trimmed) throw new Error('Tên nhãn không được để trống.');
+  getCatalogTags(): ScreeningCatalogTag[] {
+    return DEFAULT_SCREENING_CATALOG_TAGS;
+  },
 
-    const randomColor =
-      TAG_COLOR_CLASSES[Math.floor(Math.random() * TAG_COLOR_CLASSES.length)];
-    const newTag: CandidateTag = {
-      id: `tag-${Date.now()}`,
-      name: trimmed,
-      colorClass: randomColor,
-    };
-
+  /**
+   * Cập nhật toàn bộ danh sách nhãn (Multi-select Tags) cho hồ sơ ứng viên
+   */
+  async updateCandidateTags(
+    candidateId: string,
+    tagsList: CandidateTag[]
+  ): Promise<CandidateTag[]> {
     try {
-      await axiosClient.post(`/candidates/${candidateId}/tags`, { name: trimmed });
+      await axiosClient.put(`/candidates/${candidateId}/tags`, { tags: tagsList });
     } catch {
       // Offline fallback
     }
@@ -610,13 +622,72 @@ export const candidateService = {
     try {
       const stored = localStorage.getItem(`${STORAGE_KEY_CANDIDATES}_${candidateId}`);
       const data: UnifiedCandidate = stored ? JSON.parse(stored) : DEFAULT_MOCK_CANDIDATE;
-      if (!data.tags.some((t) => t.name.toLowerCase() === trimmed.toLowerCase())) {
+      data.tags = tagsList;
+      data.updatedAt = new Date().toISOString();
+      localStorage.setItem(`${STORAGE_KEY_CANDIDATES}_${candidateId}`, JSON.stringify(data));
+    } catch {
+      // Bỏ qua
+    }
+
+    // Đồng bộ vào danh sách CandidateProfile
+    const candidateList = loadCandidateProfilesFromStorage();
+    const targetCandidateIndex = candidateList.findIndex(
+      (candidateItem) => candidateItem.id === candidateId
+    );
+    if (targetCandidateIndex !== -1) {
+      candidateList[targetCandidateIndex].tags = tagsList;
+      candidateList[targetCandidateIndex].updatedAt = new Date().toISOString();
+      saveCandidateProfilesToStorage(candidateList);
+    }
+
+    return tagsList;
+  },
+
+  /**
+   * Thêm nhãn (Tag) cho hồ sơ ứng viên
+   */
+  async addCandidateTag(candidateId: string, tagName: string): Promise<CandidateTag> {
+    const trimmedTagName = tagName.trim();
+    if (!trimmedTagName) throw new Error('Tên nhãn không được để trống.');
+
+    const randomColorClass =
+      TAG_COLOR_CLASSES[Math.floor(Math.random() * TAG_COLOR_CLASSES.length)];
+    const newTag: CandidateTag = {
+      id: `tag-${Date.now()}`,
+      name: trimmedTagName,
+      colorClass: randomColorClass,
+    };
+
+    try {
+      await axiosClient.post(`/candidates/${candidateId}/tags`, { name: trimmedTagName });
+    } catch {
+      // Offline fallback
+    }
+
+    try {
+      const stored = localStorage.getItem(`${STORAGE_KEY_CANDIDATES}_${candidateId}`);
+      const data: UnifiedCandidate = stored ? JSON.parse(stored) : DEFAULT_MOCK_CANDIDATE;
+      if (!data.tags.some((tagItem) => tagItem.name.toLowerCase() === trimmedTagName.toLowerCase())) {
         data.tags.push(newTag);
         data.updatedAt = new Date().toISOString();
         localStorage.setItem(`${STORAGE_KEY_CANDIDATES}_${candidateId}`, JSON.stringify(data));
       }
     } catch {
       // Bỏ qua
+    }
+
+    // Đồng bộ vào danh sách CandidateProfile
+    const candidateList = loadCandidateProfilesFromStorage();
+    const targetCandidateIndex = candidateList.findIndex(
+      (candidateItem) => candidateItem.id === candidateId
+    );
+    if (targetCandidateIndex !== -1) {
+      const existingTags = candidateList[targetCandidateIndex].tags || [];
+      if (!existingTags.some((tagItem) => tagItem.name.toLowerCase() === trimmedTagName.toLowerCase())) {
+        candidateList[targetCandidateIndex].tags = [...existingTags, newTag];
+        candidateList[targetCandidateIndex].updatedAt = new Date().toISOString();
+        saveCandidateProfilesToStorage(candidateList);
+      }
     }
 
     return newTag;
@@ -636,24 +707,70 @@ export const candidateService = {
       const stored = localStorage.getItem(`${STORAGE_KEY_CANDIDATES}_${candidateId}`);
       if (stored) {
         const data: UnifiedCandidate = JSON.parse(stored);
-        data.tags = data.tags.filter((t) => t.id !== tagId);
+        data.tags = data.tags.filter((tagItem) => tagItem.id !== tagId);
         data.updatedAt = new Date().toISOString();
         localStorage.setItem(`${STORAGE_KEY_CANDIDATES}_${candidateId}`, JSON.stringify(data));
       }
     } catch {
       // Bỏ qua
     }
+
+    // Đồng bộ vào danh sách CandidateProfile
+    const candidateList = loadCandidateProfilesFromStorage();
+    const targetCandidateIndex = candidateList.findIndex(
+      (candidateItem) => candidateItem.id === candidateId
+    );
+    if (targetCandidateIndex !== -1 && candidateList[targetCandidateIndex].tags) {
+      candidateList[targetCandidateIndex].tags = candidateList[targetCandidateIndex].tags.filter(
+        (tagItem) => tagItem.id !== tagId
+      );
+      candidateList[targetCandidateIndex].updatedAt = new Date().toISOString();
+      saveCandidateProfilesToStorage(candidateList);
+    }
   },
 
   /**
-   * Thêm ghi chú nội bộ cho hồ sơ ứng viên (AC 4)
+   * Thêm ghi chú nội bộ cho hồ sơ ứng viên (Subtask TKNHTTDNB1-384 & Story S4-09)
    */
   async addInternalNote(
     candidateId: string,
-    notePayload: { content: string; category?: InternalNote['category'] },
-    author: { fullName: string; role: string; avatar?: string }
+    notePayloadOrContent:
+      | { content: string; category?: InternalNote['category'] }
+      | string,
+    authorOrAuthorName?:
+      | { fullName: string; role: string; avatar?: string }
+      | string,
+    authorRoleParameter?: string,
+    categoryParameter?: InternalNote['category']
   ): Promise<InternalNote> {
-    const trimmedContent = notePayload.content.trim();
+    let resolvedContent = '';
+    let resolvedCategory: InternalNote['category'] = 'GENERAL';
+    let resolvedAuthorName = 'Người dùng hệ thống';
+    let resolvedAuthorRole = 'Nhân sự';
+    let resolvedAuthorAvatar: string | undefined = undefined;
+
+    if (typeof notePayloadOrContent === 'string') {
+      resolvedContent = notePayloadOrContent;
+      if (typeof authorOrAuthorName === 'string') {
+        resolvedAuthorName = authorOrAuthorName;
+      }
+      if (authorRoleParameter) {
+        resolvedAuthorRole = authorRoleParameter;
+      }
+      if (categoryParameter) {
+        resolvedCategory = categoryParameter;
+      }
+    } else {
+      resolvedContent = notePayloadOrContent.content;
+      resolvedCategory = notePayloadOrContent.category || 'GENERAL';
+      if (typeof authorOrAuthorName === 'object' && authorOrAuthorName !== null) {
+        resolvedAuthorName = authorOrAuthorName.fullName || 'Người dùng hệ thống';
+        resolvedAuthorRole = authorOrAuthorName.role || 'Nhân sự';
+        resolvedAuthorAvatar = authorOrAuthorName.avatar;
+      }
+    }
+
+    const trimmedContent = resolvedContent.trim();
     if (!trimmedContent) {
       throw new Error('Nội dung ghi chú không được để trống.');
     }
@@ -661,11 +778,11 @@ export const candidateService = {
     const newNote: InternalNote = {
       id: `note-${Date.now()}`,
       content: trimmedContent,
-      authorName: author.fullName || 'Người dùng hệ thống',
-      authorRole: author.role || 'Nhân sự',
-      authorAvatar: author.avatar,
+      authorName: resolvedAuthorName,
+      authorRole: resolvedAuthorRole,
+      authorAvatar: resolvedAuthorAvatar,
       createdAt: new Date().toISOString(),
-      category: notePayload.category || 'GENERAL',
+      category: resolvedCategory,
     };
 
     try {
@@ -682,6 +799,20 @@ export const candidateService = {
       localStorage.setItem(`${STORAGE_KEY_CANDIDATES}_${candidateId}`, JSON.stringify(data));
     } catch {
       // Bỏ qua
+    }
+
+    // Đồng bộ vào danh sách CandidateProfile
+    const candidateList = loadCandidateProfilesFromStorage();
+    const targetCandidateIndex = candidateList.findIndex(
+      (candidateItem) => candidateItem.id === candidateId
+    );
+    if (targetCandidateIndex !== -1) {
+      if (!candidateList[targetCandidateIndex].notes) {
+        candidateList[targetCandidateIndex].notes = [];
+      }
+      candidateList[targetCandidateIndex].notes.unshift(newNote);
+      candidateList[targetCandidateIndex].updatedAt = new Date().toISOString();
+      saveCandidateProfilesToStorage(candidateList);
     }
 
     return newNote;
