@@ -49,9 +49,8 @@ export const PublicJobApplyPage: React.FC = () => {
             setError('Tin tuyển dụng không tồn tại hoặc đã hết hạn đăng ký.');
           }
         }
-      } catch (err) {
+      } catch {
         if (isMounted) {
-          console.error('Error fetching job details for apply:', err);
           setError('Không thể tải thông tin tin tuyển dụng. Vui lòng thử lại sau.');
         }
       } finally {
