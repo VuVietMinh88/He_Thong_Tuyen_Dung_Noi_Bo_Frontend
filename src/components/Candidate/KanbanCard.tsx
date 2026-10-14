@@ -2,6 +2,7 @@ import React from 'react';
 import { BriefcaseBusiness, Mail, Phone, Star, UserRound } from 'lucide-react';
 import type { CandidateProfile, CandidateStage } from '../../types/candidate';
 import { CANDIDATE_STAGE_CONFIG } from '../../types/candidate';
+import SlaOverdueBadge from '../SLA/SlaOverdueBadge';
 
 export interface KanbanCardProps {
   candidate: CandidateProfile;
@@ -105,13 +106,16 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
       )}
 
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
-        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${stageConfig.badgeClass}`}>
-          {stageConfig.label}
-        </span>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${stageConfig.badgeClass}`}>
+            {stageConfig.label}
+          </span>
+          <SlaOverdueBadge candidate={candidate} size="xs" />
+        </div>
         {candidate.appliedAt && (
           <time
             dateTime={candidate.appliedAt}
-            className="text-[10px] text-slate-400"
+            className="text-[10px] text-slate-400 shrink-0"
           >
             {new Date(candidate.appliedAt).toLocaleDateString('vi-VN')}
           </time>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Search,
   Filter,
@@ -13,6 +13,7 @@ import {
   Star,
   LayoutGrid,
   List,
+  Flag,
 } from 'lucide-react';
 import type {
   CandidateProfile,
@@ -20,13 +21,17 @@ import type {
   CandidateFilterCriteria,
   CandidateStage,
 } from '../../types/candidate';
-import type { CandidateStageChangePayload } from '../../components/Candidate/CandidateKanbanBoard';
 import { candidateService } from '../../services/candidateService';
 import { CandidateDetailModal } from '../../components/Candidate/CandidateDetailModal';
-import CandidateKanbanBoard from '../../components/Candidate/CandidateKanbanBoard';
+import CandidateKanbanBoard, {
+  type CandidateStageChangePayload,
+} from '../../components/Candidate/CandidateKanbanBoard';
 import MoveStageModal from '../../components/Candidate/MoveStageModal';
 import RejectCandidateModal from '../../components/Candidate/RejectCandidateModal';
 import type { MoveCandidateStagePayload, RejectCandidatePayload } from '../../services/candidateStageService';
+import SlaOverdueBadge from '../../components/SLA/SlaOverdueBadge';
+import SlaNotificationBell from '../../components/SLA/SlaNotificationBell';
+import { slaService } from '../../services/slaService';
 
 type PendingStageAction = {
   candidate: CandidateProfile;
@@ -43,6 +48,7 @@ export const CandidateManagementPage: React.FC = () => {
     CvParsingStatus | 'ALL'
   >('ALL');
   const [selectedJobId, setSelectedJobId] = useState('ALL');
+  const [onlyOverdueSla, setOnlyOverdueSla] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
 
   // Quản lý Modal chi tiết hồ sơ & đối chiếu gợi ý CV
@@ -98,9 +104,21 @@ export const CandidateManagementPage: React.FC = () => {
     };
   }, [searchKeyword, selectedStatusFilter]);
 
-  const visibleCandidates = selectedJobId === 'ALL'
-    ? candidateList
-    : candidateList.filter((candidate) => candidate.appliedJobId === selectedJobId);
+  const overdueCount = useMemo(() => {
+    return slaService.filterOverdueCandidates(candidateList).length;
+  }, [candidateList]);
+
+  const visibleCandidates = useMemo(() => {
+    let list =
+      selectedJobId === 'ALL'
+        ? candidateList
+        : candidateList.filter((candidate) => candidate.appliedJobId === selectedJobId);
+
+    if (onlyOverdueSla) {
+      list = slaService.filterOverdueCandidates(list);
+    }
+    return list;
+  }, [candidateList, selectedJobId, onlyOverdueSla]);
 
   const jobOptions = Array.from(
     candidateList.reduce((jobs, candidate) => {
@@ -118,6 +136,13 @@ export const CandidateManagementPage: React.FC = () => {
   const handleOpenCandidateDetail = (candidateItem: CandidateProfile) => {
     setSelectedCandidate(candidateItem);
     setIsDetailModalOpen(true);
+  };
+
+  const handleOpenCandidateDetailById = (candidateId: string) => {
+    const target = candidateList.find((c) => c.id === candidateId);
+    if (target) {
+      handleOpenCandidateDetail(target);
+    }
   };
 
   const handleCloseCandidateDetail = () => {
@@ -218,17 +243,24 @@ export const CandidateManagementPage: React.FC = () => {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={fetchCandidates}
-          disabled={isLoading}
-          className="inline-flex items-center gap-1.5 self-start rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-xs font-medium text-gray-700 shadow-2xs hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-750"
-        >
-          <RefreshCw
-            className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`}
+        <div className="flex items-center gap-2 self-start">
+          <SlaNotificationBell
+            candidates={candidateList}
+            onSelectCandidate={handleOpenCandidateDetailById}
           />
-          Làm mới
-        </button>
+
+          <button
+            type="button"
+            onClick={fetchCandidates}
+            disabled={isLoading}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-xs font-medium text-gray-700 shadow-2xs hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-750"
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`}
+            />
+            Làm mới
+          </button>
+        </div>
       </div>
 
       {/* Thanh công cụ tìm kiếm và bộ lọc trạng thái */}
@@ -286,6 +318,34 @@ export const CandidateManagementPage: React.FC = () => {
               <option key={job.id} value={job.id}>{job.title}</option>
             ))}
           </select>
+
+          {/* Bộ lọc nhanh: Hồ sơ quá hạn SLA (AC 2) */}
+          <button
+            type="button"
+            data-testid="filter-chip-overdue-sla"
+            onClick={() => setOnlyOverdueSla(!onlyOverdueSla)}
+            aria-pressed={onlyOverdueSla}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+              onlyOverdueSla
+                ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                : 'bg-rose-50/90 text-rose-700 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800'
+            }`}
+          >
+            <Flag className={`h-3.5 w-3.5 ${onlyOverdueSla ? 'text-white' : 'text-rose-600'}`} />
+            <span>Hồ sơ quá hạn SLA</span>
+            {overdueCount > 0 && (
+              <span
+                className={`ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                  onlyOverdueSla
+                    ? 'bg-white text-rose-700'
+                    : 'bg-rose-200 text-rose-800 dark:bg-rose-900 dark:text-rose-200'
+                }`}
+              >
+                {overdueCount}
+              </span>
+            )}
+          </button>
+
           <div className="ml-auto inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800" aria-label="Chế độ xem ứng viên">
             <button
               type="button"
@@ -445,13 +505,16 @@ export const CandidateManagementPage: React.FC = () => {
                       {renderStatusBadge(candidateItem.cvParsingStatus)}
                     </td>
 
-                    {/* Thời điểm nộp */}
+                    {/* Thời điểm nộp & Cảnh báo SLA */}
                     <td className="px-5 py-4 text-xs text-gray-500 dark:text-gray-400">
                       <div className="flex items-center gap-1">
                         <Clock className="h-3.5 w-3.5" />
                         {candidateItem.appliedAt
                           ? new Date(candidateItem.appliedAt).toLocaleDateString('vi-VN')
                           : 'Mới đây'}
+                      </div>
+                      <div className="mt-1.5">
+                        <SlaOverdueBadge candidate={candidateItem} size="xs" />
                       </div>
                     </td>
 
