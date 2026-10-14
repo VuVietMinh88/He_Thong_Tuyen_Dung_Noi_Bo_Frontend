@@ -24,7 +24,7 @@ import { tokenService } from '../../services/token.service';
 import usePermission from '../../hooks/usePermission';
 import { useToast } from '../../components/notifications/useToast';
 import { candidateProfileService, CandidateAccessDeniedError } from '../../services/candidateProfileService';
-import { duplicateCandidateService } from '../../services/duplicateCandidateService';
+import { candidateMergeService } from '../../services/candidateMergeService';
 import type {
   UnifiedCandidate,
   ApplicationRecord,
@@ -99,11 +99,15 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
       }
 
       // Phát hiện hồ sơ trùng (AC 1)
-      const dup = await duplicateCandidateService.detectDuplicate(data);
+      const dup = await candidateMergeService.checkDuplicateCandidates({
+        candidateId: data.id,
+        email: data.email,
+        phone: data.phone,
+      });
       setDuplicateComparison(dup);
 
-      // Kiểm tra bản ghi gộp còn hạn hoàn tác (AC 4)
-      const mergeRec = duplicateCandidateService.getActiveMergeRecord(data.id);
+      // Kiểm tra bản ghi gộp còn hạn hoàn tác (AC 3)
+      const mergeRec = candidateMergeService.getMergeRecordForCandidate(data.id);
       setActiveMergeRecord(mergeRec);
     } catch (err: unknown) {
       if (err instanceof CandidateAccessDeniedError || (err as { status?: number })?.status === 403) {
@@ -127,11 +131,11 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
     fetchCandidate();
   }, [fetchCandidate]);
 
-  // Xử lý sau khi gộp thành công (AC 3 & AC 4)
+  // Xử lý sau khi gộp thành công (AC 2 & AC 3)
   const handleMergeSuccess = (mergedCandidate: UnifiedCandidate) => {
     setCandidate(mergedCandidate);
     setDuplicateComparison(null);
-    const mergeRec = duplicateCandidateService.getActiveMergeRecord(mergedCandidate.id);
+    const mergeRec = candidateMergeService.getMergeRecordForCandidate(mergedCandidate.id);
     setActiveMergeRecord(mergeRec);
     addToast({
       type: 'success',
