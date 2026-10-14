@@ -36,6 +36,7 @@ import PublicJobApplyPage from "./pages/CareerPage/PublicJobApplyPage";
 import ApplicationLookupPage from "./pages/CareerPage/ApplicationLookupPage";
 import InternalReferralPage from "./pages/Referral/InternalReferralPage";
 import CandidateManagementPage from "./pages/Candidate/CandidateManagementPage";
+import UnifiedCandidateProfilePage from "./pages/Candidate/UnifiedCandidateProfilePage";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -367,6 +368,14 @@ function App() {
                 element={
                   <MainLayout>
                     <CandidateManagementPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/candidates/:id"
+                element={
+                  <MainLayout>
+                    <UnifiedCandidateProfilePage />
                   </MainLayout>
                 }
               />
