@@ -502,6 +502,7 @@ export const CandidateManagementPage: React.FC = () => {
           candidateName={pendingStageAction.candidate.fullName}
           currentStage={pendingStageAction.fromStage}
           initialStage={pendingStageAction.toStage}
+          allowException
           onClose={() => setPendingStageAction(null)}
           onSuccess={(payload) => handleStageMoveSuccess(payload, payload.toStage)}
         />

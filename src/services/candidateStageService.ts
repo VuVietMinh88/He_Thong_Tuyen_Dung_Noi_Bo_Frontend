@@ -2,6 +2,24 @@ import axios from 'axios';
 import axiosClient from '../utils/axiosClient';
 import type { CandidateStage } from '../types/candidate';
 
+const STANDARD_STAGE_ORDER: CandidateStage[] = [
+  'NEW',
+  'SCREENING',
+  'INTERVIEWING',
+  'OFFER',
+  'HIRED',
+];
+
+export const getSkippedCandidateStages = (
+  currentStage: CandidateStage,
+  targetStage: CandidateStage,
+): CandidateStage[] => {
+  const currentIndex = STANDARD_STAGE_ORDER.indexOf(currentStage);
+  const targetIndex = STANDARD_STAGE_ORDER.indexOf(targetStage);
+  if (currentIndex < 0 || targetIndex <= currentIndex + 1) return [];
+  return STANDARD_STAGE_ORDER.slice(currentIndex + 1, targetIndex);
+};
+
 export interface MoveCandidateStagePayload {
   applicationId?: string;
   toStage: CandidateStage;
@@ -9,6 +27,8 @@ export interface MoveCandidateStagePayload {
   interviewerId?: string;
   interviewer?: string;
   notes?: string;
+  isException?: boolean;
+  exceptionReason?: string;
 }
 
 export interface RejectCandidatePayload {
