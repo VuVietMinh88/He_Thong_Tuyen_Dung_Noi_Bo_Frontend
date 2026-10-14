@@ -22,6 +22,9 @@ import type {
 import { candidateService } from '../../services/candidateService';
 import { CandidateDetailModal } from '../../components/Candidate/CandidateDetailModal';
 import CandidateKanbanBoard from '../../components/Candidate/CandidateKanbanBoard';
+import { MatchingScoreBadge } from '../../components/Candidate/MatchingScoreBadge';
+import { CriteriaQuickSummaryPopover } from '../../components/Candidate/CriteriaQuickSummaryPopover';
+import { resolveCandidateMatchingEvaluation } from '../../utils/candidateMatchingHelper';
 
 export const CandidateManagementPage: React.FC = () => {
   const [candidateList, setCandidateList] = useState<CandidateProfile[]>([]);
@@ -316,6 +319,9 @@ export const CandidateManagementPage: React.FC = () => {
                     Ứng viên
                   </th>
                   <th scope="col" className="px-5 py-3.5">
+                    Điểm phù hợp & Tiêu chí
+                  </th>
+                  <th scope="col" className="px-5 py-3.5">
                     Vị trí ứng tuyển
                   </th>
                   <th scope="col" className="px-5 py-3.5">
@@ -376,6 +382,27 @@ export const CandidateManagementPage: React.FC = () => {
                           )}
                         </div>
                       )}
+                    </td>
+
+                    {/* Điểm tổng phù hợp và tóm tắt 3 tiêu chí bắt buộc (Task TKNHTTDNB1-410) */}
+                    <td className="px-5 py-4">
+                      {(() => {
+                        const matchingEvaluation =
+                          candidateItem.matchingEvaluation ||
+                          resolveCandidateMatchingEvaluation(candidateItem);
+                        return (
+                          <div className="flex flex-col gap-1.5 items-start">
+                            <MatchingScoreBadge
+                              totalMatchingScore={matchingEvaluation.totalMatchingScore}
+                              isOverallPassed={matchingEvaluation.isOverallPassed}
+                              variant="standard"
+                            />
+                            <CriteriaQuickSummaryPopover
+                              criteriaList={matchingEvaluation.criteriaList}
+                            />
+                          </div>
+                        );
+                      })()}
                     </td>
 
                     {/* Vị trí ứng tuyển */}

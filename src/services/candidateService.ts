@@ -12,6 +12,7 @@ import type {
   CandidateScreeningUpdatePayload,
 } from '../types/candidate';
 import { DEFAULT_SCREENING_CATALOG_TAGS } from '../types/candidate';
+import { resolveCandidateMatchingEvaluation } from '../utils/candidateMatchingHelper';
 
 const STORAGE_KEY_CANDIDATE_PROFILES = 'smart_recruit_candidate_profiles';
 const STORAGE_KEY_CANDIDATES = 'smart_recruit_unified_candidates';
@@ -309,7 +310,13 @@ export const candidateService = {
       );
     }
 
-    return candidateList;
+    // Đảm bảo mỗi hồ sơ ứng viên đều có kết quả đánh giá 3 tiêu chí và điểm tổng phù hợp (TKNHTTDNB1-410)
+    return candidateList.map((candidateItem) => ({
+      ...candidateItem,
+      matchingEvaluation:
+        candidateItem.matchingEvaluation ||
+        resolveCandidateMatchingEvaluation(candidateItem),
+    }));
   },
 
   /**
@@ -321,7 +328,12 @@ export const candidateService = {
         `/recruitment/candidates/${candidateId}`
       );
       if (apiResponse.data) {
-        return apiResponse.data;
+        return {
+          ...apiResponse.data,
+          matchingEvaluation:
+            apiResponse.data.matchingEvaluation ||
+            resolveCandidateMatchingEvaluation(apiResponse.data),
+        };
       }
     } catch {
       // Dùng dữ liệu bộ nhớ cục bộ khi backend chưa sẵn sàng
@@ -331,7 +343,16 @@ export const candidateService = {
     const foundCandidate = candidateList.find(
       (candidateItem) => candidateItem.id === candidateId
     );
-    return foundCandidate ?? null;
+    if (!foundCandidate) {
+      return null;
+    }
+
+    return {
+      ...foundCandidate,
+      matchingEvaluation:
+        foundCandidate.matchingEvaluation ||
+        resolveCandidateMatchingEvaluation(foundCandidate),
+    };
   },
 
   /**

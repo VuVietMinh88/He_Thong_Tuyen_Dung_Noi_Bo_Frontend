@@ -40,6 +40,7 @@ export interface CandidateProfile {
   rating?: number;
   tags?: CandidateTag[];
   notes?: CandidateInternalNote[];
+  matchingEvaluation?: CandidateMatchingEvaluation;
   appliedAt?: string;
   updatedAt?: string;
 }
@@ -140,6 +141,34 @@ export interface CandidateScreeningUpdatePayload {
     authorRole?: string;
   };
 }
+
+/**
+ * Types & Constants cho Đánh giá mức độ phù hợp & Tiêu chí bắt buộc (Task TKNHTTDNB1-410 / Story TKNHTTDNB1-57)
+ */
+export type MandatoryCriterionKey = 'EXPERIENCE' | 'EDUCATION' | 'SKILLS';
+
+export interface MandatoryCriterionItem {
+  id: string;
+  criterionKey: MandatoryCriterionKey;
+  criterionName: string; // VD: "Số năm kinh nghiệm", "Bằng cấp (Học vấn)", "Kỹ năng chuyên môn"
+  jobRequirement: string; // Yêu cầu từ vị trí tuyển dụng
+  candidateValue: string; // Thông tin từ hồ sơ ứng viên
+  isPassed: boolean; // true: Đạt, false: Không đạt
+  notes?: string;
+}
+
+export interface CandidateMatchingEvaluation {
+  totalMatchingScore: number; // 0 - 100 điểm
+  isOverallPassed: boolean; // true: Đạt (Xanh lá), false: Không đạt (Cam/Đỏ)
+  criteriaList: MandatoryCriterionItem[];
+  summaryText?: string;
+  evaluatedAt?: string;
+}
+
+export const MATCHING_SCORE_PASS_THRESHOLD = 70;
+
+export const MANDATORY_CRITERIA_DISCLAIMER_NOTE =
+  'Lưu ý: Điểm phù hợp và cờ Đạt/Không đạt chỉ dùng để gợi ý thứ tự ưu tiên đọc hồ sơ, hệ thống không tự động loại ứng viên.';
 
 /**
  * Types cho Hồ sơ ứng viên thống nhất (User Story S4-09 / Task Jira TKNHTTDNB1-358)
@@ -276,6 +305,7 @@ export interface UnifiedCandidate {
   notes: InternalNote[];
   applications: ApplicationRecord[];
   currentApplicationId: string;
+  matchingEvaluation?: CandidateMatchingEvaluation;
   createdAt: string;
   updatedAt: string;
 }

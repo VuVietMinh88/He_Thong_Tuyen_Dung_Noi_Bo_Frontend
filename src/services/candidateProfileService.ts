@@ -5,6 +5,7 @@ import type {
   ApplicationRecord,
 } from '../types/candidate';
 import axiosClient from '../utils/axiosClient';
+import { resolveCandidateMatchingEvaluation } from '../utils/candidateMatchingHelper';
 
 const STORAGE_KEY_CANDIDATES = 'smart_recruit_unified_candidates';
 
@@ -159,7 +160,12 @@ export const candidateProfileService = {
     try {
       const response = await axiosClient.get<UnifiedCandidate>(`/candidates/${candidateId}/unified-profile`);
       if (response && response.data) {
-        return response.data;
+        return {
+          ...response.data,
+          matchingEvaluation:
+            response.data.matchingEvaluation ||
+            resolveCandidateMatchingEvaluation(response.data),
+        };
       }
     } catch (error: unknown) {
       const status = (error as { response?: { status?: number } })?.response?.status;
@@ -172,7 +178,13 @@ export const candidateProfileService = {
     try {
       const stored = localStorage.getItem(`${STORAGE_KEY_CANDIDATES}_${candidateId}`);
       if (stored) {
-        return JSON.parse(stored) as UnifiedCandidate;
+        const parsedCandidate = JSON.parse(stored) as UnifiedCandidate;
+        return {
+          ...parsedCandidate,
+          matchingEvaluation:
+            parsedCandidate.matchingEvaluation ||
+            resolveCandidateMatchingEvaluation(parsedCandidate),
+        };
       }
     } catch {
       // Bỏ qua lỗi
@@ -188,7 +200,12 @@ export const candidateProfileService = {
       // Bỏ qua
     }
 
-    return DEFAULT_MOCK_CANDIDATE;
+    return {
+      ...DEFAULT_MOCK_CANDIDATE,
+      matchingEvaluation:
+        DEFAULT_MOCK_CANDIDATE.matchingEvaluation ||
+        resolveCandidateMatchingEvaluation(DEFAULT_MOCK_CANDIDATE),
+    };
   },
 
   /**

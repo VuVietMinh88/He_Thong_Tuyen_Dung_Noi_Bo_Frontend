@@ -18,8 +18,10 @@ import type {
 } from '../../types/candidate';
 import { CvSuggestionConfirmBox } from './CvSuggestionConfirmBox';
 import { CandidateScreeningWidget } from './CandidateScreeningWidget';
+import { CandidateCriteriaEvaluationCard } from './CandidateCriteriaEvaluationCard';
 import { candidateService } from '../../services/candidateService';
 import { tokenService } from '../../services/token.service';
+import { resolveCandidateMatchingEvaluation } from '../../utils/candidateMatchingHelper';
 import { toast } from '../notifications';
 
 export interface CandidateDetailModalProps {
@@ -334,6 +336,14 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
 
         {/* Nội dung chi tiết cuộn được */}
         <div className="space-y-6 overflow-y-auto p-6">
+          {/* THẺ ĐÁNH GIÁ TIÊU CHÍ BẮT BUỘC & ĐIỂM PHÙ HỢP (TASK TKNHTTDNB1-410 / STORY TKNHTTDNB1-57) */}
+          <CandidateCriteriaEvaluationCard
+            evaluation={
+              currentCandidate.matchingEvaluation ||
+              resolveCandidateMatchingEvaluation(currentCandidate)
+            }
+          />
+
           {/* KHU VỰC XÁC NHẬN DỮ LIỆU GỢI Ý TỪ CV (SUBTASK TKNHTTDNB1-331) */}
           <div>
             <CvSuggestionConfirmBox

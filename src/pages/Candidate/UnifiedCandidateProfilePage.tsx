@@ -42,6 +42,9 @@ import InternalNotesSection from '../../components/Candidate/InternalNotesSectio
 import DuplicateCandidateBanner from '../../components/Candidate/DuplicateCandidateBanner';
 import MergeUndoBanner from '../../components/Candidate/MergeUndoBanner';
 import DuplicateCandidateCompareModal from '../../components/Candidate/DuplicateCandidateCompareModal';
+import { MatchingScoreBadge } from '../../components/Candidate/MatchingScoreBadge';
+import { CandidateCriteriaEvaluationCard } from '../../components/Candidate/CandidateCriteriaEvaluationCard';
+import { resolveCandidateMatchingEvaluation } from '../../utils/candidateMatchingHelper';
 
 const PIPELINE_STEPS: { stage: CandidateStage; label: string; stepNumber: number }[] = [
   { stage: 'NEW', label: 'Hồ sơ mới', stepNumber: 1 },
@@ -406,6 +409,17 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
               >
                 {stageConfig.label}
               </span>
+
+              {/* Huy hiệu Điểm tổng phù hợp & cờ Đạt / Không đạt (Task TKNHTTDNB1-410) */}
+              <MatchingScoreBadge
+                totalMatchingScore={
+                  (candidate.matchingEvaluation || resolveCandidateMatchingEvaluation(candidate)).totalMatchingScore
+                }
+                isOverallPassed={
+                  (candidate.matchingEvaluation || resolveCandidateMatchingEvaluation(candidate)).isOverallPassed
+                }
+                variant="standard"
+              />
             </div>
 
             <div>
@@ -632,6 +646,14 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
           {/* Tab 1: Overview & Details */}
           {contentTab === 'overview' && (
             <div className="space-y-5">
+              {/* THẺ ĐÁNH GIÁ TIÊU CHÍ BẮT BUỘC & ĐIỂM PHÙ HỢP (TASK TKNHTTDNB1-410 / STORY TKNHTTDNB1-57) */}
+              <CandidateCriteriaEvaluationCard
+                evaluation={
+                  candidate.matchingEvaluation ||
+                  resolveCandidateMatchingEvaluation(candidate)
+                }
+              />
+
               {/* Cover Letter Section */}
               {candidate.coverLetter && (
                 <div className="bg-white rounded-xl border border-gray-200 shadow-xs p-5">
