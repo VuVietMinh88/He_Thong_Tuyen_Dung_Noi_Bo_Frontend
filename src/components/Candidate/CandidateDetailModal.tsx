@@ -9,6 +9,7 @@ import {
   Clock,
   Send,
   RefreshCw,
+  FolderHeart,
 } from 'lucide-react';
 import type {
   CandidateProfile,
@@ -23,6 +24,7 @@ import { candidateService } from '../../services/candidateService';
 import { tokenService } from '../../services/token.service';
 import { resolveCandidateMatchingEvaluation } from '../../utils/candidateMatchingHelper';
 import { toast } from '../notifications';
+import { AddToTalentPoolModal } from './AddToTalentPoolModal';
 
 export interface CandidateDetailModalProps {
   isOpen: boolean;
@@ -40,6 +42,7 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
   const [currentCandidate, setCurrentCandidate] =
     useState<CandidateProfile | null>(candidateProfile);
   const [isProcessingAction, setIsProcessingAction] = useState<boolean>(false);
+  const [isTalentPoolModalOpen, setIsTalentPoolModalOpen] = useState<boolean>(false);
 
   // Đồng bộ lại hồ sơ khi prop candidateProfile thay đổi
   const [previousCandidateId, setPreviousCandidateId] = useState<string | null>(
@@ -324,14 +327,26 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Đóng cửa sổ chi tiết ứng viên"
-            className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 focus:ring-2 focus:ring-gray-300 focus:outline-hidden dark:hover:bg-gray-800 dark:hover:text-gray-200"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid="detail-add-to-talent-pool-btn"
+              onClick={() => setIsTalentPoolModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700 shadow-2xs hover:bg-purple-100 dark:border-purple-800 dark:bg-purple-950/40 dark:text-purple-300 transition-colors"
+            >
+              <FolderHeart className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+              <span>Lưu kho tiềm năng</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Đóng cửa sổ chi tiết ứng viên"
+              className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 focus:ring-2 focus:ring-gray-300 focus:outline-hidden dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* Nội dung chi tiết cuộn được */}
@@ -500,6 +515,13 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
             Đóng cửa sổ
           </button>
         </div>
+
+        {/* Modal chuyển ứng viên vào Kho tiềm năng */}
+        <AddToTalentPoolModal
+          isOpen={isTalentPoolModalOpen}
+          candidates={currentCandidate ? [currentCandidate] : []}
+          onClose={() => setIsTalentPoolModalOpen(false)}
+        />
       </div>
     </div>
   );

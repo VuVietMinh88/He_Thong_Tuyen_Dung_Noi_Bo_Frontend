@@ -15,6 +15,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  FolderHeart,
 } from 'lucide-react';
 import type {
   CandidateProfile,
@@ -47,6 +48,7 @@ import SlaNotificationBell from '../../components/SLA/SlaNotificationBell';
 import { slaService } from '../../services/slaService';
 import { CandidateSearchFilterPanel } from '../../components/Candidate/CandidateSearchFilterPanel';
 import { filterCandidatesCombined } from '../../utils/candidateFilterHelper';
+import { AddToTalentPoolModal } from '../../components/Candidate/AddToTalentPoolModal';
 
 type PendingStageAction = {
   candidate: CandidateProfile;
@@ -85,6 +87,11 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
     useState<CandidateProfile | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
   const [pendingStageAction, setPendingStageAction] = useState<PendingStageAction | null>(null);
+
+  // Quản lý chọn ứng viên & Modal đưa vào kho tiềm năng (Task Jira TKNHTTDNB1-396)
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
+  const [isTalentPoolModalOpen, setIsTalentPoolModalOpen] = useState<boolean>(false);
+  const [talentPoolModalCandidates, setTalentPoolModalCandidates] = useState<CandidateProfile[]>([]);
 
   const fetchCandidates = useCallback(async () => {
     setIsLoading(true);
@@ -244,6 +251,32 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
         : candidate
     )));
     setPendingStageAction(null);
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedCandidateIds.length === visibleCandidates.length && visibleCandidates.length > 0) {
+      setSelectedCandidateIds([]);
+    } else {
+      setSelectedCandidateIds(visibleCandidates.map((c) => c.id));
+    }
+  };
+
+  const handleToggleSelectCandidate = (candidateId: string) => {
+    setSelectedCandidateIds((prev) =>
+      prev.includes(candidateId) ? prev.filter((id) => id !== candidateId) : [...prev, candidateId]
+    );
+  };
+
+  const handleOpenTalentPoolForSingle = (candidate: CandidateProfile) => {
+    setTalentPoolModalCandidates([candidate]);
+    setIsTalentPoolModalOpen(true);
+  };
+
+  const handleOpenTalentPoolForBulk = () => {
+    const selectedList = candidateList.filter((c) => selectedCandidateIds.includes(c.id));
+    if (selectedList.length === 0) return;
+    setTalentPoolModalCandidates(selectedList);
+    setIsTalentPoolModalOpen(true);
   };
 
   const renderStatusBadge = (parsingStatus: CvParsingStatus) => {
@@ -429,6 +462,41 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
         </div>
       </div>
 
+      {/* Thanh thao tác hàng loạt (Bulk Action Bar) */}
+      {selectedCandidateIds.length > 0 && (
+        <div
+          data-testid="bulk-action-bar"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-200 bg-indigo-50/90 px-4 py-2.5 shadow-xs dark:border-indigo-900/60 dark:bg-indigo-950/40"
+        >
+          <div className="flex items-center gap-2 text-xs font-semibold text-indigo-900 dark:text-indigo-200">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[11px] font-bold">
+              {selectedCandidateIds.length}
+            </span>
+            <span>ứng viên đang được chọn</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid="bulk-clear-selection-btn"
+              onClick={() => setSelectedCandidateIds([])}
+              className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-indigo-100/70 dark:text-slate-300 dark:hover:bg-indigo-900/50"
+            >
+              Bỏ chọn
+            </button>
+            <button
+              type="button"
+              data-testid="bulk-add-to-talent-pool-btn"
+              onClick={handleOpenTalentPoolForBulk}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-indigo-700 transition-colors"
+            >
+              <FolderHeart className="h-4 w-4" />
+              <span>Chuyển vào Kho tiềm năng</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Bảng danh sách ứng viên */}
       {viewMode === 'kanban' ? (
         isLoading ? (
@@ -470,6 +538,19 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
             <table className="min-w-full divide-y divide-gray-200 text-left text-sm dark:divide-gray-800">
               <thead className="bg-gray-50/80 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:bg-gray-800/60 dark:text-gray-400">
                 <tr>
+                  <th scope="col" className="w-10 px-4 py-3.5">
+                    <input
+                      type="checkbox"
+                      data-testid="select-all-candidates-checkbox"
+                      aria-label="Chọn tất cả ứng viên trên trang"
+                      checked={
+                        visibleCandidates.length > 0 &&
+                        selectedCandidateIds.length === visibleCandidates.length
+                      }
+                      onChange={handleToggleSelectAll}
+                      className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800"
+                    />
+                  </th>
                   <th scope="col" className="px-5 py-3.5">
                     Ứng viên
                   </th>
@@ -529,6 +610,17 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
                     key={candidateItem.id}
                     className="transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/40"
                   >
+                    {/* Ô chọn Checkbox */}
+                    <td className="w-10 px-4 py-4">
+                      <input
+                        type="checkbox"
+                        data-testid={`select-candidate-checkbox-${candidateItem.id}`}
+                        aria-label={`Chọn ứng viên ${candidateItem.fullName}`}
+                        checked={selectedCandidateIds.includes(candidateItem.id)}
+                        onChange={() => handleToggleSelectCandidate(candidateItem.id)}
+                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800"
+                      />
+                    </td>
                     {/* Thông tin ứng viên */}
                     <td className="px-5 py-4">
                       <div className="font-medium text-gray-900 dark:text-white">
@@ -642,30 +734,43 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
                       </div>
                     </td>
 
-                    {/* Thao tác xem hồ sơ */}
+                    {/* Thao tác xem hồ sơ & Lưu kho tiềm năng */}
                     <td className="px-5 py-4 text-right">
-                      <button
-                        type="button"
-                        id={`view-candidate-btn-${candidateItem.id}`}
-                        onClick={() => handleOpenCandidateDetail(candidateItem)}
-                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                          candidateItem.cvParsingStatus === 'PENDING_CONFIRMATION'
-                            ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs dark:bg-indigo-500'
-                            : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-750'
-                        }`}
-                      >
-                        {candidateItem.cvParsingStatus === 'PENDING_CONFIRMATION' ? (
-                          <>
-                            <Sparkles className="h-3.5 w-3.5" />
-                            Đối chiếu gợi ý CV
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="h-3.5 w-3.5" />
-                            Xem hồ sơ
-                          </>
-                        )}
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          data-testid={`add-to-talent-pool-btn-${candidateItem.id}`}
+                          title="Chuyển vào Kho ứng viên tiềm năng"
+                          onClick={() => handleOpenTalentPoolForSingle(candidateItem)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-purple-200 bg-purple-50 px-2.5 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-100 dark:border-purple-800 dark:bg-purple-950/40 dark:text-purple-300 transition-colors"
+                        >
+                          <FolderHeart className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                          <span className="hidden xl:inline">Lưu tiềm năng</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          id={`view-candidate-btn-${candidateItem.id}`}
+                          onClick={() => handleOpenCandidateDetail(candidateItem)}
+                          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                            candidateItem.cvParsingStatus === 'PENDING_CONFIRMATION'
+                              ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs dark:bg-indigo-500'
+                              : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-750'
+                          }`}
+                        >
+                          {candidateItem.cvParsingStatus === 'PENDING_CONFIRMATION' ? (
+                            <>
+                              <Sparkles className="h-3.5 w-3.5" />
+                              Đối chiếu gợi ý CV
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="h-3.5 w-3.5" />
+                              Xem hồ sơ
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -702,6 +807,16 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
           onSuccess={(payload) => handleStageMoveSuccess(payload, 'REJECTED')}
         />
       )}
+
+      {/* Modal chuyển ứng viên vào Kho tiềm năng (Task Jira TKNHTTDNB1-396) */}
+      <AddToTalentPoolModal
+        isOpen={isTalentPoolModalOpen}
+        candidates={talentPoolModalCandidates}
+        onClose={() => setIsTalentPoolModalOpen(false)}
+        onSuccess={() => {
+          setSelectedCandidateIds([]);
+        }}
+      />
     </div>
   );
 };
