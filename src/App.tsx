@@ -33,6 +33,7 @@ import JobPostingPreviewApproval from "./components/JobPosting/JobPostingPreview
 import PublicJobListPage from "./pages/CareerPage/PublicJobListPage";
 import PublicJobDetailPage from "./pages/CareerPage/PublicJobDetailPage";
 import PublicJobApplyPage from "./pages/CareerPage/PublicJobApplyPage";
+import ApplicationLookupPage from "./pages/CareerPage/ApplicationLookupPage";
 import InternalReferralPage from "./pages/Referral/InternalReferralPage";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
@@ -108,6 +109,7 @@ function App() {
             <Route path="/careers/jobs" element={<PublicJobListPage />} />
             <Route path="/careers/jobs/:id" element={<PublicJobDetailPage />} />
             <Route path="/careers/jobs/:id/apply" element={<PublicJobApplyPage />} />
+            <Route path="/careers/applications/lookup" element={<ApplicationLookupPage />} />
             <Route path="/jobs/:id" element={<PublicJobDetailPage />} />
             <Route path="/jobs/:id/apply" element={<PublicJobApplyPage />} />
             <Route path="/public-jobs" element={<PublicJobListPage />} />
