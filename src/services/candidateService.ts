@@ -330,9 +330,67 @@ export const candidateService = {
   },
 
   /**
-   * Xác nhận áp dụng dữ liệu gợi ý từ CV vào hồ sơ ứng viên
+   * Gọi API trích xuất thông tin gợi ý từ tệp CV PDF (Subtask TKNHTTDNB1-332)
+   * Tại sao: Hàm này chỉ lấy dữ liệu gợi ý và trả về đối tượng CvSuggestedCandidateInfo độc lập.
+   * TUYỆT ĐỐI KHÔNG tự động ghi đè hay cập nhật vào các trường họ tên, email, số điện thoại
+   * trong hồ sơ ứng viên để tránh làm mất dữ liệu người dùng đã nhập.
    */
-  async confirmCvSuggestion(
+  async fetchCvParsedSuggestion(
+    candidateId: string
+  ): Promise<CvSuggestedCandidateInfo> {
+    try {
+      const apiResponse = await axiosClient.get<CvSuggestedCandidateInfo>(
+        `/recruitment/candidates/${candidateId}/cv-suggestion`
+      );
+      if (apiResponse.data && apiResponse.data.fullName) {
+        return apiResponse.data;
+      }
+    } catch {
+      // Khi backend chưa sẵn sàng hoặc mạng offline, chuyển xuống xử lý mock fallback
+    }
+
+    const candidateList = loadCandidateProfilesFromStorage();
+    const foundCandidate = candidateList.find(
+      (candidateItem) => candidateItem.id === candidateId
+    );
+
+    if (!foundCandidate) {
+      throw new Error(`Không tìm thấy hồ sơ ứng viên có mã định danh: ${candidateId}`);
+    }
+
+    // Nếu hồ sơ được đánh dấu FAILED từ trước, ném lỗi độc lập để UI hiển thị thông báo nhẹ nhàng
+    if (foundCandidate.cvParsingStatus === 'FAILED') {
+      throw new Error(
+        foundCandidate.cvParsingErrorMessage ||
+          'Tệp CV là định dạng ảnh chụp scan hoặc không thể trích xuất tự động văn bản có cấu trúc.'
+      );
+    }
+
+    if (foundCandidate.cvSuggestedInfo) {
+      return foundCandidate.cvSuggestedInfo;
+    }
+
+    // Giả lập trích xuất thành công nhưng KHÔNG ghi đè vào dữ liệu gốc của ứng viên
+    const simulatedSuggestion: CvSuggestedCandidateInfo = {
+      fullName: foundCandidate.fullName.includes(' ')
+        ? foundCandidate.fullName
+        : `${foundCandidate.fullName} (Từ CV)`,
+      email: foundCandidate.email.replace('.temp', ''),
+      phone: foundCandidate.phone,
+      confidenceScore: 0.95,
+      extractedAt: new Date().toISOString(),
+      rawSnippet: `Trích xuất từ tệp ${foundCandidate.cvFileName || 'CV.pdf'}: ${foundCandidate.fullName} - ${foundCandidate.email}`,
+    };
+
+    return simulatedSuggestion;
+  },
+
+  /**
+   * Xác nhận áp dụng dữ liệu gợi ý từ CV vào hồ sơ ứng viên (Subtask TKNHTTDNB1-332)
+   * Tại sao: Chỉ khi Recruiter chủ động bấm nút "Xác nhận áp dụng", hệ thống mới tiến hành
+   * cập nhật các trường họ tên, email, số điện thoại vào dữ liệu chính của hồ sơ ứng viên.
+   */
+  async applyConfirmedCandidateInfo(
     candidateId: string,
     confirmedSuggestionData: CvSuggestedCandidateInfo
   ): Promise<CandidateProfile> {
@@ -374,6 +432,16 @@ export const candidateService = {
     saveCandidateProfilesToStorage(candidateList);
 
     return updatedCandidate;
+  },
+
+  /**
+   * Alias cho applyConfirmedCandidateInfo để tương thích với các component đã gọi confirmCvSuggestion
+   */
+  async confirmCvSuggestion(
+    candidateId: string,
+    confirmedSuggestionData: CvSuggestedCandidateInfo
+  ): Promise<CandidateProfile> {
+    return this.applyConfirmedCandidateInfo(candidateId, confirmedSuggestionData);
   },
 
   /**

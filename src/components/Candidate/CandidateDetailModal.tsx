@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   FileText,
@@ -8,6 +8,7 @@ import {
   ExternalLink,
   Clock,
   Send,
+  RefreshCw,
 } from 'lucide-react';
 import type {
   CandidateProfile,
@@ -43,6 +44,60 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
     setCurrentCandidate(candidateProfile);
   }
 
+  const candidateId = currentCandidate?.id;
+  const candidateParsingStatus = currentCandidate?.cvParsingStatus;
+
+  // Luồng bóc tách CV tự động độc lập khi mở hồ sơ có trạng thái PARSING
+  // Tại sao: Bóc tách bất đồng bộ và lưu vào state gợi ý riêng, không làm đơ UI hồ sơ
+  useEffect(() => {
+    let isSubscribed = true;
+
+    if (isOpen && candidateId && candidateParsingStatus === 'PARSING') {
+      const executeCvExtraction = async () => {
+        try {
+          const suggestedResult = await candidateService.fetchCvParsedSuggestion(
+            candidateId
+          );
+          if (isSubscribed) {
+            // Tại sao: Kết quả bóc tách chỉ lưu vào state gợi ý cvSuggestedInfo,
+            // tuyệt đối KHÔNG tự động ghi đè vào các trường họ tên, email, phone gốc của ứng viên.
+            setCurrentCandidate((previousCandidate) => {
+              if (!previousCandidate || previousCandidate.id !== candidateId) return previousCandidate;
+              return {
+                ...previousCandidate,
+                cvParsingStatus: 'PENDING_CONFIRMATION',
+                cvSuggestedInfo: suggestedResult,
+                cvParsingErrorMessage: undefined,
+              };
+            });
+          }
+        } catch (parsingError: unknown) {
+          if (isSubscribed) {
+            // Tại sao: Bắt lỗi độc lập cho luồng đọc CV, không làm vỡ hoặc chặn màn hình chi tiết hồ sơ
+            const extractedMessage =
+              parsingError instanceof Error
+                ? parsingError.message
+                : 'Không thể trích xuất tự động văn bản từ tệp CV.';
+            setCurrentCandidate((previousCandidate) => {
+              if (!previousCandidate || previousCandidate.id !== candidateId) return previousCandidate;
+              return {
+                ...previousCandidate,
+                cvParsingStatus: 'FAILED',
+                cvParsingErrorMessage: extractedMessage,
+              };
+            });
+          }
+        }
+      };
+
+      executeCvExtraction();
+    }
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [isOpen, candidateId, candidateParsingStatus]);
+
   if (!isOpen || !currentCandidate) {
     return null;
   }
@@ -52,7 +107,8 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
   ): Promise<void> => {
     setIsProcessingAction(true);
     try {
-      const updatedProfile = await candidateService.confirmCvSuggestion(
+      // Chỉ khi Recruiter chủ động nhấn "Xác nhận áp dụng", hệ thống mới ghi đè vào dữ liệu chính của hồ sơ
+      const updatedProfile = await candidateService.applyConfirmedCandidateInfo(
         currentCandidate.id,
         confirmedData
       );
@@ -77,6 +133,7 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
   const handleDismissSuggestion = async (): Promise<void> => {
     setIsProcessingAction(true);
     try {
+      // Bỏ qua gợi ý từ CV, giữ nguyên vẹn dữ liệu gốc ban đầu
       const updatedProfile = await candidateService.dismissCvSuggestion(
         currentCandidate.id
       );
@@ -108,10 +165,19 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
       }
       toast.info('Hệ thống đã phân tích lại tệp CV.');
     } catch (caughtError: unknown) {
+      // Bắt lỗi độc lập, giữ nguyên thông tin hồ sơ
       const errorMessage =
         caughtError instanceof Error
           ? caughtError.message
           : 'Không thể phân tích lại tệp CV.';
+      setCurrentCandidate((previousCandidate) => {
+        if (!previousCandidate) return null;
+        return {
+          ...previousCandidate,
+          cvParsingStatus: 'FAILED',
+          cvParsingErrorMessage: errorMessage,
+        };
+      });
       toast.error(errorMessage);
     } finally {
       setIsProcessingAction(false);
@@ -197,17 +263,30 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
                 </div>
               </div>
 
-              {currentCandidate.cvUrl && (
-                <a
-                  href={currentCandidate.cvUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-2xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-750"
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  id="re-extract-cv-btn"
+                  onClick={handleRetryParsing}
+                  disabled={isProcessingAction}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-2xs hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-750"
                 >
-                  <ExternalLink className="h-3.5 w-3.5 text-gray-500" />
-                  Mở tệp CV PDF
-                </a>
-              )}
+                  <RefreshCw className={`h-3.5 w-3.5 ${isProcessingAction ? 'animate-spin' : ''}`} />
+                  Trích xuất lại từ CV
+                </button>
+
+                {currentCandidate.cvUrl && (
+                  <a
+                    href={currentCandidate.cvUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-2xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-750"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5 text-gray-500" />
+                    Mở tệp CV PDF
+                  </a>
+                )}
+              </div>
             </div>
           </div>
 
