@@ -38,6 +38,8 @@ export interface InterviewSchedulePayload {
   interviewerIds?: string[]; // Danh sách ID người phỏng vấn tương thích AC
   notes?: string;
   status?: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED';
+  isOverride?: boolean;
+  overrideReason?: string;
   createdAt?: string;
   createdByName?: string;
 }
@@ -67,6 +69,8 @@ export interface CreateInterviewSchedulePayload {
   interviewers?: InterviewerInfo[];
   notes?: string;
   status?: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED';
+  isOverride?: boolean; // Cờ xác nhận ghi đè khi có xung đột (TKNHTTDNB1-439)
+  overrideReason?: string; // Lý do ghi đè bắt buộc khi isOverride = true
   createdAt?: string;
   createdByName?: string;
 }
@@ -100,21 +104,83 @@ export class InterviewPastTimeError extends Error {
   }
 }
 
+export type ConflictType = 'INTERVIEWER_CONFLICT' | 'ROOM_CONFLICT' | 'BOTH';
+
+export interface ConflictingInterviewSummary {
+  id: string;
+  candidateName: string;
+  jobTitle: string;
+  roundName: string;
+  interviewDate: string;
+  startTime: string; // HH:mm hoặc ISO
+  endTime: string;
+  durationMinutes: number;
+  format: InterviewFormat;
+  locationOrLink: string;
+  interviewerNames?: string[];
+}
+
+export interface ConflictItemDetail {
+  type: 'INTERVIEWER' | 'ROOM';
+  entityId?: string;
+  entityName: string; // Tên người phỏng vấn hoặc tên phòng họp bị chiếm
+  entityRoleOrLocation?: string; // Chức danh hoặc vị trí phòng họp
+  reason: string; // Lý do mô tả xung đột
+  conflictingInterview: ConflictingInterviewSummary;
+}
+
+export interface ProposedInterviewSummary {
+  candidateName: string;
+  jobTitle: string;
+  roundName: string;
+  interviewDate: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+  format: InterviewFormat;
+  locationOrLink: string;
+  interviewerNames?: string[];
+}
+
+export interface InterviewConflictCheckResult {
+  hasConflict: boolean;
+  conflictType?: ConflictType;
+  message?: string;
+  conflicts: ConflictItemDetail[];
+  proposedInterview?: ProposedInterviewSummary;
+}
+
+export interface CheckInterviewConflictPayload {
+  id?: string;
+  candidateName?: string;
+  jobTitle?: string;
+  roundName?: string;
+  interviewDate: string;
+  startTime: string;
+  durationMinutes: number;
+  format: InterviewFormat;
+  locationOrLink: string;
+  interviewerIds: string[];
+}
+
 /**
- * Lỗi khi người phỏng vấn bị trùng lịch phỏng vấn khác trong cùng khung giờ (AC 2)
+ * Lỗi khi phát hiện xung đột lịch phỏng vấn (người phỏng vấn hoặc phòng họp bận) (TKNHTTDNB1-439)
  */
 export class InterviewerConflictError extends Error {
   code = 'INTERVIEWER_CONFLICT';
   statusCode = 409;
   conflictingInterviewerIds?: string[];
+  conflictResult?: InterviewConflictCheckResult;
 
   constructor(
-    message = 'Một hoặc nhiều người phỏng vấn đã có lịch bận trong khung giờ này. Vui lòng chọn thời gian khác hoặc thay đổi người phỏng vấn.',
+    message = 'Một hoặc nhiều người phỏng vấn hoặc phòng họp đã có lịch bận trong khung giờ này.',
     conflictingInterviewerIds?: string[],
+    conflictResult?: InterviewConflictCheckResult,
   ) {
     super(message);
     this.name = 'InterviewerConflictError';
     this.conflictingInterviewerIds = conflictingInterviewerIds;
+    this.conflictResult = conflictResult;
     Object.setPrototypeOf(this, InterviewerConflictError.prototype);
   }
 }

@@ -18,6 +18,7 @@ import {
   Copy,
 } from 'lucide-react';
 import { useToast } from '../notifications/useToast';
+import { InterviewConflictModal } from './InterviewConflictModal';
 import {
   interviewService,
   validateScheduleTime,
@@ -30,6 +31,7 @@ import type {
   InterviewerInfo,
   InterviewSchedulePayload,
   CreateInterviewSchedulePayload,
+  InterviewConflictCheckResult,
 } from '../../types/interview';
 import {
   DEFAULT_INTERVIEW_ROUNDS,
@@ -106,6 +108,11 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
   const [interviewerSearch, setInterviewerSearch] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [hasCopiedLink, setHasCopiedLink] = useState<boolean>(false);
+
+  // Conflict modal state (TKNHTTDNB1-439)
+  const [conflictData, setConflictData] = useState<InterviewConflictCheckResult | null>(null);
+  const [isConflictModalOpen, setIsConflictModalOpen] = useState<boolean>(false);
+  const [isOverriding, setIsOverriding] = useState<boolean>(false);
 
   const todayVN = useMemo(() => getVietnamTodayString(), []);
 
@@ -245,6 +252,59 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
     setTimeout(() => setHasCopiedLink(false), 2000);
   };
 
+  // Xử lý xác nhận ghi đè khi phát hiện xung đột (TKNHTTDNB1-439)
+  const handleConfirmOverride = async (reason: string) => {
+    try {
+      setIsOverriding(true);
+      const payload: CreateInterviewSchedulePayload = {
+        applicationId: applicationId || 'app-current',
+        candidateId,
+        candidateName,
+        candidateEmail,
+        jobTitle,
+        interviewRound: effectiveRoundName,
+        roundType,
+        startTime:
+          timeValidation.scheduledDateTimeISO ||
+          `${interviewDate}T${interviewTime}:00+07:00`,
+        interviewDate,
+        interviewTime,
+        durationMinutes,
+        interviewType: format,
+        format,
+        locationOrLink: locationOrLink.trim(),
+        interviewerIds: selectedInterviewers.map((i) => i.id),
+        interviewers: selectedInterviewers,
+        notes: notes.trim(),
+        status: 'SCHEDULED',
+        isOverride: true,
+        overrideReason: reason,
+      };
+
+      const result = await interviewService.createInterviewSchedule(payload);
+
+      addToast({
+        message: `Đã ghi đè và xếp lịch ${effectiveRoundName} cho ứng viên ${candidateName} thành công.`,
+        type: 'success',
+      });
+
+      setIsConflictModalOpen(false);
+      if (onSuccess) {
+        onSuccess(result);
+      }
+      onClose();
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Không thể ghi đè lịch phỏng vấn.';
+      addToast({
+        message,
+        type: 'error',
+      });
+    } finally {
+      setIsOverriding(false);
+    }
+  };
+
   // Xử lý gửi biểu mẫu
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -317,10 +377,32 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
           type: 'error',
         });
       } else if (err instanceof InterviewerConflictError) {
-        addToast({
-          message: err.message,
-          type: 'warning',
-        });
+        // Hiển thị modal chi tiết xung đột lịch (TKNHTTDNB1-439)
+        if (err.conflictResult && err.conflictResult.hasConflict) {
+          setConflictData(err.conflictResult);
+          setIsConflictModalOpen(true);
+        } else {
+          try {
+            const checkRes = await interviewService.checkInterviewConflict({
+              candidateName,
+              jobTitle,
+              roundName: effectiveRoundName,
+              interviewDate,
+              startTime: interviewTime,
+              durationMinutes,
+              format,
+              locationOrLink: locationOrLink.trim(),
+              interviewerIds: selectedInterviewers.map((i) => i.id),
+            });
+            setConflictData(checkRes);
+            setIsConflictModalOpen(true);
+          } catch {
+            addToast({
+              message: err.message,
+              type: 'warning',
+            });
+          }
+        }
       } else {
         const message =
           err instanceof Error ? err.message : 'Không thể lưu lịch phỏng vấn, vui lòng thử lại.';
@@ -925,6 +1007,15 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
           </div>
         </form>
       </div>
+
+      {/* Modal chi tiết xung đột lịch phỏng vấn (TKNHTTDNB1-439) */}
+      <InterviewConflictModal
+        isOpen={isConflictModalOpen}
+        onClose={() => setIsConflictModalOpen(false)}
+        conflictResult={conflictData}
+        onConfirmOverride={handleConfirmOverride}
+        isSubmitting={isOverriding}
+      />
     </div>
   );
 };
