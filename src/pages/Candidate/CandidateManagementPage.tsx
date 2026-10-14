@@ -1,0 +1,355 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Search,
+  Filter,
+  FileText,
+  Sparkles,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  Clock,
+  Eye,
+  RefreshCw,
+} from 'lucide-react';
+import type {
+  CandidateProfile,
+  CvParsingStatus,
+  CandidateFilterCriteria,
+} from '../../types/candidate';
+import { candidateService } from '../../services/candidateService';
+import { CandidateDetailModal } from '../../components/Candidate/CandidateDetailModal';
+
+export const CandidateManagementPage: React.FC = () => {
+  const [candidateList, setCandidateList] = useState<CandidateProfile[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [searchKeyword, setSearchKeyword] = useState<string>('');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<
+    CvParsingStatus | 'ALL'
+  >('ALL');
+
+  // Quản lý Modal chi tiết hồ sơ & đối chiếu gợi ý CV
+  const [selectedCandidate, setSelectedCandidate] =
+    useState<CandidateProfile | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
+
+  const fetchCandidates = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const filterCriteria: CandidateFilterCriteria = {
+        keyword: searchKeyword,
+        cvParsingStatus: selectedStatusFilter,
+      };
+      const resultList = await candidateService.getCandidates(filterCriteria);
+      setCandidateList(resultList);
+    } catch {
+      setCandidateList([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [searchKeyword, selectedStatusFilter]);
+
+  useEffect(() => {
+    let isSubscribed = true;
+    const loadCandidates = async () => {
+      setIsLoading(true);
+      try {
+        const filterCriteria: CandidateFilterCriteria = {
+          keyword: searchKeyword,
+          cvParsingStatus: selectedStatusFilter,
+        };
+        const resultList = await candidateService.getCandidates(filterCriteria);
+        if (isSubscribed) {
+          setCandidateList(resultList);
+        }
+      } catch {
+        if (isSubscribed) {
+          setCandidateList([]);
+        }
+      } finally {
+        if (isSubscribed) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadCandidates();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [searchKeyword, selectedStatusFilter]);
+
+  const handleOpenCandidateDetail = (candidateItem: CandidateProfile) => {
+    setSelectedCandidate(candidateItem);
+    setIsDetailModalOpen(true);
+  };
+
+  const handleCloseCandidateDetail = () => {
+    setIsDetailModalOpen(false);
+    setSelectedCandidate(null);
+  };
+
+  const handleProfileUpdated = (updatedProfile: CandidateProfile) => {
+    setCandidateList((previousList) =>
+      previousList.map((item) =>
+        item.id === updatedProfile.id ? updatedProfile : item
+      )
+    );
+    setSelectedCandidate(updatedProfile);
+  };
+
+  const renderStatusBadge = (parsingStatus: CvParsingStatus) => {
+    switch (parsingStatus) {
+      case 'PENDING_CONFIRMATION':
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700 ring-1 ring-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:ring-indigo-800">
+            <Sparkles className="h-3 w-3 text-indigo-500" />
+            Chờ xác nhận gợi ý
+          </span>
+        );
+      case 'CONFIRMED':
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:ring-emerald-800">
+            <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+            Đã xác nhận
+          </span>
+        );
+      case 'PARSING':
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:ring-blue-800">
+            <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+            Đang đọc CV PDF
+          </span>
+        );
+      case 'FAILED':
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:ring-amber-800">
+            <AlertCircle className="h-3 w-3 text-amber-500" />
+            Lỗi đọc CV
+          </span>
+        );
+      case 'DISMISSED':
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+            Đã bỏ qua
+          </span>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="space-y-6 p-6">
+      {/* Tiêu đề trang & Tóm tắt */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
+            Quản lý Hồ sơ Ứng viên & CV
+          </h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Xem hồ sơ, đối chiếu và xác nhận dữ liệu cơ bản (Họ tên, Email, Số điện thoại) trích xuất tự động từ CV PDF.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={fetchCandidates}
+          disabled={isLoading}
+          className="inline-flex items-center gap-1.5 self-start rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-xs font-medium text-gray-700 shadow-2xs hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-750"
+        >
+          <RefreshCw
+            className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`}
+          />
+          Làm mới
+        </button>
+      </div>
+
+      {/* Thanh công cụ tìm kiếm và bộ lọc trạng thái */}
+      <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-xs dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:items-center sm:justify-between">
+        {/* Tìm kiếm theo từ khóa */}
+        <div className="relative min-w-0 flex-1 sm:max-w-md">
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            id="candidate-search-input"
+            type="text"
+            value={searchKeyword}
+            onChange={(changeEvent) => setSearchKeyword(changeEvent.target.value)}
+            placeholder="Tìm theo tên ứng viên, email, số điện thoại..."
+            className="w-full rounded-lg border border-gray-300 bg-white py-2 pl-10 pr-4 text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+          />
+        </div>
+
+        {/* Lọc theo trạng thái gợi ý từ CV */}
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-gray-400" />
+          <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+            Trạng thái CV:
+          </span>
+          <select
+            id="candidate-status-filter"
+            value={selectedStatusFilter}
+            onChange={(changeEvent) =>
+              setSelectedStatusFilter(
+                changeEvent.target.value as CvParsingStatus | 'ALL'
+              )
+            }
+            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+          >
+            <option value="ALL">Tất cả trạng thái</option>
+            <option value="PENDING_CONFIRMATION">Chờ xác nhận gợi ý</option>
+            <option value="CONFIRMED">Đã xác nhận</option>
+            <option value="PARSING">Đang đọc CV PDF</option>
+            <option value="FAILED">Lỗi đọc CV</option>
+            <option value="DISMISSED">Đã bỏ qua</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Bảng danh sách ứng viên */}
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900">
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center p-12 text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400" />
+            <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
+              Đang tải danh sách hồ sơ ứng viên...
+            </p>
+          </div>
+        ) : candidateList.length === 0 ? (
+          <div className="flex flex-col items-center justify-center p-12 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400 dark:bg-gray-800">
+              <FileText className="h-6 w-6" />
+            </div>
+            <h3 className="mt-3 text-sm font-semibold text-gray-900 dark:text-white">
+              Không tìm thấy hồ sơ nào
+            </h3>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Thử điều chỉnh lại từ khóa tìm kiếm hoặc bộ lọc trạng thái.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-left text-sm dark:divide-gray-800">
+              <thead className="bg-gray-50/80 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:bg-gray-800/60 dark:text-gray-400">
+                <tr>
+                  <th scope="col" className="px-5 py-3.5">
+                    Ứng viên
+                  </th>
+                  <th scope="col" className="px-5 py-3.5">
+                    Vị trí ứng tuyển
+                  </th>
+                  <th scope="col" className="px-5 py-3.5">
+                    Tệp CV
+                  </th>
+                  <th scope="col" className="px-5 py-3.5">
+                    Trạng thái bóc tách CV
+                  </th>
+                  <th scope="col" className="px-5 py-3.5">
+                    Thời điểm nộp
+                  </th>
+                  <th scope="col" className="px-5 py-3.5 text-right">
+                    Thao tác
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                {candidateList.map((candidateItem) => (
+                  <tr
+                    key={candidateItem.id}
+                    className="transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/40"
+                  >
+                    {/* Thông tin ứng viên */}
+                    <td className="px-5 py-4">
+                      <div className="font-medium text-gray-900 dark:text-white">
+                        {candidateItem.fullName}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {candidateItem.email} • {candidateItem.phone}
+                      </div>
+                      {candidateItem.trackingCode && (
+                        <div className="mt-1 font-mono text-[11px] text-gray-400">
+                          {candidateItem.trackingCode}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Vị trí ứng tuyển */}
+                    <td className="px-5 py-4">
+                      <div className="font-medium text-gray-800 dark:text-gray-200">
+                        {candidateItem.appliedJobTitle || 'Chưa xác định'}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {candidateItem.departmentName || 'Chưa phân bổ'}
+                      </div>
+                    </td>
+
+                    {/* Tệp CV đính kèm */}
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
+                        <FileText className="h-4 w-4 text-red-500" />
+                        <span className="max-w-[160px] truncate">
+                          {candidateItem.cvFileName || 'CV.pdf'}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Trạng thái bóc tách CV */}
+                    <td className="px-5 py-4">
+                      {renderStatusBadge(candidateItem.cvParsingStatus)}
+                    </td>
+
+                    {/* Thời điểm nộp */}
+                    <td className="px-5 py-4 text-xs text-gray-500 dark:text-gray-400">
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3.5 w-3.5" />
+                        {candidateItem.appliedAt
+                          ? new Date(candidateItem.appliedAt).toLocaleDateString('vi-VN')
+                          : 'Mới đây'}
+                      </div>
+                    </td>
+
+                    {/* Thao tác xem hồ sơ */}
+                    <td className="px-5 py-4 text-right">
+                      <button
+                        type="button"
+                        id={`view-candidate-btn-${candidateItem.id}`}
+                        onClick={() => handleOpenCandidateDetail(candidateItem)}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                          candidateItem.cvParsingStatus === 'PENDING_CONFIRMATION'
+                            ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs dark:bg-indigo-500'
+                            : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-750'
+                        }`}
+                      >
+                        {candidateItem.cvParsingStatus === 'PENDING_CONFIRMATION' ? (
+                          <>
+                            <Sparkles className="h-3.5 w-3.5" />
+                            Đối chiếu gợi ý CV
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="h-3.5 w-3.5" />
+                            Xem hồ sơ
+                          </>
+                        )}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Modal chi tiết hồ sơ & xác nhận dữ liệu gợi ý CV */}
+      <CandidateDetailModal
+        isOpen={isDetailModalOpen}
+        candidateProfile={selectedCandidate}
+        onClose={handleCloseCandidateDetail}
+        onProfileUpdated={handleProfileUpdated}
+      />
+    </div>
+  );
+};
+
+export default CandidateManagementPage;

@@ -35,6 +35,7 @@ import PublicJobDetailPage from "./pages/CareerPage/PublicJobDetailPage";
 import PublicJobApplyPage from "./pages/CareerPage/PublicJobApplyPage";
 import ApplicationLookupPage from "./pages/CareerPage/ApplicationLookupPage";
 import InternalReferralPage from "./pages/Referral/InternalReferralPage";
+import CandidateManagementPage from "./pages/Candidate/CandidateManagementPage";
 import UnifiedCandidateProfilePage from "./pages/Candidate/UnifiedCandidateProfilePage";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
@@ -366,7 +367,7 @@ function App() {
                 path="/candidates"
                 element={
                   <MainLayout>
-                    <PlaceholderPage title="Quản lý CV / Ứng viên" />
+                    <CandidateManagementPage />
                   </MainLayout>
                 }
               />
