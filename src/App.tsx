@@ -33,8 +33,10 @@ import JobPostingPreviewApproval from "./components/JobPosting/JobPostingPreview
 import PublicJobListPage from "./pages/CareerPage/PublicJobListPage";
 import PublicJobDetailPage from "./pages/CareerPage/PublicJobDetailPage";
 import PublicJobApplyPage from "./pages/CareerPage/PublicJobApplyPage";
+import InternalReferralPage from "./pages/Referral/InternalReferralPage";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
+
 
 function HealthCheck() {
   const [status, setStatus] = useState<HealthResponse | null>(null);
@@ -128,6 +130,14 @@ function App() {
                 }
               />
               <Route
+                path="/referrals"
+                element={
+                  <MainLayout>
+                    <InternalReferralPage />
+                  </MainLayout>
+                }
+              />
+              <Route
                 path="/admin/dashboard"
                 element={
                   <MainLayout>
@@ -135,6 +145,7 @@ function App() {
                   </MainLayout>
                 }
               />
+
             </Route>
 
             <Route
