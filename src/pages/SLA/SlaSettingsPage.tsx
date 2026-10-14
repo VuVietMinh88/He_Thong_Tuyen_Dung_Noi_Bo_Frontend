@@ -16,7 +16,7 @@ import type { CandidateStage } from '../../types/candidate';
 import { CANDIDATE_STAGE_CONFIG } from '../../types/candidate';
 import type { SlaSettings } from '../../types/sla';
 import { DEFAULT_SLA_SETTINGS } from '../../types/sla';
-import { slaService } from '../../services/slaService';
+import { slaService, SlaValidationError, SlaApiError } from '../../services/slaService';
 import { useToast } from '../../components/notifications/useToast';
 
 const CONFIGURABLE_STAGES: CandidateStage[] = [
@@ -56,32 +56,41 @@ export const SlaSettingsPage: React.FC = () => {
 
   // Xử lý thay đổi số ngày tối đa cho từng giai đoạn
   const handleStageMaxDaysChange = (stage: CandidateStage, value: number) => {
-    const validValue = Math.max(1, Math.min(90, value || 1));
     setSettings((prev) => ({
       ...prev,
       stages: {
         ...prev.stages,
         [stage]: {
           ...prev.stages[stage],
-          maxDays: validValue,
+          maxDays: value,
         },
       },
     }));
+    // Xóa lỗi validation khi người dùng chỉnh sửa trường này
+    setValidationErrors((prev) => {
+      const next = { ...prev };
+      delete next[stage];
+      return next;
+    });
   };
 
   // Xử lý thay đổi số ngày cảnh báo trước
   const handleStageWarningDaysChange = (stage: CandidateStage, value: number) => {
-    const validValue = Math.max(0, Math.min(10, value || 0));
     setSettings((prev) => ({
       ...prev,
       stages: {
         ...prev.stages,
         [stage]: {
           ...prev.stages[stage],
-          warningDaysBefore: validValue,
+          warningDaysBefore: value,
         },
       },
     }));
+    setValidationErrors((prev) => {
+      const next = { ...prev };
+      delete next[`${stage}_warning`];
+      return next;
+    });
   };
 
   // Xử lý bật/tắt SLA cho từng giai đoạn
@@ -112,47 +121,38 @@ export const SlaSettingsPage: React.FC = () => {
     });
   };
 
-  // Lưu cấu hình
+  // Lưu cấu hình (AC 1, AC 2)
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setValidationErrors({});
-
-    // Kiểm tra tính hợp lệ
-    const errors: Record<string, string> = {};
-    CONFIGURABLE_STAGES.forEach((stage) => {
-      const cfg = settings.stages[stage];
-      if (cfg && cfg.isEnabled) {
-        if (!cfg.maxDays || cfg.maxDays <= 0) {
-          errors[stage] = 'Ngưỡng SLA phải lớn hơn 0 ngày.';
-        }
-        if (cfg.warningDaysBefore >= cfg.maxDays) {
-          errors[`${stage}_warning`] = 'Số ngày cảnh báo phải nhỏ hơn ngưỡng SLA.';
-        }
-      }
-    });
-
-    if (Object.keys(errors).length > 0) {
-      setValidationErrors(errors);
-      addToast({
-        type: 'warning',
-        message: 'Vui lòng kiểm tra lại các giá trị cấu hình SLA chưa hợp lệ.',
-      });
-      return;
-    }
 
     try {
       setIsSaving(true);
-      const updated = await slaService.updateSlaSettings(settings);
+      setValidationErrors({});
+      const updated = await slaService.saveSlaSettings(settings);
       setSettings(updated);
       addToast({
         type: 'success',
         message: 'Lưu cấu hình ngưỡng SLA và lịch nhắc việc thành công!',
       });
-    } catch {
-      addToast({
-        type: 'error',
-        message: 'Lỗi khi lưu cấu hình SLA lên hệ thống.',
-      });
+    } catch (err: unknown) {
+      // Giữ nguyên trạng thái form settings để người dùng chỉnh sửa (AC 2)
+      if (err instanceof SlaValidationError) {
+        setValidationErrors(err.fieldErrors);
+        addToast({
+          type: 'warning',
+          message: err.message,
+        });
+      } else if (err instanceof SlaApiError) {
+        addToast({
+          type: 'error',
+          message: err.message,
+        });
+      } else {
+        addToast({
+          type: 'error',
+          message: err instanceof Error ? err.message : 'Lỗi khi lưu cấu hình SLA lên hệ thống.',
+        });
+      }
     } finally {
       setIsSaving(false);
     }

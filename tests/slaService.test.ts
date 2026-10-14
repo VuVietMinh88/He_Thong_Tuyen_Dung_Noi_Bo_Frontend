@@ -1,8 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { slaService, normalizeCandidateStage } from '../src/services/slaService';
+import {
+  slaService,
+  normalizeCandidateStage,
+  SlaValidationError,
+  SlaApiError,
+} from '../src/services/slaService';
 import type { CandidateProfile } from '../src/types/candidate';
 import type { SlaSettings } from '../src/types/sla';
 import { DEFAULT_SLA_SETTINGS } from '../src/types/sla';
+import axiosClient from '../src/utils/axiosClient';
 
 const storage = new Map<string, string>();
 
@@ -65,6 +71,178 @@ describe('TKNHTTDNB1-416 / S5-10: Cấu hình SLA và Dấu hiệu ứng viên q
       const resetSettings = await slaService.resetSlaSettingsToDefault();
       expect(resetSettings.reminderTime).toBe('09:00');
       expect(resetSettings.stages.NEW.maxDays).toBe(3);
+    });
+  });
+
+  describe('TKNHTTDNB1-417 (AC 1 & AC 2): saveSlaSettings - Bắt lỗi dữ liệu & Mã lỗi HTTP backend', () => {
+    it('ném lỗi SlaValidationError khi số ngày SLA <= 0 hoặc không phải số nguyên dương', async () => {
+      const invalidSettings: Partial<SlaSettings> = {
+        stages: {
+          ...DEFAULT_SLA_SETTINGS.stages,
+          NEW: {
+            ...DEFAULT_SLA_SETTINGS.stages.NEW,
+            maxDays: 0,
+          },
+        },
+      };
+
+      await expect(slaService.saveSlaSettings(invalidSettings)).rejects.toThrow(SlaValidationError);
+
+      try {
+        await slaService.saveSlaSettings(invalidSettings);
+      } catch (err) {
+        expect(err).toBeInstanceOf(SlaValidationError);
+        const valErr = err as SlaValidationError;
+        expect(valErr.fieldErrors.NEW).toContain('lớn hơn 0 ngày');
+      }
+    });
+
+    it('ném lỗi SlaValidationError khi số ngày cảnh báo trước >= ngưỡng SLA', async () => {
+      const invalidSettings: Partial<SlaSettings> = {
+        stages: {
+          ...DEFAULT_SLA_SETTINGS.stages,
+          NEW: {
+            ...DEFAULT_SLA_SETTINGS.stages.NEW,
+            maxDays: 3,
+            warningDaysBefore: 3, // không được >= maxDays
+          },
+        },
+      };
+
+      await expect(slaService.saveSlaSettings(invalidSettings)).rejects.toThrow(SlaValidationError);
+    });
+
+    it('ném lỗi SlaApiError khi Backend trả về mã lỗi 400 Bad Request', async () => {
+      vi.spyOn(axiosClient, 'put').mockRejectedValueOnce({
+        response: { status: 400, data: { message: 'Tham số cấu hình không hợp lệ.' } },
+      });
+
+      await expect(
+        slaService.saveSlaSettings({ reminderTime: '10:00' })
+      ).rejects.toThrow(SlaApiError);
+
+      try {
+        vi.spyOn(axiosClient, 'put').mockRejectedValueOnce({
+          response: { status: 400, data: { message: 'Tham số cấu hình không hợp lệ.' } },
+        });
+        await slaService.saveSlaSettings({ reminderTime: '10:00' });
+      } catch (err) {
+        expect(err).toBeInstanceOf(SlaApiError);
+        expect((err as SlaApiError).statusCode).toBe(400);
+      }
+    });
+
+    it('ném lỗi SlaApiError khi Backend trả về mã lỗi 403 Forbidden (không có quyền quản trị)', async () => {
+      vi.spyOn(axiosClient, 'put').mockRejectedValueOnce({
+        response: { status: 403, data: { message: 'Forbidden' } },
+      });
+
+      try {
+        await slaService.saveSlaSettings({ reminderTime: '11:00' });
+        expect.unreachable();
+      } catch (err) {
+        expect(err).toBeInstanceOf(SlaApiError);
+        expect((err as SlaApiError).statusCode).toBe(403);
+        expect((err as SlaApiError).message).toContain('không có quyền quản trị');
+      }
+    });
+
+    it('ném lỗi SlaApiError khi Backend trả về mã lỗi 422 Unprocessable Entity', async () => {
+      vi.spyOn(axiosClient, 'put').mockRejectedValueOnce({
+        response: { status: 422, data: { message: 'Ngưỡng thời gian vi phạm chính sách công ty.' } },
+      });
+
+      try {
+        await slaService.saveSlaSettings({ reminderTime: '12:00' });
+        expect.unreachable();
+      } catch (err) {
+        expect(err).toBeInstanceOf(SlaApiError);
+        expect((err as SlaApiError).statusCode).toBe(422);
+      }
+    });
+
+    it('ném lỗi SlaApiError khi Backend trả về lỗi 500 Internal Server Error', async () => {
+      vi.spyOn(axiosClient, 'put').mockRejectedValueOnce({
+        response: { status: 500, data: { message: 'Internal Server Error' } },
+      });
+
+      try {
+        await slaService.saveSlaSettings({ reminderTime: '08:00' });
+        expect.unreachable();
+      } catch (err) {
+        expect(err).toBeInstanceOf(SlaApiError);
+        expect((err as SlaApiError).statusCode).toBe(500);
+        expect((err as SlaApiError).message).toContain('Máy chủ gặp sự cố');
+      }
+    });
+
+    it('gọi API thành công qua PUT /sla-settings và cập nhật bộ nhớ tạm', async () => {
+      const mockResult: SlaSettings = {
+        ...DEFAULT_SLA_SETTINGS,
+        reminderTime: '08:30',
+      };
+      vi.spyOn(axiosClient, 'put').mockResolvedValueOnce({ data: mockResult });
+
+      const result = await slaService.saveSlaSettings({ reminderTime: '08:30' });
+      expect(result.reminderTime).toBe('08:30');
+      expect(axiosClient.put).toHaveBeenCalledWith('/sla-settings', expect.any(Object));
+    });
+  });
+
+  describe('TKNHTTDNB1-417 (AC 1): getOverdueCandidateList - Lấy danh sách hồ sơ quá hạn', () => {
+    it('gọi API /candidates/overdue khi server có kết nối', async () => {
+      const mockOverdue: CandidateProfile[] = [
+        {
+          id: 'can-api-01',
+          fullName: 'Trần Văn Quá Hạn',
+          email: 'tvqh@test.com',
+          phone: '0901234567',
+          status: 'NEW',
+          cvParsingStatus: 'CONFIRMED',
+          appliedAt: '2026-10-01T00:00:00.000Z',
+        },
+      ];
+
+      vi.spyOn(axiosClient, 'get').mockResolvedValueOnce({ data: mockOverdue });
+
+      const result = await slaService.getOverdueCandidateList({ stage: 'NEW' });
+      expect(axiosClient.get).toHaveBeenCalledWith('/candidates/overdue', {
+        params: { stage: 'NEW', jobId: undefined },
+      });
+      expect(result.length).toBe(1);
+      expect(result[0].id).toBe('can-api-01');
+    });
+
+    it('fallback tính toán offline khi API quá hạn ném lỗi', async () => {
+      vi.spyOn(axiosClient, 'get').mockRejectedValueOnce(new Error('Network error'));
+
+      const candidates: CandidateProfile[] = [
+        {
+          id: 'can-safe',
+          fullName: 'Nguyễn An Toàn',
+          email: 'safe@test.com',
+          phone: '0900000001',
+          status: 'NEW',
+          cvParsingStatus: 'CONFIRMED',
+          appliedAt: new Date().toISOString(), // 0 ngày -> an toàn
+        },
+        {
+          id: 'can-late',
+          fullName: 'Lê Quá Hạn',
+          email: 'late@test.com',
+          phone: '0900000002',
+          status: 'NEW',
+          cvParsingStatus: 'CONFIRMED',
+          appliedAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(), // 6 ngày > 3 ngày -> quá hạn
+        },
+      ];
+
+      const overdueList = await slaService.getOverdueCandidateList({
+        candidateList: candidates,
+      });
+
+      expect(overdueList.length).toBe(1);
+      expect(overdueList[0].id).toBe('can-late');
     });
   });
 
