@@ -293,5 +293,99 @@ describe('TKNHTTDNB1-348 / S4-07: Internal Candidate Referral System', () => {
       });
     });
   });
+
+  describe('TKNHTTDNB1-349: API Integration & 4 Status Levels Mapping & FormData', () => {
+    it('hỗ trợ gửi hồ sơ giới thiệu bằng FormData', async () => {
+      const validPdf = new File(['dummy content'], 'CV_From_FormData.pdf', {
+        type: 'application/pdf',
+      });
+
+      const formData = new FormData();
+      formData.append('jobPostingId', 'jp-demo-306');
+      formData.append('candidateName', 'Trương Quốc Bảo');
+      formData.append('candidateEmail', 'baotq@gmail.com');
+      formData.append('candidatePhone', '0988776655');
+      formData.append('referralNote', 'Lập trình viên tiềm năng, năng động, nhiệt huyết.');
+      formData.append('cvFile', validPdf);
+
+      const result = await referralService.createReferral(formData, mockUser);
+
+      expect(result.candidateName).toBe('Trương Quốc Bảo');
+      expect(result.candidateEmail).toBe('baotq@gmail.com');
+      expect(result.cvFileName).toBe('CV_From_FormData.pdf');
+      expect(result.source).toBe('INTERNAL_REFERRAL');
+      expect(result.status).toBe('RECEIVED');
+    });
+
+    it('ánh xạ chính xác các trạng thái từ Backend về 4 mức tổng quát chuẩn', async () => {
+      const { mapToGeneralStatus } = await import('../src/services/referralService');
+
+      // 1. Mức Đã nhận
+      expect(mapToGeneralStatus('NEW')).toBe('RECEIVED');
+      expect(mapToGeneralStatus('APPLIED')).toBe('RECEIVED');
+      expect(mapToGeneralStatus('SUBMITTED')).toBe('RECEIVED');
+      expect(mapToGeneralStatus('RECEIVED')).toBe('RECEIVED');
+
+      // 2. Mức Đang xem xét
+      expect(mapToGeneralStatus('SCREENING')).toBe('IN_REVIEW');
+      expect(mapToGeneralStatus('SHORTLISTED')).toBe('IN_REVIEW');
+      expect(mapToGeneralStatus('HR_REVIEW')).toBe('IN_REVIEW');
+      expect(mapToGeneralStatus('IN_REVIEW')).toBe('IN_REVIEW');
+
+      // 3. Mức Mời phỏng vấn
+      expect(mapToGeneralStatus('INTERVIEWING')).toBe('INTERVIEWING');
+      expect(mapToGeneralStatus('INVITED_TO_INTERVIEW')).toBe('INTERVIEWING');
+      expect(mapToGeneralStatus('INTERVIEW_SCHEDULED')).toBe('INTERVIEWING');
+      expect(mapToGeneralStatus('TESTING')).toBe('INTERVIEWING');
+
+      // 4. Mức Kết thúc
+      expect(mapToGeneralStatus('OFFER_ACCEPTED')).toBe('COMPLETED');
+      expect(mapToGeneralStatus('HIRED')).toBe('COMPLETED');
+      expect(mapToGeneralStatus('REJECTED')).toBe('COMPLETED');
+      expect(mapToGeneralStatus('WITHDRAWN')).toBe('COMPLETED');
+      expect(mapToGeneralStatus('CLOSED')).toBe('COMPLETED');
+    });
+
+    it('hàm sanitizeReferralData loại bỏ triệt để mọi trường nhạy cảm của HR', async () => {
+      const { sanitizeReferralData } = await import('../src/services/referralService');
+
+      const rawBackendPayload = {
+        id: 'ref-backend-999',
+        fullName: 'Ứng viên Bí Mật',
+        email: 'secret@gmail.com',
+        phone: '0912999888',
+        status: 'SCREENING',
+        hrNotes: 'Ghi chú mật của Recruiter: Mức lương đề xuất hơi cao',
+        internalNotes: 'Nhận xét phỏng vấn vòng 1: Chưa đạt thuật toán',
+        interviewerScores: [8.5, 7.0],
+        interviewerNames: ['Lê Văn Phỏng Vấn', 'Trần Thị Chấm Điểm'],
+        evaluationReport: 'Báo cáo chi tiết bảo mật',
+        rating: 4,
+        score: 85,
+      };
+
+      const sanitized = sanitizeReferralData(rawBackendPayload);
+
+      expect(sanitized.candidateName).toBe('Ứng viên Bí Mật');
+      expect(sanitized.status).toBe('IN_REVIEW');
+      expect(sanitized).not.toHaveProperty('hrNotes');
+      expect(sanitized).not.toHaveProperty('internalNotes');
+      expect(sanitized).not.toHaveProperty('interviewerScores');
+      expect(sanitized).not.toHaveProperty('interviewerNames');
+      expect(sanitized).not.toHaveProperty('evaluationReport');
+      expect(sanitized).not.toHaveProperty('rating');
+      expect(sanitized).not.toHaveProperty('score');
+    });
+
+    it('getOpenJobPostings trả về danh sách vị trí đang tuyển', async () => {
+      const jobs = await referralService.getOpenJobPostings();
+      expect(Array.isArray(jobs)).toBe(true);
+      expect(jobs.length).toBeGreaterThan(0);
+      expect(jobs[0]).toHaveProperty('title');
+      expect(jobs[0]).toHaveProperty('departmentName');
+      expect(jobs[0]).toHaveProperty('workLocation');
+    });
+  });
 });
+
 
