@@ -201,6 +201,81 @@ export class InterviewApiError extends Error {
   }
 }
 
+/**
+ * Lỗi phân quyền khi người dùng không có quyền ghi đè lịch phỏng vấn trùng (403 Forbidden - TKNHTTDNB1-440)
+ */
+export class InterviewConflictForbiddenError extends Error {
+  code = 'FORBIDDEN';
+  statusCode = 403;
+
+  constructor(
+    message = 'Tài khoản của bạn không có quyền thực hiện hành động ghi đè lịch phỏng vấn ngoại lệ. Vui lòng liên hệ Quản trị viên hoặc Trưởng phòng Tuyển dụng.',
+  ) {
+    super(message);
+    this.name = 'InterviewConflictForbiddenError';
+    Object.setPrototypeOf(this, InterviewConflictForbiddenError.prototype);
+  }
+}
+
+/**
+ * Lỗi thiếu thông tin xác thực hoặc phiên đăng nhập hết hạn (401 Unauthorized - TKNHTTDNB1-440)
+ */
+export class InterviewConflictUnauthorizedError extends Error {
+  code = 'UNAUTHORIZED';
+  statusCode = 401;
+
+  constructor(
+    message = 'Phiên làm việc đã hết hạn hoặc chưa được xác thực. Vui lòng đăng nhập lại.',
+  ) {
+    super(message);
+    this.name = 'InterviewConflictUnauthorizedError';
+    Object.setPrototypeOf(this, InterviewConflictUnauthorizedError.prototype);
+  }
+}
+
+/**
+ * Lỗi dữ liệu ghi đè không hợp lệ hoặc thiếu lý do bắt buộc (400 Bad Request - TKNHTTDNB1-440)
+ */
+export class InterviewConflictValidationError extends Error {
+  code = 'VALIDATION_ERROR';
+  statusCode = 400;
+
+  constructor(
+    message = 'Lý do ghi đè lịch phỏng vấn là bắt buộc và phải có tối thiểu 5 ký tự.',
+  ) {
+    super(message);
+    this.name = 'InterviewConflictValidationError';
+    Object.setPrototypeOf(this, InterviewConflictValidationError.prototype);
+  }
+}
+
+/**
+ * Payload cho API ghi đè lịch phỏng vấn khi có xung đột (User Story S6-04 / TKNHTTDNB1-440)
+ */
+export interface OverrideInterviewPayload {
+  applicationId: string;
+  interviewRound?: string;
+  roundName?: string;
+  roundType?: InterviewRoundType;
+  startTime: string; // ISO string thời điểm bắt đầu
+  durationMinutes: number;
+  interviewType?: InterviewFormat;
+  format?: InterviewFormat;
+  locationOrLink: string;
+  interviewerIds: string[];
+  overrideConflict?: boolean; // Cờ xác nhận ghi đè theo AC 1 (overrideConflict: true)
+  isOverride?: boolean; // Alias tương thích AC cũ
+  overrideReason: string; // Lý do bắt buộc, không được để trống
+  candidateId?: string;
+  candidateName?: string;
+  candidateEmail?: string;
+  jobTitle?: string;
+  interviewDate?: string;
+  interviewTime?: string;
+  notes?: string;
+  status?: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED';
+}
+
 export interface InterviewRoundOption {
   type: InterviewRoundType;
   label: string;
