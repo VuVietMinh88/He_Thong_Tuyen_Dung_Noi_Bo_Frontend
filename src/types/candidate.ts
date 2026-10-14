@@ -44,6 +44,9 @@ export interface CandidateProfile {
   matchingEvaluation?: CandidateMatchingEvaluation;
   educationLevel?: string;
   skills?: string[];
+  currentCompany?: string;
+  dateOfBirth?: string;
+  address?: string;
   appliedAt?: string;
   updatedAt?: string;
 }
@@ -409,3 +412,42 @@ export interface UnifiedCandidate {
   createdAt: string;
   updatedAt: string;
 }
+
+/**
+ * Types cho Biểu mẫu thêm ứng viên thủ công (Task Jira: TKNHTTDNB1-406 / User Story S5-06)
+ */
+export type CandidateSourceOption =
+  | 'REFERRAL'
+  | 'LINKEDIN'
+  | 'EVENT'
+  | 'EMAIL'
+  | 'WEBSITE'
+  | 'OTHER';
+
+export const CANDIDATE_SOURCE_CONFIG: Array<{ value: CandidateSourceOption; label: string }> = [
+  { value: 'REFERRAL', label: 'Giới thiệu nội bộ (Referral)' },
+  { value: 'LINKEDIN', label: 'Mạng xã hội LinkedIn' },
+  { value: 'EVENT', label: 'Sự kiện tuyển dụng / Job Fair' },
+  { value: 'EMAIL', label: 'Email trực tiếp' },
+  { value: 'WEBSITE', label: 'Website công ty' },
+  { value: 'OTHER', label: 'Nguồn khác' },
+];
+
+export interface CreateManualCandidateDto {
+  fullName: string;
+  email: string;
+  phone: string;
+  dateOfBirth?: string;
+  address?: string;
+  appliedJobId: string;
+  appliedJobTitle?: string;
+  source: string;
+  skills?: string[];
+  experienceYears?: number;
+  currentCompany?: string;
+  notes?: string;
+  cvFileName?: string;
+  cvFileSize?: number;
+  cvUrl?: string;
+}
+

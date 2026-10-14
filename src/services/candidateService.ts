@@ -10,6 +10,7 @@ import type {
   CandidateInternalNote,
   ScreeningCatalogTag,
   CandidateScreeningUpdatePayload,
+  CreateManualCandidateDto,
 } from '../types/candidate';
 import {
   DEFAULT_SCREENING_CATALOG_TAGS,
@@ -115,10 +116,12 @@ const DEFAULT_MOCK_CANDIDATES: CandidateProfile[] = [
   },
 ];
 
+let inMemoryCandidateProfiles: CandidateProfile[] = [...DEFAULT_MOCK_CANDIDATES];
+
 const loadCandidateProfilesFromStorage = (): CandidateProfile[] => {
   try {
     if (typeof window === 'undefined' || !window.localStorage) {
-      return DEFAULT_MOCK_CANDIDATES;
+      return [...inMemoryCandidateProfiles];
     }
 
     const rawStoredProfiles = window.localStorage.getItem(STORAGE_KEY_CANDIDATE_PROFILES);
@@ -127,19 +130,24 @@ const loadCandidateProfilesFromStorage = (): CandidateProfile[] => {
         STORAGE_KEY_CANDIDATE_PROFILES,
         JSON.stringify(DEFAULT_MOCK_CANDIDATES)
       );
-      return DEFAULT_MOCK_CANDIDATES;
+      inMemoryCandidateProfiles = [...DEFAULT_MOCK_CANDIDATES];
+      return [...DEFAULT_MOCK_CANDIDATES];
     }
 
     const parsedProfiles: CandidateProfile[] = JSON.parse(rawStoredProfiles);
-    return Array.isArray(parsedProfiles) && parsedProfiles.length > 0
-      ? parsedProfiles
-      : DEFAULT_MOCK_CANDIDATES;
+    const result =
+      Array.isArray(parsedProfiles) && parsedProfiles.length > 0
+        ? parsedProfiles
+        : DEFAULT_MOCK_CANDIDATES;
+    inMemoryCandidateProfiles = [...result];
+    return result;
   } catch {
-    return DEFAULT_MOCK_CANDIDATES;
+    return [...inMemoryCandidateProfiles];
   }
 };
 
 const saveCandidateProfilesToStorage = (candidateProfiles: CandidateProfile[]): void => {
+  inMemoryCandidateProfiles = [...candidateProfiles];
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       window.localStorage.setItem(
@@ -1036,6 +1044,65 @@ export const candidateService = {
     }
 
     return false;
+  },
+
+  /**
+   * Tạo hồ sơ ứng viên thủ công kèm tệp CV (Task Jira: TKNHTTDNB1-406 / User Story S5-06)
+   */
+  async createManualCandidate(
+    dto: CreateManualCandidateDto
+  ): Promise<CandidateProfile> {
+    try {
+      const apiResponse = await axiosClient.post<CandidateProfile>(
+        '/recruitment/candidates/manual',
+        dto
+      );
+      if (apiResponse.data && apiResponse.data.id) {
+        return apiResponse.data;
+      }
+    } catch {
+      // Khi backend chưa sẵn sàng hoặc môi trường offline, chuyển xuống xử lý mock fallback
+    }
+
+    const currentProfiles = loadCandidateProfilesFromStorage();
+    const newId = `cand-manual-${Date.now()}`;
+    const randCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const trackingCode = `APP-${new Date().getFullYear()}-${randCode}`;
+
+    const newCandidate: CandidateProfile = {
+      id: newId,
+      trackingCode,
+      fullName: dto.fullName.trim(),
+      email: dto.email.trim(),
+      phone: dto.phone.trim(),
+      dateOfBirth: dto.dateOfBirth,
+      address: dto.address,
+      appliedJobId: dto.appliedJobId,
+      appliedJobTitle: dto.appliedJobTitle || 'Vị trí tuyển dụng',
+      departmentName: 'Khối Công nghệ & Sản phẩm',
+      source: dto.source || 'Thủ công',
+      status: 'Mới tiếp nhận',
+      skills: dto.skills || [],
+      experienceYears: dto.experienceYears,
+      currentCompany: dto.currentCompany,
+      currentTitle: dto.currentCompany ? `Chuyên viên tại ${dto.currentCompany}` : undefined,
+      coverLetter: dto.notes || '',
+      cvUrl: dto.cvUrl || '/sample-cv.pdf',
+      cvFileName: dto.cvFileName || (dto.cvUrl ? 'CV_UngVien.pdf' : undefined),
+      cvParsingStatus: 'CONFIRMED',
+      appliedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const evaluatedCandidate: CandidateProfile = {
+      ...newCandidate,
+      matchingEvaluation: resolveCandidateMatchingEvaluation(newCandidate),
+    };
+
+    const updatedProfiles = [evaluatedCandidate, ...currentProfiles];
+    saveCandidateProfilesToStorage(updatedProfiles);
+
+    return evaluatedCandidate;
   },
 };
 

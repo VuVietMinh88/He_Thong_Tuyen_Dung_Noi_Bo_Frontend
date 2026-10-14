@@ -16,6 +16,7 @@ import {
   ArrowUp,
   ArrowDown,
   FolderHeart,
+  Plus,
 } from 'lucide-react';
 import type {
   CandidateProfile,
@@ -50,6 +51,7 @@ import { CandidateSearchFilterPanel } from '../../components/Candidate/Candidate
 import { filterCandidatesCombined } from '../../utils/candidateFilterHelper';
 import { AddToTalentPoolModal } from '../../components/Candidate/AddToTalentPoolModal';
 import { SmartTalentMatchingPanel } from '../../components/Candidate/SmartTalentMatchingPanel';
+import { ManualCandidateCreateModal } from '../../components/Candidate/ManualCandidateCreateModal';
 
 type PendingStageAction = {
   candidate: CandidateProfile;
@@ -93,6 +95,9 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
   const [isTalentPoolModalOpen, setIsTalentPoolModalOpen] = useState<boolean>(false);
   const [talentPoolModalCandidates, setTalentPoolModalCandidates] = useState<CandidateProfile[]>([]);
+
+  // Quản lý biểu mẫu thêm ứng viên thủ công (Task Jira TKNHTTDNB1-406 / User Story S5-06)
+  const [isManualCreateModalOpen, setIsManualCreateModalOpen] = useState<boolean>(false);
 
   const fetchCandidates = useCallback(async () => {
     setIsLoading(true);
@@ -350,6 +355,17 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
               className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`}
             />
             Làm mới
+          </button>
+
+          {/* Nút Thêm ứng viên thủ công (Task Jira TKNHTTDNB1-406 / User Story S5-06) */}
+          <button
+            type="button"
+            data-testid="btn-open-manual-candidate-create"
+            onClick={() => setIsManualCreateModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-blue-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 dark:bg-blue-500 dark:hover:bg-blue-600"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>Thêm ứng viên</span>
           </button>
         </div>
       </div>
@@ -835,6 +851,19 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
         onClose={() => setIsTalentPoolModalOpen(false)}
         onSuccess={() => {
           setSelectedCandidateIds([]);
+        }}
+      />
+
+      {/* Modal thêm hồ sơ ứng viên thủ công (Task Jira TKNHTTDNB1-406 / User Story S5-06) */}
+      <ManualCandidateCreateModal
+        isOpen={isManualCreateModalOpen}
+        onClose={() => setIsManualCreateModalOpen(false)}
+        jobOptions={jobOptions}
+        onSuccess={(newCandidate, shouldClose) => {
+          setCandidateList((prev) => [newCandidate, ...prev]);
+          if (shouldClose) {
+            setIsManualCreateModalOpen(false);
+          }
         }}
       />
     </div>
