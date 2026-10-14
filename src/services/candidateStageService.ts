@@ -35,6 +35,7 @@ export interface RejectCandidatePayload {
   applicationId?: string;
   reason: string;
   sendEmail: boolean;
+  interviewResult?: 'PASSED' | 'FAILED';
 }
 
 const getRequestError = (error: unknown, fallbackMessage: string): Error => {

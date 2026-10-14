@@ -803,8 +803,14 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
         <RejectCandidateModal
           candidateId={pendingStageAction.candidate.id}
           candidateName={pendingStageAction.candidate.fullName}
+          currentStage={pendingStageAction.fromStage}
           onClose={() => setPendingStageAction(null)}
-          onSuccess={(payload) => handleStageMoveSuccess(payload, 'REJECTED')}
+          onSuccess={(payload) =>
+            handleStageMoveSuccess(
+              payload,
+              payload.interviewResult === 'PASSED' ? 'OFFER' : 'REJECTED',
+            )
+          }
         />
       )}
 

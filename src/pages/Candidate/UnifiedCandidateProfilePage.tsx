@@ -973,8 +973,14 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
           candidateId={candidate.id}
           candidateName={candidate.fullName}
           applicationId={activeApplication.id}
+          currentStage={activeApplication.stage}
           onClose={() => setIsRejectModalOpen(false)}
-          onSuccess={(payload) => handleApplicationStageUpdated('REJECTED', payload)}
+          onSuccess={(payload) =>
+            handleApplicationStageUpdated(
+              payload.interviewResult === 'PASSED' ? 'OFFER' : 'REJECTED',
+              payload,
+            )
+          }
         />
       )}
       {candidate && isInterviewModalOpen && (
