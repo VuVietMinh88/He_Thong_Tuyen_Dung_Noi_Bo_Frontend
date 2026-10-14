@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AxiosError, AxiosHeaders, type InternalAxiosRequestConfig } from 'axios';
 import axiosClient from '../src/utils/axiosClient';
-import { candidateStageService } from '../src/services/candidateStageService';
+import {
+  candidateStageService,
+  getSkippedCandidateStages,
+} from '../src/services/candidateStageService';
 
 const createApiError = (status: number, data: unknown): AxiosError => {
   const config = { headers: new AxiosHeaders() } as InternalAxiosRequestConfig;
@@ -23,6 +26,13 @@ const createApiError = (status: number, data: unknown): AxiosError => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('candidateStageService', () => {
+  it('detects skipped stages and the interview bypass', () => {
+    expect(getSkippedCandidateStages('SCREENING', 'OFFER')).toEqual(['INTERVIEWING']);
+    expect(getSkippedCandidateStages('NEW', 'OFFER')).toEqual(['SCREENING', 'INTERVIEWING']);
+    expect(getSkippedCandidateStages('SCREENING', 'INTERVIEWING')).toEqual([]);
+    expect(getSkippedCandidateStages('OFFER', 'SCREENING')).toEqual([]);
+  });
+
   it('sends the selected stage and interview schedule to the candidate stage endpoint', async () => {
     const patch = vi.spyOn(axiosClient, 'patch').mockResolvedValueOnce({ data: {} });
     const payload = {
@@ -37,6 +47,23 @@ describe('candidateStageService', () => {
 
     expect(patch).toHaveBeenCalledWith(
       '/recruitment/candidates/candidate%2F123/stage',
+      payload,
+    );
+  });
+
+  it('includes exception approval flag and reason for an approved skipped stage', async () => {
+    const patch = vi.spyOn(axiosClient, 'patch').mockResolvedValueOnce({ data: {} });
+    const payload = {
+      applicationId: 'application-789',
+      toStage: 'OFFER' as const,
+      isException: true,
+      exceptionReason: 'Ứng viên đã hoàn thành vòng phỏng vấn ở quy trình nội bộ khác.',
+    };
+
+    await candidateStageService.moveCandidateToStage('candidate-789', payload);
+
+    expect(patch).toHaveBeenCalledWith(
+      '/recruitment/candidates/candidate-789/stage',
       payload,
     );
   });

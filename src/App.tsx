@@ -38,6 +38,7 @@ import InternalReferralPage from "./pages/Referral/InternalReferralPage";
 import JobPostingManagementPage from "./pages/Recruitment/JobPostingManagementPage";
 import CandidateManagementPage from "./pages/Candidate/CandidateManagementPage";
 import UnifiedCandidateProfilePage from "./pages/Candidate/UnifiedCandidateProfilePage";
+import SlaSettingsPage from "./pages/SLA/SlaSettingsPage";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -352,6 +353,14 @@ function App() {
                 element={
                   <MainLayout>
                     <MasterDataManagement />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/settings/sla"
+                element={
+                  <MainLayout>
+                    <SlaSettingsPage />
                   </MainLayout>
                 }
               />

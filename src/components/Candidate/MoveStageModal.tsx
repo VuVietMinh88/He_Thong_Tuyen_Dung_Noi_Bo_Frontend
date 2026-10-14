@@ -1,10 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { CalendarDays, Loader2, UserRound, X } from 'lucide-react';
+import { AlertTriangle, CalendarDays, Loader2, UserRound, X } from 'lucide-react';
 import type { CandidateStage } from '../../types/candidate';
 import { CANDIDATE_STAGE_CONFIG } from '../../types/candidate';
 import type { UserAccount } from '../../types/account';
 import { userService } from '../../services/userService';
-import { candidateStageService, type MoveCandidateStagePayload } from '../../services/candidateStageService';
+import { tokenService } from '../../services/token.service';
+import {
+  candidateStageService,
+  getSkippedCandidateStages,
+  type MoveCandidateStagePayload,
+} from '../../services/candidateStageService';
 import { toast } from '../notifications';
 
 const SELECTABLE_STAGES: CandidateStage[] = [
@@ -15,12 +20,20 @@ const SELECTABLE_STAGES: CandidateStage[] = [
   'HIRED',
 ];
 
+const getNextSelectableStage = (stage: CandidateStage): CandidateStage => {
+  const nextIndex = SELECTABLE_STAGES.indexOf(stage) + 1;
+  return SELECTABLE_STAGES[nextIndex]
+    ?? SELECTABLE_STAGES.find((candidateStage) => candidateStage !== stage)
+    ?? 'NEW';
+};
+
 export interface MoveStageModalProps {
   candidateId: string;
   candidateName: string;
   applicationId?: string;
   currentStage: CandidateStage;
   initialStage?: CandidateStage;
+  allowException?: boolean;
   onClose: () => void;
   onSuccess: (payload: MoveCandidateStagePayload) => void;
 }
@@ -31,13 +44,14 @@ export const MoveStageModal: React.FC<MoveStageModalProps> = ({
   applicationId,
   currentStage,
   initialStage,
+  allowException = false,
   onClose,
   onSuccess,
 }) => {
   const [toStage, setToStage] = useState<CandidateStage>(
     initialStage && SELECTABLE_STAGES.includes(initialStage)
       ? initialStage
-      : SELECTABLE_STAGES.find((stage) => stage !== currentStage) ?? 'NEW',
+      : getNextSelectableStage(currentStage),
   );
   const [interviewDate, setInterviewDate] = useState('');
   const [interviewerId, setInterviewerId] = useState('');
@@ -45,8 +59,17 @@ export const MoveStageModal: React.FC<MoveStageModalProps> = ({
   const [isLoadingInterviewers, setIsLoadingInterviewers] = useState(true);
   const [interviewerLoadError, setInterviewerLoadError] = useState('');
   const [notes, setNotes] = useState('');
+  const [exceptionReason, setExceptionReason] = useState('');
+  const [isExceptionConfirmed, setIsExceptionConfirmed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const skippedStages = getSkippedCandidateStages(currentStage, toStage);
+  const skipsInterview = skippedStages.includes('INTERVIEWING');
+  const requiresException = skippedStages.length > 0;
+  const hasHrOverrideRole = (tokenService.getUserData()?.roles ?? [])
+    .some((role) => role === 'HR_MANAGER' || role === 'ADMIN');
+  const canUseException = allowException && hasHrOverrideRole;
+
 
   useEffect(() => {
     let isCurrent = true;
@@ -76,10 +99,25 @@ export const MoveStageModal: React.FC<MoveStageModalProps> = ({
       setErrorMessage('Vui lòng chọn lịch phỏng vấn và nhập người phỏng vấn.');
       return;
     }
+    if (requiresException && !canUseException) {
+      setErrorMessage('Chuyển bước này cần quyền ngoại lệ của HR cấp cao.');
+      return;
+    }
+    if (requiresException && !isExceptionConfirmed) {
+      setErrorMessage('Vui lòng xác nhận cảnh báo bỏ qua giai đoạn.');
+      return;
+    }
+    if (requiresException && !exceptionReason.trim()) {
+      setErrorMessage('Vui lòng nhập lý do ngoại lệ để tiếp tục.');
+      return;
+    }
 
     const payload: MoveCandidateStagePayload = {
       applicationId,
       toStage,
+      ...(requiresException
+        ? { isException: true, exceptionReason: exceptionReason.trim() }
+        : {}),
       ...(toStage === 'INTERVIEWING'
         ? {
             interviewDate: new Date(interviewDate).toISOString(),
@@ -141,6 +179,53 @@ export const MoveStageModal: React.FC<MoveStageModalProps> = ({
               ))}
             </select>
           </div>
+
+          {requiresException && (
+            <div className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+              <div className="flex items-start gap-2.5 text-amber-950">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden="true" />
+                <p className="text-sm leading-5">
+                  Bạn đang chuyển thẳng ứng viên sang bước <strong>{CANDIDATE_STAGE_CONFIG[toStage].label}</strong>
+                  {' '}bỏ qua {skipsInterview
+                    ? <>vòng <strong>Phỏng vấn</strong></>
+                    : <>giai đoạn {skippedStages.map((stage) => CANDIDATE_STAGE_CONFIG[stage].label).join(', ')}</>}.
+                  {' '}Bạn có chắc chắn muốn tiếp tục?
+                </p>
+              </div>
+              {!canUseException ? (
+                <p role="alert" className="text-sm font-medium text-rose-700">
+                  Chỉ HR Manager hoặc Admin có thể phê duyệt chuyển bước ngoại lệ.
+                </p>
+              ) : (
+                <>
+                  <label className="flex cursor-pointer items-start gap-2 text-sm text-amber-950">
+                    <input
+                      type="checkbox"
+                      checked={isExceptionConfirmed}
+                      onChange={(event) => setIsExceptionConfirmed(event.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-amber-400 text-amber-700 focus:ring-amber-500"
+                    />
+                    <span>Xác nhận thực hiện chuyển giai đoạn ngoại lệ</span>
+                  </label>
+                  <div>
+                    <label htmlFor="move-stage-exception-reason" className="mb-1.5 block text-sm font-semibold text-amber-950">
+                      Lý do ngoại lệ <span className="text-rose-600">*</span>
+                    </label>
+                    <textarea
+                      id="move-stage-exception-reason"
+                      rows={3}
+                      maxLength={1000}
+                      required
+                      value={exceptionReason}
+                      onChange={(event) => setExceptionReason(event.target.value)}
+                      placeholder="Nêu rõ lý do cần bỏ qua giai đoạn theo quy trình..."
+                      className="w-full resize-y rounded-lg border border-amber-300 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-100"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {toStage === 'INTERVIEWING' && (
             <div className="grid gap-4 sm:grid-cols-2">

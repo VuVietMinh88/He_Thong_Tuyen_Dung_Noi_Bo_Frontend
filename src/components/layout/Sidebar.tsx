@@ -86,6 +86,13 @@ const menuItems: SidebarMenuItem[] = [
     permissions: ['ORGANIZATION_READ_ALL'],
   },
   {
+    label: 'Cấu hình SLA',
+    to: '/settings/sla',
+    icon: '⏱️',
+    roles: [ROLES.ADMIN, ROLES.HR_MANAGER],
+    permissions: ['ORGANIZATION_READ_ALL'],
+  },
+  {
     label: 'Quản lý CV / Ứng viên',
     to: '/candidates',
     icon: '📄',
