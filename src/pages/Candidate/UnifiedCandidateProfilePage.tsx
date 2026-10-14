@@ -51,6 +51,9 @@ import CandidateInteractionTimeline from '../../components/Candidate/CandidateIn
 import MoveStageModal from '../../components/Candidate/MoveStageModal';
 import RejectCandidateModal from '../../components/Candidate/RejectCandidateModal';
 import InterviewScheduleModal from '../../components/Candidate/InterviewScheduleModal';
+import CandidateInterviewsList from '../../components/Candidate/CandidateInterviewsList';
+import { interviewService } from '../../services/interviewService';
+import type { InterviewSchedulePayload } from '../../types/interview';
 import type {
   MoveCandidateStagePayload,
   RejectCandidatePayload,
@@ -77,7 +80,9 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
   const [isCoverLetterExpanded, setIsCoverLetterExpanded] = useState<boolean>(false);
   const [hoverRating, setHoverRating] = useState<number | null>(null);
   const [mobileTab, setMobileTab] = useState<'profile' | 'cv'>('profile');
-  const [contentTab, setContentTab] = useState<'overview' | 'history' | 'notes' | 'timeline'>('overview');
+  const [contentTab, setContentTab] = useState<'overview' | 'history' | 'notes' | 'timeline' | 'interviews'>('overview');
+  const [candidateInterviews, setCandidateInterviews] = useState<InterviewSchedulePayload[]>([]);
+  const [isLoadingInterviews, setIsLoadingInterviews] = useState<boolean>(false);
   const [isMoveStageModalOpen, setIsMoveStageModalOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [isInterviewModalOpen, setIsInterviewModalOpen] = useState(false);
@@ -146,6 +151,24 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
   useEffect(() => {
     fetchCandidate();
   }, [fetchCandidate]);
+
+  // Tải danh sách lịch phỏng vấn của ứng viên (AC 1 & AC 3)
+  const loadCandidateInterviews = useCallback(async () => {
+    if (!id) return;
+    try {
+      setIsLoadingInterviews(true);
+      const data = await interviewService.getCandidateInterviews(activeAppId || '', id);
+      setCandidateInterviews(data);
+    } catch {
+      // Ignored
+    } finally {
+      setIsLoadingInterviews(false);
+    }
+  }, [id, activeAppId]);
+
+  useEffect(() => {
+    loadCandidateInterviews();
+  }, [loadCandidateInterviews]);
 
   // Xử lý sau khi gộp thành công (AC 2 & AC 3)
   const handleMergeSuccess = (mergedCandidate: UnifiedCandidate) => {
@@ -718,11 +741,60 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
               <Clock className="w-4 h-4" />
               Nhật ký tương tác
             </button>
+            <button
+              type="button"
+              onClick={() => setContentTab('interviews')}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all ${
+                contentTab === 'interviews'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              <Calendar className="w-4 h-4" />
+              Lịch phỏng vấn ({candidateInterviews.length})
+            </button>
           </div>
 
           {/* Tab 1: Overview & Details */}
           {contentTab === 'overview' && (
             <div className="space-y-5">
+              {/* Upcoming interview banner if any */}
+              {candidateInterviews.some((i) => i.status === 'SCHEDULED') && (
+                <div className="bg-gradient-to-r from-indigo-50 via-white to-purple-50 p-4 rounded-xl border border-indigo-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                      <Calendar className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold uppercase text-indigo-700 tracking-wider">
+                          Lịch phỏng vấn sắp tới
+                        </span>
+                        <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-indigo-100 text-indigo-800">
+                          {candidateInterviews.find((i) => i.status === 'SCHEDULED')?.roundName}
+                        </span>
+                      </div>
+                      <p className="text-xs sm:text-sm font-semibold text-slate-800 mt-0.5">
+                        {candidateInterviews.find((i) => i.status === 'SCHEDULED')?.interviewDate} lúc{' '}
+                        {candidateInterviews.find((i) => i.status === 'SCHEDULED')?.interviewTime} (
+                        {candidateInterviews.find((i) => i.status === 'SCHEDULED')?.format === 'ONLINE'
+                          ? 'Trực tuyến'
+                          : 'Trực tiếp'}
+                        )
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setContentTab('interviews')}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-white border border-indigo-200 px-3 py-1.5 rounded-lg transition shadow-2xs cursor-pointer"
+                  >
+                    Xem chi tiết lịch phỏng vấn →
+                  </button>
+                </div>
+              )}
+
               {/* THẺ ĐÁNH GIÁ TIÊU CHÍ BẮT BUỘC & ĐIỂM PHÙ HỢP (TASK TKNHTTDNB1-410 / STORY TKNHTTDNB1-57) */}
               <CandidateCriteriaEvaluationCard
                 evaluation={
@@ -829,6 +901,19 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
           {contentTab === 'timeline' && (
             <CandidateInteractionTimeline candidateId={candidate.id} />
           )}
+
+          {/* Tab 5: Candidate Interviews List (AC 1 & AC 3) */}
+          {contentTab === 'interviews' && (
+            <CandidateInterviewsList
+              interviews={candidateInterviews}
+              isLoading={isLoadingInterviews}
+              onScheduleNew={() => setIsInterviewModalOpen(true)}
+              onStatusChange={async (interviewId, newStatus) => {
+                await interviewService.updateInterviewStatus(interviewId, newStatus);
+                await loadCandidateInterviews();
+              }}
+            />
+          )}
         </div>
 
         {/* Right Column (45% on lg): Inline CV Preview (Sticky) */}
@@ -903,6 +988,8 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
           jobTitle={activeApplication?.jobTitle}
           onSuccess={() => {
             fetchCandidate();
+            loadCandidateInterviews();
+            setContentTab('interviews');
           }}
         />
       )}

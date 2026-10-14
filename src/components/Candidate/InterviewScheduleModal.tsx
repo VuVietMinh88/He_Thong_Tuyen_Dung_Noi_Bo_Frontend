@@ -29,10 +29,13 @@ import type {
   InterviewRoundType,
   InterviewerInfo,
   InterviewSchedulePayload,
+  CreateInterviewSchedulePayload,
 } from '../../types/interview';
 import {
   DEFAULT_INTERVIEW_ROUNDS,
   DEFAULT_DURATION_OPTIONS,
+  InterviewPastTimeError,
+  InterviewerConflictError,
 } from '../../types/interview';
 
 export interface InterviewScheduleModalProps {
@@ -273,28 +276,30 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
 
     try {
       setIsSubmitting(true);
-      const payload: Omit<InterviewSchedulePayload, 'id' | 'createdAt'> = {
+      const payload: CreateInterviewSchedulePayload = {
+        applicationId: applicationId || 'app-current',
         candidateId,
         candidateName,
         candidateEmail,
-        applicationId,
         jobTitle,
-        roundName: effectiveRoundName,
+        interviewRound: effectiveRoundName,
         roundType,
-        interviewDate,
-        interviewTime,
-        scheduledDateTimeISO:
+        startTime:
           timeValidation.scheduledDateTimeISO ||
           `${interviewDate}T${interviewTime}:00+07:00`,
+        interviewDate,
+        interviewTime,
         durationMinutes,
+        interviewType: format,
         format,
         locationOrLink: locationOrLink.trim(),
+        interviewerIds: selectedInterviewers.map((i) => i.id),
         interviewers: selectedInterviewers,
         notes: notes.trim(),
         status: 'SCHEDULED',
       };
 
-      const result = await interviewService.scheduleInterview(payload);
+      const result = await interviewService.createInterviewSchedule(payload);
 
       addToast({
         message: `Đã xếp lịch ${effectiveRoundName} cho ứng viên ${candidateName} vào ngày ${interviewDate} (${interviewTime} - ${endTime}).`,
@@ -306,12 +311,24 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
       }
       onClose();
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : 'Không thể lưu lịch phỏng vấn, vui lòng thử lại.';
-      addToast({
-        message,
-        type: 'error',
-      });
+      if (err instanceof InterviewPastTimeError) {
+        addToast({
+          message: err.message,
+          type: 'error',
+        });
+      } else if (err instanceof InterviewerConflictError) {
+        addToast({
+          message: err.message,
+          type: 'warning',
+        });
+      } else {
+        const message =
+          err instanceof Error ? err.message : 'Không thể lưu lịch phỏng vấn, vui lòng thử lại.';
+        addToast({
+          message,
+          type: 'error',
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }

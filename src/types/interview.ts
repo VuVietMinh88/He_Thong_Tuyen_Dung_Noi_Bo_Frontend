@@ -24,18 +24,115 @@ export interface InterviewSchedulePayload {
   applicationId?: string;
   jobTitle?: string;
   roundName: string;
+  interviewRound?: string; // Alias tương thích AC
   roundType?: InterviewRoundType;
   interviewDate: string; // Định dạng YYYY-MM-DD
   interviewTime: string; // Định dạng HH:mm
   scheduledDateTimeISO: string; // Chuỗi ISO chuẩn UTC / GMT+7
+  startTime?: string; // Alias tương thích AC
   durationMinutes: number; // 30, 45, 60, 90, 120 phút
   format: InterviewFormat; // ONLINE hoặc OFFLINE
+  interviewType?: InterviewFormat; // Alias tương thích AC
   locationOrLink: string; // Địa chỉ phòng họp hoặc link họp trực tuyến
   interviewers: InterviewerInfo[];
+  interviewerIds?: string[]; // Danh sách ID người phỏng vấn tương thích AC
   notes?: string;
   status?: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED';
   createdAt?: string;
   createdByName?: string;
+}
+
+/**
+ * Payload chuẩn cho API tạo lịch phỏng vấn theo User Story S6-02 (AC 1)
+ */
+export interface CreateInterviewSchedulePayload {
+  id?: string;
+  applicationId: string;
+  candidateId?: string;
+  candidateName?: string;
+  candidateEmail?: string;
+  jobTitle?: string;
+  interviewRound: string; // Vòng phỏng vấn (Vòng CV, Vòng Kỹ thuật, Vòng HR...)
+  roundName?: string;
+  roundType?: InterviewRoundType;
+  startTime: string; // ISO string thời điểm bắt đầu
+  scheduledDateTimeISO?: string;
+  interviewDate?: string;
+  interviewTime?: string;
+  durationMinutes: number; // Thời lượng (phút)
+  interviewType: InterviewFormat; // ONLINE hoặc OFFLINE
+  format?: InterviewFormat;
+  locationOrLink: string; // Link họp hoặc tên phòng họp
+  interviewerIds: string[]; // Danh sách ID người phỏng vấn
+  interviewers?: InterviewerInfo[];
+  notes?: string;
+  status?: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED';
+  createdAt?: string;
+  createdByName?: string;
+}
+
+/**
+ * Tham số truy vấn lịch phỏng vấn cá nhân (AC 1)
+ */
+export interface PersonalScheduleParams {
+  userId?: string;
+  interviewerId?: string;
+  date?: string; // YYYY-MM-DD
+  startDate?: string;
+  endDate?: string;
+  status?: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'ALL';
+  search?: string;
+}
+
+/**
+ * Lỗi khi người dùng chọn thời gian phỏng vấn trong quá khứ (AC 2)
+ */
+export class InterviewPastTimeError extends Error {
+  code = 'PAST_TIME_NOT_ALLOWED';
+  statusCode = 400;
+
+  constructor(
+    message = 'Thời gian phỏng vấn không được ở thời điểm quá khứ theo múi giờ Việt Nam (GMT+7). Vui lòng chọn ngày giờ trong tương lai.',
+  ) {
+    super(message);
+    this.name = 'InterviewPastTimeError';
+    Object.setPrototypeOf(this, InterviewPastTimeError.prototype);
+  }
+}
+
+/**
+ * Lỗi khi người phỏng vấn bị trùng lịch phỏng vấn khác trong cùng khung giờ (AC 2)
+ */
+export class InterviewerConflictError extends Error {
+  code = 'INTERVIEWER_CONFLICT';
+  statusCode = 409;
+  conflictingInterviewerIds?: string[];
+
+  constructor(
+    message = 'Một hoặc nhiều người phỏng vấn đã có lịch bận trong khung giờ này. Vui lòng chọn thời gian khác hoặc thay đổi người phỏng vấn.',
+    conflictingInterviewerIds?: string[],
+  ) {
+    super(message);
+    this.name = 'InterviewerConflictError';
+    this.conflictingInterviewerIds = conflictingInterviewerIds;
+    Object.setPrototypeOf(this, InterviewerConflictError.prototype);
+  }
+}
+
+/**
+ * Lỗi phản hồi API tổng quát từ Backend
+ */
+export class InterviewApiError extends Error {
+  statusCode?: number;
+  errorCode?: string;
+
+  constructor(message: string, statusCode?: number, errorCode?: string) {
+    super(message);
+    this.name = 'InterviewApiError';
+    this.statusCode = statusCode;
+    this.errorCode = errorCode;
+    Object.setPrototypeOf(this, InterviewApiError.prototype);
+  }
 }
 
 export interface InterviewRoundOption {
@@ -130,4 +227,3 @@ export const MOCK_INTERNAL_INTERVIEWERS: InterviewerInfo[] = [
     avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100&auto=format&fit=crop&q=80',
   },
 ];
-
