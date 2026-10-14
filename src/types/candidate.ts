@@ -42,6 +42,8 @@ export interface CandidateProfile {
   tags?: CandidateTag[];
   notes?: CandidateInternalNote[];
   matchingEvaluation?: CandidateMatchingEvaluation;
+  educationLevel?: string;
+  skills?: string[];
   appliedAt?: string;
   updatedAt?: string;
 }
@@ -82,6 +84,72 @@ export interface CandidateFilterCriteria {
   cvParsingStatus?: CvParsingStatus | 'ALL';
   sortBy?: CandidateSortOption;
 }
+
+/**
+ * Types cho Tìm kiếm ứng viên nâng cao & Bộ lọc kết hợp đa điều kiện (Task Jira TKNHTTDNB1-390 / User Story S5-03)
+ */
+export type ExperienceFilterOption =
+  | 'ALL'
+  | 'LT_1' // Dưới 1 năm (< 1 năm)
+  | '1_TO_3' // 1 - 3 năm
+  | '3_TO_5' // 3 - 5 năm
+  | 'GT_5' // Trên 5 năm (> 5 năm)
+  | 'CUSTOM'; // Tùy chỉnh khoảng Min - Max
+
+export type EducationFilterOption =
+  | 'ALL'
+  | 'BACHELOR' // Đại học / Cử nhân
+  | 'MASTER_PLUS' // Thạc sĩ / Tiến sĩ
+  | 'COLLEGE' // Cao đẳng
+  | 'OTHER'; // Trung cấp / Khác
+
+export type StageFilterOption =
+  | 'ALL'
+  | 'NEW' // Chờ duyệt (Mới tiếp nhận / Sơ loại)
+  | 'INTERVIEWING' // Phỏng vấn
+  | 'OFFER_HIRED' // Trúng tuyển (Offer / Nhận việc)
+  | 'REJECTED'; // Loại hồ sơ
+
+export interface CandidateCombinedFilterState {
+  keyword: string;
+  jobId: string;
+  department: string;
+  experienceLevel: ExperienceFilterOption;
+  minExperienceYears?: number;
+  maxExperienceYears?: number;
+  educationLevel: EducationFilterOption;
+  stageStatus: StageFilterOption;
+  skills: string[];
+  cvParsingStatus?: CvParsingStatus | 'ALL';
+  sortBy?: CandidateSortOption;
+}
+
+export const DEFAULT_COMBINED_FILTER_STATE: CandidateCombinedFilterState = {
+  keyword: '',
+  jobId: 'ALL',
+  department: 'ALL',
+  experienceLevel: 'ALL',
+  educationLevel: 'ALL',
+  stageStatus: 'ALL',
+  skills: [],
+  cvParsingStatus: 'ALL',
+  sortBy: DEFAULT_CANDIDATE_SORT_OPTION,
+};
+
+export const COMMON_SKILL_SUGGESTIONS: string[] = [
+  'React',
+  'TypeScript',
+  'Node.js',
+  'Tailwind CSS',
+  'Java',
+  'Spring Boot',
+  'Python',
+  'UI/UX',
+  'SQL',
+  'Docker',
+  'AWS',
+  'Tiếng Anh',
+];
 
 /**
  * Constants & Types cho Sàng lọc nhanh hồ sơ (Subtask TKNHTTDNB1-384 / Story TKNHTTDNB1-52)
