@@ -36,8 +36,13 @@ export const InternalReferralPage: React.FC = () => {
   }, []);
 
   const handleReferralSuccess = (newReferral: CandidateReferral) => {
-    setReferrals((prev) => [newReferral, ...prev]);
-    // Giữ ở form hoặc chuyển sang tracking sau khi nộp
+    setReferrals((prev) => {
+      const exists = prev.some((item) => item.id === newReferral.id);
+      return exists ? prev : [newReferral, ...prev];
+    });
+    // Tự động làm mới danh sách và chuyển sang Tab theo dõi trạng thái
+    loadReferrals();
+    setActiveTab('tracking');
   };
 
   return (
@@ -147,6 +152,7 @@ export const InternalReferralPage: React.FC = () => {
             referrals={referrals}
             isLoading={isLoadingReferrals}
             onRefresh={loadReferrals}
+            onAddNew={() => setActiveTab('form')}
           />
         </div>
       )}
