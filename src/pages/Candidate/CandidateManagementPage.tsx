@@ -22,7 +22,9 @@ import type {
 } from '../../types/candidate';
 import { candidateService } from '../../services/candidateService';
 import { CandidateDetailModal } from '../../components/Candidate/CandidateDetailModal';
-import CandidateKanbanBoard from '../../components/Candidate/CandidateKanbanBoard';
+import CandidateKanbanBoard, {
+  type CandidateStageChangePayload,
+} from '../../components/Candidate/CandidateKanbanBoard';
 import SlaOverdueBadge from '../../components/SLA/SlaOverdueBadge';
 import SlaNotificationBell from '../../components/SLA/SlaNotificationBell';
 import { slaService } from '../../services/slaService';
@@ -49,7 +51,6 @@ export const CandidateManagementPage: React.FC = () => {
       const filterCriteria: CandidateFilterCriteria = {
         keyword: searchKeyword,
         cvParsingStatus: selectedStatusFilter,
-        jobId: selectedJobId === 'ALL' ? undefined : selectedJobId,
       };
       const resultList = await candidateService.getCandidates(filterCriteria);
       setCandidateList(resultList);
@@ -58,7 +59,7 @@ export const CandidateManagementPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [searchKeyword, selectedStatusFilter, selectedJobId]);
+  }, [searchKeyword, selectedStatusFilter]);
 
   useEffect(() => {
     let isSubscribed = true;
@@ -68,7 +69,6 @@ export const CandidateManagementPage: React.FC = () => {
         const filterCriteria: CandidateFilterCriteria = {
           keyword: searchKeyword,
           cvParsingStatus: selectedStatusFilter,
-          jobId: selectedJobId === 'ALL' ? undefined : selectedJobId,
         };
         const resultList = await candidateService.getCandidates(filterCriteria);
         if (isSubscribed) {
@@ -145,6 +145,17 @@ export const CandidateManagementPage: React.FC = () => {
       )
     );
     setSelectedCandidate(updatedProfile);
+  };
+
+  const handleCandidateStageChange = ({
+    candidateId,
+    toStage,
+  }: CandidateStageChangePayload) => {
+    setCandidateList((previousList) => previousList.map((candidate) => (
+      candidate.id === candidateId
+        ? { ...candidate, status: toStage, updatedAt: new Date().toISOString() }
+        : candidate
+    )));
   };
 
   const renderStatusBadge = (parsingStatus: CvParsingStatus) => {
@@ -343,6 +354,7 @@ export const CandidateManagementPage: React.FC = () => {
             candidates={visibleCandidates}
             selectedJobId={selectedJobId === 'ALL' ? undefined : selectedJobId}
             onSelectCandidate={handleOpenCandidateDetail}
+            onStageChange={handleCandidateStageChange}
           />
         )
       ) : (
