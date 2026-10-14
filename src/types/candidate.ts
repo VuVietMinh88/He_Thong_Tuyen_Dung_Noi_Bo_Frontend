@@ -126,6 +126,20 @@ export interface CandidateInternalNote {
 }
 
 /**
+ * Payload cập nhật tổng hợp dữ liệu sàng lọc ứng viên (Subtask TKNHTTDNB1-385)
+ */
+export interface CandidateScreeningUpdatePayload {
+  rating?: number;
+  tags?: CandidateTag[];
+  newNote?: {
+    content: string;
+    category?: CandidateInternalNote['category'];
+    authorName: string;
+    authorRole?: string;
+  };
+}
+
+/**
  * Types cho Hồ sơ ứng viên thống nhất (User Story S4-09 / Task Jira TKNHTTDNB1-358)
  */
 

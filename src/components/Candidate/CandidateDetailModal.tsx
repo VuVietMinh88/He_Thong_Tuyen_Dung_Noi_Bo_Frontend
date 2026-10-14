@@ -222,6 +222,7 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
           ? caughtError.message
           : 'Không thể cập nhật mức đánh giá sao.';
       toast.error(errorMessage);
+      throw caughtError;
     }
   };
 
@@ -249,6 +250,7 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
           ? caughtError.message
           : 'Không thể cập nhật danh sách nhãn hồ sơ.';
       toast.error(errorMessage);
+      throw caughtError;
     }
   };
 
@@ -283,6 +285,7 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
           ? caughtError.message
           : 'Không thể lưu ghi chú nội bộ.';
       toast.error(errorMessage);
+      throw caughtError;
     }
   };
 
