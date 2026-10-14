@@ -16,6 +16,19 @@ export interface InterviewerInfo {
   department?: string;
 }
 
+export type CandidateInterviewResponseStatus =
+  | 'CONFIRMED'
+  | 'RESCHEDULE_REQUESTED'
+  | 'DECLINED'
+  | 'PENDING';
+
+export interface CandidateInterviewResponse {
+  status: CandidateInterviewResponseStatus;
+  respondedAt?: string;
+  reason?: string;
+  proposedDateTime?: string;
+}
+
 export interface InterviewSchedulePayload {
   id?: string;
   candidateId: string;
@@ -38,6 +51,7 @@ export interface InterviewSchedulePayload {
   interviewerIds?: string[]; // Danh sách ID người phỏng vấn tương thích AC
   notes?: string;
   status?: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED';
+  candidateResponse?: CandidateInterviewResponse;
   isOverride?: boolean;
   overrideReason?: string;
   createdAt?: string;
