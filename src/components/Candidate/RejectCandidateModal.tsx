@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import { AlertTriangle, Loader2, Mail, X } from 'lucide-react';
+import type { CandidateStage } from '../../types/candidate';
 import { candidateStageService, type RejectCandidatePayload } from '../../services/candidateStageService';
+import {
+  interviewEvaluationService,
+} from '../../services/interviewEvaluationService';
+import InterviewResultNotificationModal from './InterviewResultNotificationModal';
 import { toast } from '../notifications';
 
 const REJECTION_REASONS = [
@@ -16,6 +21,7 @@ export interface RejectCandidateModalProps {
   candidateId: string;
   candidateName: string;
   applicationId?: string;
+  currentStage?: CandidateStage;
   onClose: () => void;
   onSuccess: (payload: RejectCandidatePayload) => void;
 }
@@ -24,6 +30,7 @@ export const RejectCandidateModal: React.FC<RejectCandidateModalProps> = ({
   candidateId,
   candidateName,
   applicationId,
+  currentStage,
   onClose,
   onSuccess,
 }) => {
@@ -32,6 +39,7 @@ export const RejectCandidateModal: React.FC<RejectCandidateModalProps> = ({
   const [sendEmail, setSendEmail] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
   const reason = reasonOption === 'Lý do khác' ? customReason.trim() : reasonOption;
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -44,6 +52,24 @@ export const RejectCandidateModal: React.FC<RejectCandidateModalProps> = ({
     setIsSubmitting(true);
     setErrorMessage('');
     try {
+      if (currentStage === 'INTERVIEWING') {
+        const evaluationStatus = await interviewEvaluationService.getEvaluationStatus(
+          candidateId,
+          applicationId,
+        );
+        if (!evaluationStatus.isComplete) {
+          const pendingNames = evaluationStatus.pendingInterviewerNames?.filter(Boolean) ?? [];
+          setErrorMessage(
+            `Chưa thể thông báo kết quả: mới hoàn tất ${evaluationStatus.completedCount}/${evaluationStatus.requiredCount} đánh giá.${
+              pendingNames.length > 0 ? ` Còn thiếu: ${pendingNames.join(', ')}.` : ''
+            } Vui lòng hoàn tất đánh giá phỏng vấn trước.`,
+          );
+          return;
+        }
+        setIsResultModalOpen(true);
+        return;
+      }
+
       await candidateStageService.rejectCandidate(candidateId, payload);
       toast.success(`Đã cập nhật trạng thái từ chối cho ${candidateName}.`);
       onSuccess(payload);
@@ -116,18 +142,20 @@ export const RejectCandidateModal: React.FC<RejectCandidateModalProps> = ({
             </div>
           )}
 
-          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3.5">
-            <input
-              type="checkbox"
-              checked={sendEmail}
-              onChange={(event) => setSendEmail(event.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-            />
-            <span>
-              <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-800"><Mail className="h-4 w-4 text-slate-500" /> Gửi email thông báo cho ứng viên</span>
-              <span className="mt-1 block text-xs text-slate-500">Yêu cầu hệ thống gửi email từ chối tự động sau khi cập nhật trạng thái.</span>
-            </span>
-          </label>
+          {currentStage !== 'INTERVIEWING' && (
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3.5">
+              <input
+                type="checkbox"
+                checked={sendEmail}
+                onChange={(event) => setSendEmail(event.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span>
+                <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-800"><Mail className="h-4 w-4 text-slate-500" /> Gửi email thông báo cho ứng viên</span>
+                <span className="mt-1 block text-xs text-slate-500">Yêu cầu hệ thống gửi email từ chối tự động sau khi cập nhật trạng thái.</span>
+              </span>
+            </label>
+          )}
 
           {errorMessage && <p role="alert" className="text-sm font-medium text-rose-600">{errorMessage}</p>}
 
@@ -140,6 +168,26 @@ export const RejectCandidateModal: React.FC<RejectCandidateModalProps> = ({
           </footer>
         </form>
       </section>
+      {isResultModalOpen && (
+        <InterviewResultNotificationModal
+          candidateId={candidateId}
+          candidateName={candidateName}
+          applicationId={applicationId}
+          initialResult="FAILED"
+          initialStage="REJECTED"
+          initialRejectionReason={reason}
+          onClose={() => setIsResultModalOpen(false)}
+          onSuccess={(result) => {
+            onSuccess({
+              applicationId,
+              reason,
+              sendEmail: true,
+              interviewResult: result,
+            });
+            onClose();
+          }}
+        />
+      )}
     </div>
   );
 };

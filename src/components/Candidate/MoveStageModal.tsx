@@ -10,6 +10,11 @@ import {
   getSkippedCandidateStages,
   type MoveCandidateStagePayload,
 } from '../../services/candidateStageService';
+import {
+  interviewEvaluationService,
+  type InterviewResultStage,
+} from '../../services/interviewEvaluationService';
+import InterviewResultNotificationModal from './InterviewResultNotificationModal';
 import { toast } from '../notifications';
 
 const SELECTABLE_STAGES: CandidateStage[] = [
@@ -63,6 +68,10 @@ export const MoveStageModal: React.FC<MoveStageModalProps> = ({
   const [isExceptionConfirmed, setIsExceptionConfirmed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [pendingResultPayload, setPendingResultPayload] =
+    useState<MoveCandidateStagePayload | null>(null);
+  const [pendingResultStage, setPendingResultStage] =
+    useState<InterviewResultStage | null>(null);
   const skippedStages = getSkippedCandidateStages(currentStage, toStage);
   const skipsInterview = skippedStages.includes('INTERVIEWING');
   const requiresException = skippedStages.length > 0;
@@ -131,6 +140,27 @@ export const MoveStageModal: React.FC<MoveStageModalProps> = ({
     setIsSubmitting(true);
     setErrorMessage('');
     try {
+      if (currentStage === 'INTERVIEWING') {
+        const evaluationStatus = await interviewEvaluationService.getEvaluationStatus(
+          candidateId,
+          applicationId,
+        );
+        if (!evaluationStatus.isComplete) {
+          const pendingNames = evaluationStatus.pendingInterviewerNames?.filter(Boolean) ?? [];
+          setErrorMessage(
+            `Chưa thể chuyển giai đoạn: mới hoàn tất ${evaluationStatus.completedCount}/${evaluationStatus.requiredCount} đánh giá.${
+              pendingNames.length > 0 ? ` Còn thiếu: ${pendingNames.join(', ')}.` : ''
+            } Vui lòng hoàn tất đánh giá phỏng vấn trước.`,
+          );
+          return;
+        }
+        if (toStage === 'OFFER' || toStage === 'HIRED') {
+          setPendingResultPayload(payload);
+          setPendingResultStage(toStage);
+          return;
+        }
+      }
+
       await candidateStageService.moveCandidateToStage(candidateId, payload);
       toast.success(`Đã chuyển ${candidateName} sang giai đoạn "${CANDIDATE_STAGE_CONFIG[toStage].label}".`);
       onSuccess(payload);
@@ -295,6 +325,26 @@ export const MoveStageModal: React.FC<MoveStageModalProps> = ({
           </footer>
         </form>
       </section>
+      {pendingResultPayload && pendingResultStage && (
+        <InterviewResultNotificationModal
+          candidateId={candidateId}
+          candidateName={candidateName}
+          applicationId={applicationId}
+          initialStage={pendingResultStage}
+          onClose={() => {
+            setPendingResultPayload(null);
+            setPendingResultStage(null);
+          }}
+          onSuccess={(_result, stage) => {
+            const completedPayload = { ...pendingResultPayload, toStage: stage };
+            toast.success(
+              `Đã chuyển ${candidateName} sang giai đoạn "${CANDIDATE_STAGE_CONFIG[stage].label}".`,
+            );
+            onSuccess(completedPayload);
+            onClose();
+          }}
+        />
+      )}
     </div>
   );
 };
