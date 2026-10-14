@@ -23,7 +23,7 @@ import {
 import { tokenService } from '../../services/token.service';
 import usePermission from '../../hooks/usePermission';
 import { useToast } from '../../components/notifications/useToast';
-import { candidateService } from '../../services/candidateService';
+import { candidateProfileService, CandidateAccessDeniedError } from '../../services/candidateProfileService';
 import type {
   UnifiedCandidate,
   ApplicationRecord,
@@ -65,12 +65,18 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
     if (!id) return;
     try {
       setIsLoading(true);
-      const data = await candidateService.getCandidateById(id);
+      const data = await candidateProfileService.getUnifiedCandidateProfile(id);
       setCandidate(data);
 
-      // Check access permission (AC 5)
-      const allowed = candidateService.checkCandidateAccess(data, currentUser, permissions);
+      // Check access permission (AC 4)
+      const allowed = candidateProfileService.checkCandidateAccess(data, currentUser, permissions);
       setHasAccess(allowed);
+      if (!allowed) {
+        addToast({
+          type: 'error',
+          message: 'Bạn không có quyền truy cập hồ sơ ứng viên này (403 Forbidden).',
+        });
+      }
 
       if (data.applications && data.applications.length > 0) {
         const currentApp =
@@ -78,11 +84,19 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
           data.applications[0];
         setActiveAppId(currentApp.id);
       }
-    } catch {
-      addToast({
-        type: 'error',
-        message: 'Không thể tải thông tin hồ sơ ứng viên. Vui lòng thử lại.',
-      });
+    } catch (err: unknown) {
+      if (err instanceof CandidateAccessDeniedError || (err as { status?: number })?.status === 403) {
+        setHasAccess(false);
+        addToast({
+          type: 'error',
+          message: 'Bạn không có quyền truy cập hồ sơ ứng viên này (403 Forbidden).',
+        });
+      } else {
+        addToast({
+          type: 'error',
+          message: 'Không thể tải thông tin hồ sơ ứng viên. Vui lòng thử lại.',
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -101,7 +115,7 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
   const handleRatingChange = async (newRating: number) => {
     if (!candidate) return;
     try {
-      await candidateService.updateCandidateRating(candidate.id, newRating);
+      await candidateProfileService.updateCandidateRating(candidate.id, newRating);
       setCandidate((prev) => (prev ? { ...prev, rating: newRating } : prev));
       addToast({
         type: 'success',
@@ -119,9 +133,10 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
   const handleAddTag = async (tagName: string) => {
     if (!candidate) return;
     try {
-      const newTag = await candidateService.addCandidateTag(candidate.id, tagName);
+      const updatedTags = [...candidate.tags, { id: `tag-${Date.now()}`, name: tagName, colorClass: 'bg-indigo-50 text-indigo-700 border-indigo-200' }];
+      await candidateProfileService.updateCandidateTags(candidate.id, updatedTags);
       setCandidate((prev) =>
-        prev ? { ...prev, tags: [...prev.tags, newTag] } : prev
+        prev ? { ...prev, tags: updatedTags } : prev
       );
       addToast({
         type: 'success',
@@ -140,9 +155,10 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
   const handleRemoveTag = async (tagId: string) => {
     if (!candidate) return;
     try {
-      await candidateService.removeCandidateTag(candidate.id, tagId);
+      const remainingTags = candidate.tags.filter((t) => t.id !== tagId);
+      await candidateProfileService.updateCandidateTags(candidate.id, remainingTags);
       setCandidate((prev) =>
-        prev ? { ...prev, tags: prev.tags.filter((t) => t.id !== tagId) } : prev
+        prev ? { ...prev, tags: remainingTags } : prev
       );
       addToast({
         type: 'success',
@@ -168,7 +184,7 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
         fullName: user?.fullName || 'Người dùng nội bộ',
         role: user?.roles?.[0] || 'Nhân sự',
       };
-      const newNote = await candidateService.addInternalNote(
+      const newNote = await candidateProfileService.addCandidateNote(
         candidate.id,
         { content, category },
         author
