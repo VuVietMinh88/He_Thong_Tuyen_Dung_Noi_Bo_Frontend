@@ -26,6 +26,9 @@ import { CandidateDetailModal } from '../../components/Candidate/CandidateDetail
 import CandidateKanbanBoard, {
   type CandidateStageChangePayload,
 } from '../../components/Candidate/CandidateKanbanBoard';
+import { MatchingScoreBadge } from '../../components/Candidate/MatchingScoreBadge';
+import { CriteriaQuickSummaryPopover } from '../../components/Candidate/CriteriaQuickSummaryPopover';
+import { resolveCandidateMatchingEvaluation } from '../../utils/candidateMatchingHelper';
 import MoveStageModal from '../../components/Candidate/MoveStageModal';
 import RejectCandidateModal from '../../components/Candidate/RejectCandidateModal';
 import type { MoveCandidateStagePayload, RejectCandidatePayload } from '../../services/candidateStageService';
@@ -418,6 +421,9 @@ export const CandidateManagementPage: React.FC = () => {
                     Ứng viên
                   </th>
                   <th scope="col" className="px-5 py-3.5">
+                    Điểm phù hợp & Tiêu chí
+                  </th>
+                  <th scope="col" className="px-5 py-3.5">
                     Vị trí ứng tuyển
                   </th>
                   <th scope="col" className="px-5 py-3.5">
@@ -478,6 +484,27 @@ export const CandidateManagementPage: React.FC = () => {
                           )}
                         </div>
                       )}
+                    </td>
+
+                    {/* Điểm tổng phù hợp và tóm tắt 3 tiêu chí bắt buộc (Task TKNHTTDNB1-410) */}
+                    <td className="px-5 py-4">
+                      {(() => {
+                        const matchingEvaluation =
+                          candidateItem.matchingEvaluation ||
+                          resolveCandidateMatchingEvaluation(candidateItem);
+                        return (
+                          <div className="flex flex-col gap-1.5 items-start">
+                            <MatchingScoreBadge
+                              totalMatchingScore={matchingEvaluation.totalMatchingScore}
+                              isOverallPassed={matchingEvaluation.isOverallPassed}
+                              variant="standard"
+                            />
+                            <CriteriaQuickSummaryPopover
+                              criteriaList={matchingEvaluation.criteriaList}
+                            />
+                          </div>
+                        );
+                      })()}
                     </td>
 
                     {/* Vị trí ứng tuyển */}

@@ -2,6 +2,9 @@ import React from 'react';
 import { BriefcaseBusiness, Mail, Phone, Star, UserRound } from 'lucide-react';
 import type { CandidateProfile, CandidateStage } from '../../types/candidate';
 import { CANDIDATE_STAGE_CONFIG } from '../../types/candidate';
+import { MatchingScoreBadge } from './MatchingScoreBadge';
+import { CriteriaQuickSummaryPopover } from './CriteriaQuickSummaryPopover';
+import { resolveCandidateMatchingEvaluation } from '../../utils/candidateMatchingHelper';
 import SlaOverdueBadge from '../SLA/SlaOverdueBadge';
 
 export interface KanbanCardProps {
@@ -16,6 +19,8 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
   onClick,
 }) => {
   const stageConfig = CANDIDATE_STAGE_CONFIG[stage];
+  const matchingEvaluation =
+    candidate.matchingEvaluation || resolveCandidateMatchingEvaluation(candidate);
   const initials = candidate.fullName
     .trim()
     .split(/\s+/)
@@ -46,12 +51,19 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
             </span>
           </span>
         </button>
-        {typeof candidate.rating === 'number' && candidate.rating > 0 && (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-50 px-1.5 py-1 text-xs font-bold text-amber-700">
-            <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500" aria-hidden="true" />
-            {candidate.rating}/5
-          </span>
-        )}
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <MatchingScoreBadge
+            totalMatchingScore={matchingEvaluation.totalMatchingScore}
+            isOverallPassed={matchingEvaluation.isOverallPassed}
+            variant="compact"
+          />
+          {typeof candidate.rating === 'number' && candidate.rating > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-bold text-amber-700">
+              <Star className="h-3 w-3 fill-amber-400 text-amber-500" aria-hidden="true" />
+              {candidate.rating}/5
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="mt-4 space-y-2 border-t border-slate-100 pt-3 text-xs text-slate-600">
@@ -82,6 +94,11 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
               ? `${candidate.experienceYears} năm kinh nghiệm`
               : candidate.currentTitle || 'Kinh nghiệm chưa cập nhật'}
           </span>
+        </div>
+
+        {/* Tóm tắt 3 tiêu chí bắt buộc (Kinh nghiệm, Học vấn, Kỹ năng) */}
+        <div className="pt-1">
+          <CriteriaQuickSummaryPopover criteriaList={matchingEvaluation.criteriaList} />
         </div>
       </div>
 
