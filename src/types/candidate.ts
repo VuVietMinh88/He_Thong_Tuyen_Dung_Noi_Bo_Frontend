@@ -31,6 +31,7 @@ export interface CandidateProfile {
   experienceYears?: number;
   source?: string;
   status?: string;
+  rejectionReason?: string;
   cvUrl?: string;
   cvFileName?: string;
   cvParsingStatus: CvParsingStatus;

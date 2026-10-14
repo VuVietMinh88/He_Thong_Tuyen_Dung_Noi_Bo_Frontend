@@ -19,15 +19,26 @@ import type {
   CandidateProfile,
   CvParsingStatus,
   CandidateFilterCriteria,
+  CandidateStage,
 } from '../../types/candidate';
 import { candidateService } from '../../services/candidateService';
 import { CandidateDetailModal } from '../../components/Candidate/CandidateDetailModal';
 import CandidateKanbanBoard, {
   type CandidateStageChangePayload,
 } from '../../components/Candidate/CandidateKanbanBoard';
+import MoveStageModal from '../../components/Candidate/MoveStageModal';
+import RejectCandidateModal from '../../components/Candidate/RejectCandidateModal';
+import type { MoveCandidateStagePayload, RejectCandidatePayload } from '../../services/candidateStageService';
 import SlaOverdueBadge from '../../components/SLA/SlaOverdueBadge';
 import SlaNotificationBell from '../../components/SLA/SlaNotificationBell';
 import { slaService } from '../../services/slaService';
+
+type PendingStageAction = {
+  candidate: CandidateProfile;
+  fromStage: CandidateStage;
+  toStage: CandidateStage;
+  action: 'move' | 'reject';
+};
 
 export const CandidateManagementPage: React.FC = () => {
   const [candidateList, setCandidateList] = useState<CandidateProfile[]>([]);
@@ -44,6 +55,7 @@ export const CandidateManagementPage: React.FC = () => {
   const [selectedCandidate, setSelectedCandidate] =
     useState<CandidateProfile | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
+  const [pendingStageAction, setPendingStageAction] = useState<PendingStageAction | null>(null);
 
   const fetchCandidates = useCallback(async () => {
     setIsLoading(true);
@@ -90,7 +102,7 @@ export const CandidateManagementPage: React.FC = () => {
     return () => {
       isSubscribed = false;
     };
-  }, [searchKeyword, selectedStatusFilter, selectedJobId]);
+  }, [searchKeyword, selectedStatusFilter]);
 
   const overdueCount = useMemo(() => {
     return slaService.filterOverdueCandidates(candidateList).length;
@@ -147,15 +159,34 @@ export const CandidateManagementPage: React.FC = () => {
     setSelectedCandidate(updatedProfile);
   };
 
-  const handleCandidateStageChange = ({
-    candidateId,
-    toStage,
-  }: CandidateStageChangePayload) => {
+  const handleCandidateStageChange = ({ candidateId, fromStage, toStage }: CandidateStageChangePayload) => {
+    const candidate = candidateList.find((item) => item.id === candidateId);
+    if (!candidate) return;
+    setPendingStageAction({
+      candidate,
+      fromStage,
+      toStage,
+      action: toStage === 'REJECTED' ? 'reject' : 'move',
+    });
+  };
+
+  const handleStageMoveSuccess = (
+    payload: MoveCandidateStagePayload | RejectCandidatePayload,
+    stage: CandidateStage,
+  ) => {
+    const candidateId = pendingStageAction?.candidate.id;
+    if (!candidateId) return;
     setCandidateList((previousList) => previousList.map((candidate) => (
       candidate.id === candidateId
-        ? { ...candidate, status: toStage, updatedAt: new Date().toISOString() }
+        ? {
+            ...candidate,
+            status: stage,
+            updatedAt: new Date().toISOString(),
+            ...(stage === 'REJECTED' && 'reason' in payload ? { rejectionReason: payload.reason } : {}),
+          }
         : candidate
     )));
+    setPendingStageAction(null);
   };
 
   const renderStatusBadge = (parsingStatus: CvParsingStatus) => {
@@ -528,6 +559,25 @@ export const CandidateManagementPage: React.FC = () => {
         onClose={handleCloseCandidateDetail}
         onProfileUpdated={handleProfileUpdated}
       />
+      {pendingStageAction?.action === 'move' && (
+        <MoveStageModal
+          candidateId={pendingStageAction.candidate.id}
+          candidateName={pendingStageAction.candidate.fullName}
+          currentStage={pendingStageAction.fromStage}
+          initialStage={pendingStageAction.toStage}
+          allowException
+          onClose={() => setPendingStageAction(null)}
+          onSuccess={(payload) => handleStageMoveSuccess(payload, payload.toStage)}
+        />
+      )}
+      {pendingStageAction?.action === 'reject' && (
+        <RejectCandidateModal
+          candidateId={pendingStageAction.candidate.id}
+          candidateName={pendingStageAction.candidate.fullName}
+          onClose={() => setPendingStageAction(null)}
+          onSuccess={(payload) => handleStageMoveSuccess(payload, 'REJECTED')}
+        />
+      )}
     </div>
   );
 };
