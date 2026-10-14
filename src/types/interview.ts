@@ -24,18 +24,256 @@ export interface InterviewSchedulePayload {
   applicationId?: string;
   jobTitle?: string;
   roundName: string;
+  interviewRound?: string; // Alias tương thích AC
   roundType?: InterviewRoundType;
   interviewDate: string; // Định dạng YYYY-MM-DD
   interviewTime: string; // Định dạng HH:mm
   scheduledDateTimeISO: string; // Chuỗi ISO chuẩn UTC / GMT+7
+  startTime?: string; // Alias tương thích AC
   durationMinutes: number; // 30, 45, 60, 90, 120 phút
   format: InterviewFormat; // ONLINE hoặc OFFLINE
+  interviewType?: InterviewFormat; // Alias tương thích AC
   locationOrLink: string; // Địa chỉ phòng họp hoặc link họp trực tuyến
   interviewers: InterviewerInfo[];
+  interviewerIds?: string[]; // Danh sách ID người phỏng vấn tương thích AC
   notes?: string;
   status?: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED';
+  isOverride?: boolean;
+  overrideReason?: string;
   createdAt?: string;
   createdByName?: string;
+}
+
+/**
+ * Payload chuẩn cho API tạo lịch phỏng vấn theo User Story S6-02 (AC 1)
+ */
+export interface CreateInterviewSchedulePayload {
+  id?: string;
+  applicationId: string;
+  candidateId?: string;
+  candidateName?: string;
+  candidateEmail?: string;
+  jobTitle?: string;
+  interviewRound: string; // Vòng phỏng vấn (Vòng CV, Vòng Kỹ thuật, Vòng HR...)
+  roundName?: string;
+  roundType?: InterviewRoundType;
+  startTime: string; // ISO string thời điểm bắt đầu
+  scheduledDateTimeISO?: string;
+  interviewDate?: string;
+  interviewTime?: string;
+  durationMinutes: number; // Thời lượng (phút)
+  interviewType: InterviewFormat; // ONLINE hoặc OFFLINE
+  format?: InterviewFormat;
+  locationOrLink: string; // Link họp hoặc tên phòng họp
+  interviewerIds: string[]; // Danh sách ID người phỏng vấn
+  interviewers?: InterviewerInfo[];
+  notes?: string;
+  status?: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED';
+  isOverride?: boolean; // Cờ xác nhận ghi đè khi có xung đột (TKNHTTDNB1-439)
+  overrideReason?: string; // Lý do ghi đè bắt buộc khi isOverride = true
+  createdAt?: string;
+  createdByName?: string;
+}
+
+/**
+ * Tham số truy vấn lịch phỏng vấn cá nhân (AC 1)
+ */
+export interface PersonalScheduleParams {
+  userId?: string;
+  interviewerId?: string;
+  date?: string; // YYYY-MM-DD
+  startDate?: string;
+  endDate?: string;
+  status?: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'ALL';
+  search?: string;
+}
+
+/**
+ * Lỗi khi người dùng chọn thời gian phỏng vấn trong quá khứ (AC 2)
+ */
+export class InterviewPastTimeError extends Error {
+  code = 'PAST_TIME_NOT_ALLOWED';
+  statusCode = 400;
+
+  constructor(
+    message = 'Thời gian phỏng vấn không được ở thời điểm quá khứ theo múi giờ Việt Nam (GMT+7). Vui lòng chọn ngày giờ trong tương lai.',
+  ) {
+    super(message);
+    this.name = 'InterviewPastTimeError';
+    Object.setPrototypeOf(this, InterviewPastTimeError.prototype);
+  }
+}
+
+export type ConflictType = 'INTERVIEWER_CONFLICT' | 'ROOM_CONFLICT' | 'BOTH';
+
+export interface ConflictingInterviewSummary {
+  id: string;
+  candidateName: string;
+  jobTitle: string;
+  roundName: string;
+  interviewDate: string;
+  startTime: string; // HH:mm hoặc ISO
+  endTime: string;
+  durationMinutes: number;
+  format: InterviewFormat;
+  locationOrLink: string;
+  interviewerNames?: string[];
+}
+
+export interface ConflictItemDetail {
+  type: 'INTERVIEWER' | 'ROOM';
+  entityId?: string;
+  entityName: string; // Tên người phỏng vấn hoặc tên phòng họp bị chiếm
+  entityRoleOrLocation?: string; // Chức danh hoặc vị trí phòng họp
+  reason: string; // Lý do mô tả xung đột
+  conflictingInterview: ConflictingInterviewSummary;
+}
+
+export interface ProposedInterviewSummary {
+  candidateName: string;
+  jobTitle: string;
+  roundName: string;
+  interviewDate: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+  format: InterviewFormat;
+  locationOrLink: string;
+  interviewerNames?: string[];
+}
+
+export interface InterviewConflictCheckResult {
+  hasConflict: boolean;
+  conflictType?: ConflictType;
+  message?: string;
+  conflicts: ConflictItemDetail[];
+  proposedInterview?: ProposedInterviewSummary;
+}
+
+export interface CheckInterviewConflictPayload {
+  id?: string;
+  candidateName?: string;
+  jobTitle?: string;
+  roundName?: string;
+  interviewDate: string;
+  startTime: string;
+  durationMinutes: number;
+  format: InterviewFormat;
+  locationOrLink: string;
+  interviewerIds: string[];
+}
+
+/**
+ * Lỗi khi phát hiện xung đột lịch phỏng vấn (người phỏng vấn hoặc phòng họp bận) (TKNHTTDNB1-439)
+ */
+export class InterviewerConflictError extends Error {
+  code = 'INTERVIEWER_CONFLICT';
+  statusCode = 409;
+  conflictingInterviewerIds?: string[];
+  conflictResult?: InterviewConflictCheckResult;
+
+  constructor(
+    message = 'Một hoặc nhiều người phỏng vấn hoặc phòng họp đã có lịch bận trong khung giờ này.',
+    conflictingInterviewerIds?: string[],
+    conflictResult?: InterviewConflictCheckResult,
+  ) {
+    super(message);
+    this.name = 'InterviewerConflictError';
+    this.conflictingInterviewerIds = conflictingInterviewerIds;
+    this.conflictResult = conflictResult;
+    Object.setPrototypeOf(this, InterviewerConflictError.prototype);
+  }
+}
+
+/**
+ * Lỗi phản hồi API tổng quát từ Backend
+ */
+export class InterviewApiError extends Error {
+  statusCode?: number;
+  errorCode?: string;
+
+  constructor(message: string, statusCode?: number, errorCode?: string) {
+    super(message);
+    this.name = 'InterviewApiError';
+    this.statusCode = statusCode;
+    this.errorCode = errorCode;
+    Object.setPrototypeOf(this, InterviewApiError.prototype);
+  }
+}
+
+/**
+ * Lỗi phân quyền khi người dùng không có quyền ghi đè lịch phỏng vấn trùng (403 Forbidden - TKNHTTDNB1-440)
+ */
+export class InterviewConflictForbiddenError extends Error {
+  code = 'FORBIDDEN';
+  statusCode = 403;
+
+  constructor(
+    message = 'Tài khoản của bạn không có quyền thực hiện hành động ghi đè lịch phỏng vấn ngoại lệ. Vui lòng liên hệ Quản trị viên hoặc Trưởng phòng Tuyển dụng.',
+  ) {
+    super(message);
+    this.name = 'InterviewConflictForbiddenError';
+    Object.setPrototypeOf(this, InterviewConflictForbiddenError.prototype);
+  }
+}
+
+/**
+ * Lỗi thiếu thông tin xác thực hoặc phiên đăng nhập hết hạn (401 Unauthorized - TKNHTTDNB1-440)
+ */
+export class InterviewConflictUnauthorizedError extends Error {
+  code = 'UNAUTHORIZED';
+  statusCode = 401;
+
+  constructor(
+    message = 'Phiên làm việc đã hết hạn hoặc chưa được xác thực. Vui lòng đăng nhập lại.',
+  ) {
+    super(message);
+    this.name = 'InterviewConflictUnauthorizedError';
+    Object.setPrototypeOf(this, InterviewConflictUnauthorizedError.prototype);
+  }
+}
+
+/**
+ * Lỗi dữ liệu ghi đè không hợp lệ hoặc thiếu lý do bắt buộc (400 Bad Request - TKNHTTDNB1-440)
+ */
+export class InterviewConflictValidationError extends Error {
+  code = 'VALIDATION_ERROR';
+  statusCode = 400;
+
+  constructor(
+    message = 'Lý do ghi đè lịch phỏng vấn là bắt buộc và phải có tối thiểu 5 ký tự.',
+  ) {
+    super(message);
+    this.name = 'InterviewConflictValidationError';
+    Object.setPrototypeOf(this, InterviewConflictValidationError.prototype);
+  }
+}
+
+/**
+ * Payload cho API ghi đè lịch phỏng vấn khi có xung đột (User Story S6-04 / TKNHTTDNB1-440)
+ */
+export interface OverrideInterviewPayload {
+  applicationId: string;
+  interviewRound?: string;
+  roundName?: string;
+  roundType?: InterviewRoundType;
+  startTime: string; // ISO string thời điểm bắt đầu
+  durationMinutes: number;
+  interviewType?: InterviewFormat;
+  format?: InterviewFormat;
+  locationOrLink: string;
+  interviewerIds: string[];
+  overrideConflict?: boolean; // Cờ xác nhận ghi đè theo AC 1 (overrideConflict: true)
+  isOverride?: boolean; // Alias tương thích AC cũ
+  overrideReason: string; // Lý do bắt buộc, không được để trống
+  candidateId?: string;
+  candidateName?: string;
+  candidateEmail?: string;
+  jobTitle?: string;
+  interviewDate?: string;
+  interviewTime?: string;
+  notes?: string;
+  status?: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED';
 }
 
 export interface InterviewRoundOption {
@@ -130,4 +368,3 @@ export const MOCK_INTERNAL_INTERVIEWERS: InterviewerInfo[] = [
     avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100&auto=format&fit=crop&q=80',
   },
 ];
-

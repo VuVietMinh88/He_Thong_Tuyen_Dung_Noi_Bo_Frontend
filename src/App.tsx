@@ -39,6 +39,7 @@ import JobPostingManagementPage from "./pages/Recruitment/JobPostingManagementPa
 import CandidateManagementPage from "./pages/Candidate/CandidateManagementPage";
 import UnifiedCandidateProfilePage from "./pages/Candidate/UnifiedCandidateProfilePage";
 import SlaSettingsPage from "./pages/SLA/SlaSettingsPage";
+import PersonalInterviewSchedulePage from "./pages/Interview/PersonalInterviewSchedulePage";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -416,7 +417,7 @@ function App() {
                 path="/interviews"
                 element={
                   <MainLayout>
-                    <PlaceholderPage title="Lịch phỏng vấn" />
+                    <PersonalInterviewSchedulePage />
                   </MainLayout>
                 }
               />
