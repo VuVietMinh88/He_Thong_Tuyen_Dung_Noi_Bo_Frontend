@@ -7,6 +7,29 @@ import type {
 } from '../types/sla';
 import { DEFAULT_SLA_SETTINGS } from '../types/sla';
 import axiosClient from '../utils/axiosClient';
+import { candidateService } from './candidateService';
+
+export class SlaValidationError extends Error {
+  public fieldErrors: Record<string, string>;
+
+  constructor(message: string, fieldErrors: Record<string, string> = {}) {
+    super(message);
+    this.name = 'SlaValidationError';
+    this.fieldErrors = fieldErrors;
+  }
+}
+
+export class SlaApiError extends Error {
+  public statusCode?: number;
+  public details?: unknown;
+
+  constructor(message: string, statusCode?: number, details?: unknown) {
+    super(message);
+    this.name = 'SlaApiError';
+    this.statusCode = statusCode;
+    this.details = details;
+  }
+}
 
 const STORAGE_KEY_SETTINGS = 'smart_recruit_sla_settings';
 const STORAGE_KEY_REMINDERS = 'smart_recruit_sla_reminders';
@@ -90,9 +113,54 @@ export const slaService = {
   },
 
   /**
-   * 2. Cập nhật cấu hình SLA (AC 1)
+   * 2. Kiểm tra tính hợp lệ của dữ liệu cấu hình SLA (AC 1, AC 2)
    */
-  async updateSlaSettings(newSettings: Partial<SlaSettings>): Promise<SlaSettings> {
+  validateSlaSettings(settings: Partial<SlaSettings>): Record<string, string> {
+    const errors: Record<string, string> = {};
+
+    if (settings.stages) {
+      Object.entries(settings.stages).forEach(([stageKey, cfg]) => {
+        if (cfg && cfg.isEnabled) {
+          if (
+            typeof cfg.maxDays !== 'number' ||
+            isNaN(cfg.maxDays) ||
+            !Number.isInteger(cfg.maxDays) ||
+            cfg.maxDays <= 0
+          ) {
+            errors[stageKey] = 'Ngưỡng SLA phải là số nguyên dương lớn hơn 0 ngày.';
+          }
+
+          if (
+            typeof cfg.warningDaysBefore !== 'number' ||
+            isNaN(cfg.warningDaysBefore) ||
+            !Number.isInteger(cfg.warningDaysBefore) ||
+            cfg.warningDaysBefore < 0
+          ) {
+            errors[`${stageKey}_warning`] = 'Số ngày cảnh báo phải là số nguyên không âm.';
+          } else if (cfg.maxDays && cfg.warningDaysBefore >= cfg.maxDays) {
+            errors[`${stageKey}_warning`] = 'Số ngày cảnh báo phải nhỏ hơn ngưỡng SLA.';
+          }
+        }
+      });
+    }
+
+    if (Object.keys(errors).length > 0) {
+      throw new SlaValidationError(
+        'Dữ liệu cấu hình SLA không hợp lệ. Vui lòng kiểm tra lại các trường báo lỗi.',
+        errors
+      );
+    }
+
+    return errors;
+  },
+
+  /**
+   * 3. Lưu cấu hình SLA lên Server kèm bắt lỗi dữ liệu đầu vào & API (AC 1, AC 2)
+   */
+  async saveSlaSettings(newSettings: Partial<SlaSettings>): Promise<SlaSettings> {
+    // 1. Kiểm tra validation phía client
+    this.validateSlaSettings(newSettings);
+
     const currentSettings = await this.getSlaSettings();
     const mergedSettings: SlaSettings = {
       ...currentSettings,
@@ -110,12 +178,95 @@ export const slaService = {
         localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(response.data));
         return response.data;
       }
-    } catch {
-      // Offline fallback
+    } catch (err: unknown) {
+      const errorObj = err as { response?: { status?: number; data?: { message?: string } }; message?: string };
+      const status = errorObj?.response?.status;
+
+      if (status === 400) {
+        throw new SlaApiError(
+          errorObj.response?.data?.message || 'Dữ liệu cấu hình SLA không hợp lệ (400 Bad Request).',
+          400,
+          err
+        );
+      }
+      if (status === 403) {
+        throw new SlaApiError(
+          'Bạn không có quyền quản trị để cập nhật cấu hình SLA (403 Forbidden).',
+          403,
+          err
+        );
+      }
+      if (status === 422) {
+        throw new SlaApiError(
+          errorObj.response?.data?.message || 'Thông số cấu hình không đáp ứng yêu cầu nghiệp vụ (422 Unprocessable Entity).',
+          422,
+          err
+        );
+      }
+      if (status && status >= 500) {
+        throw new SlaApiError(
+          'Máy chủ gặp sự cố khi lưu cấu hình SLA (500 Internal Server Error). Vui lòng thử lại sau.',
+          status,
+          err
+        );
+      }
+
+      // Offline fallback: chỉ lưu vào LocalStorage khi không phải lỗi HTTP status từ server
     }
 
     localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(mergedSettings));
     return mergedSettings;
+  },
+
+  /**
+   * Cập nhật cấu hình SLA (Alias tương thích với saveSlaSettings)
+   */
+  async updateSlaSettings(newSettings: Partial<SlaSettings>): Promise<SlaSettings> {
+    return this.saveSlaSettings(newSettings);
+  },
+
+  /**
+   * 4. Lấy danh sách hồ sơ ứng viên quá hạn SLA từ Backend (AC 1)
+   */
+  async getOverdueCandidateList(params?: {
+    stage?: CandidateStage;
+    jobId?: string;
+    candidateList?: CandidateProfile[];
+  }): Promise<CandidateProfile[]> {
+    try {
+      const response = await axiosClient.get<CandidateProfile[]>('/candidates/overdue', {
+        params: {
+          stage: params?.stage,
+          jobId: params?.jobId,
+        },
+      });
+      if (response?.data && Array.isArray(response.data)) {
+        return response.data;
+      }
+    } catch {
+      // Offline fallback
+    }
+
+    let candidates = params?.candidateList;
+    if (!candidates || candidates.length === 0) {
+      try {
+        candidates = await candidateService.getCandidates();
+      } catch {
+        candidates = [];
+      }
+    }
+
+    const settings = await this.getSlaSettings();
+    let overdue = this.filterOverdueCandidates(candidates, settings);
+
+    if (params?.stage) {
+      overdue = overdue.filter((c) => normalizeCandidateStage(c.status) === params.stage);
+    }
+    if (params?.jobId) {
+      overdue = overdue.filter((c) => c.appliedJobId === params.jobId);
+    }
+
+    return overdue;
   },
 
   /**
