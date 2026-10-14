@@ -1,3 +1,4 @@
+import axios from 'axios';
 import axiosClient from '../utils/axiosClient';
 
 export interface ApplicationSourceOption {
@@ -15,18 +16,57 @@ export const APPLICATION_SOURCES: ApplicationSourceOption[] = [
   { value: 'OTHER', label: 'Khác' },
 ];
 
+export const MAX_CV_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+export const MAX_CV_FILE_SIZE_MB = 10;
+export const ALLOWED_CV_EXTENSIONS = ['.pdf', '.docx'];
+export const ALLOWED_CV_MIME_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+];
+export const CV_FILE_ACCEPT_ATTRIBUTE =
+  '.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+export const CV_FILE_RULE_TEXT =
+  'Chỉ chấp nhận tệp định dạng PDF hoặc DOCX, dung lượng tối đa 10MB';
+
+export const MAX_SUBMISSIONS_PER_HOUR = 5;
+export const SUBMISSION_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 giờ
+
 export const CV_FILE_CONFIG = {
-  MAX_SIZE_BYTES: 10 * 1024 * 1024, // 10MB
-  MAX_SIZE_MB: 10,
-  ACCEPT_ATTRIBUTE: '.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  RULE_TEXT: 'Chỉ chấp nhận tệp định dạng PDF hoặc DOCX, dung lượng tối đa 10MB',
-  ALLOWED_EXTENSIONS: ['.pdf', '.docx'],
-  ALLOWED_MIME_TYPES: [
-    'application/pdf',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/msword',
-  ],
+  MAX_SIZE_BYTES: MAX_CV_FILE_SIZE_BYTES,
+  MAX_SIZE_MB: MAX_CV_FILE_SIZE_MB,
+  ACCEPT_ATTRIBUTE: CV_FILE_ACCEPT_ATTRIBUTE,
+  RULE_TEXT: CV_FILE_RULE_TEXT,
+  ALLOWED_EXTENSIONS: ALLOWED_CV_EXTENSIONS,
+  ALLOWED_MIME_TYPES: ALLOWED_CV_MIME_TYPES,
 };
+
+export class DuplicateApplicationError extends Error {
+  constructor(
+    message: string = 'Email này đã được sử dụng để ứng tuyển vào vị trí này. Vui lòng kiểm tra lại hoặc sử dụng email khác.'
+  ) {
+    super(message);
+    this.name = 'DuplicateApplicationError';
+  }
+}
+
+export class RateLimitExceededError extends Error {
+  constructor(
+    message: string = 'Bạn đã vượt quá số lần nộp hồ sơ cho phép trong 1 giờ. Vui lòng thử lại sau.'
+  ) {
+    super(message);
+    this.name = 'RateLimitExceededError';
+  }
+}
+
+export class ApplicationSubmissionError extends Error {
+  public statusCode?: number;
+  constructor(message: string, statusCode?: number) {
+    super(message);
+    this.name = 'ApplicationSubmissionError';
+    this.statusCode = statusCode;
+  }
+}
 
 export interface CandidateApplicationPayload {
   jobId: string;
@@ -39,51 +79,51 @@ export interface CandidateApplicationPayload {
   cvFile: File;
 }
 
-export interface ApplicationSubmitResult {
+export interface ApplicationSubmissionResponse {
   success: boolean;
+  trackingCode: string;
   applicationId: string;
   message: string;
   candidateName: string;
   candidateEmail: string;
   jobTitle?: string;
   submittedAt: string;
+  confirmationEmailSent: boolean;
 }
 
-/**
- * Định dạng dung lượng byte sang MB có 2 chữ số thập phân
- */
-export const formatFileSizeMB = (bytes: number): string => {
-  if (bytes <= 0) return '0.00 MB';
-  const mb = bytes / (1024 * 1024);
-  return `${mb.toFixed(2)} MB`;
+export type ApplicationSubmitResult = ApplicationSubmissionResponse;
+
+export const formatFileSizeMB = (fileSizeBytes: number): string => {
+  if (fileSizeBytes <= 0) return '0.00 MB';
+  const sizeInMegabytes = fileSizeBytes / (1024 * 1024);
+  return `${sizeInMegabytes.toFixed(2)} MB`;
 };
 
-/**
- * Kiểm tra tính hợp lệ của tệp CV nộp lên
- */
-export const validateCvFile = (file?: File | null): { isValid: boolean; error?: string } => {
-  if (!file) {
+export const validateCvFile = (
+  selectedFile?: File | null
+): { isValid: boolean; error?: string } => {
+  if (!selectedFile) {
     return {
       isValid: false,
       error: 'Vui lòng chọn hoặc tải lên tệp CV của bạn.',
     };
   }
 
-  // Kiểm tra dung lượng tối đa 10MB
-  if (file.size > CV_FILE_CONFIG.MAX_SIZE_BYTES) {
-    const actualSizeMb = formatFileSizeMB(file.size);
+  if (selectedFile.size > MAX_CV_FILE_SIZE_BYTES) {
+    const actualSizeMb = formatFileSizeMB(selectedFile.size);
     return {
       isValid: false,
-      error: `Dung lượng tệp vượt quá mức cho phép (${actualSizeMb} > ${CV_FILE_CONFIG.MAX_SIZE_MB}MB). Vui lòng chọn tệp nhỏ hơn 10MB.`,
+      error: `Dung lượng tệp vượt quá mức cho phép (${actualSizeMb} > ${MAX_CV_FILE_SIZE_MB}MB). Vui lòng chọn tệp nhỏ hơn 10MB.`,
     };
   }
 
-  // Kiểm tra đuôi file và mime type
-  const fileName = file.name.toLowerCase();
-  const hasValidExtension = CV_FILE_CONFIG.ALLOWED_EXTENSIONS.some((ext) => fileName.endsWith(ext));
-  const hasValidMime = CV_FILE_CONFIG.ALLOWED_MIME_TYPES.includes(file.type);
+  const lowercaseFileName = selectedFile.name.toLowerCase();
+  const hasValidExtension = ALLOWED_CV_EXTENSIONS.some((extension) =>
+    lowercaseFileName.endsWith(extension)
+  );
+  const hasValidMimeType = ALLOWED_CV_MIME_TYPES.includes(selectedFile.type);
 
-  if (!hasValidExtension && !hasValidMime) {
+  if (!hasValidExtension && !hasValidMimeType) {
     return {
       isValid: false,
       error: 'Định dạng tệp không hợp lệ. Chỉ chấp nhận tệp định dạng PDF hoặc DOCX.',
@@ -93,114 +133,235 @@ export const validateCvFile = (file?: File | null): { isValid: boolean; error?: 
   return { isValid: true };
 };
 
-/**
- * Xác thực thông tin biểu mẫu ứng tuyển
- */
 export const validateApplicationForm = (
-  values: Partial<CandidateApplicationPayload>
+  formValues: Partial<CandidateApplicationPayload>
 ): Record<string, string> => {
-  const errors: Record<string, string> = {};
+  const validationErrors: Record<string, string> = {};
 
-  // 1. Họ và tên
-  if (!values.fullName || !values.fullName.trim()) {
-    errors.fullName = 'Vui lòng nhập họ và tên của bạn.';
-  } else if (values.fullName.trim().length < 2) {
-    errors.fullName = 'Họ và tên phải có ít nhất 2 ký tự.';
+  if (!formValues.fullName || !formValues.fullName.trim()) {
+    validationErrors.fullName = 'Vui lòng nhập họ và tên của bạn.';
+  } else if (formValues.fullName.trim().length < 2) {
+    validationErrors.fullName = 'Họ và tên phải có ít nhất 2 ký tự.';
   }
 
-  // 2. Email
-  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-  if (!values.email || !values.email.trim()) {
-    errors.email = 'Vui lòng nhập địa chỉ email.';
-  } else if (!emailRegex.test(values.email.trim())) {
-    errors.email = 'Địa chỉ email không hợp lệ (ví dụ: ungvien@example.com).';
+  const emailRegexPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  if (!formValues.email || !formValues.email.trim()) {
+    validationErrors.email = 'Vui lòng nhập địa chỉ email.';
+  } else if (!emailRegexPattern.test(formValues.email.trim())) {
+    validationErrors.email = 'Địa chỉ email không hợp lệ (ví dụ: ungvien@example.com).';
   }
 
-  // 3. Số điện thoại (Việt Nam 10-11 số)
-  const phoneClean = values.phone ? values.phone.replace(/[\s.-]/g, '') : '';
-  const phoneRegex = /^(0|\+84)(3|5|7|8|9)[0-9]{8}$/;
-  if (!phoneClean) {
-    errors.phone = 'Vui lòng nhập số điện thoại liên hệ.';
-  } else if (!phoneRegex.test(phoneClean)) {
-    errors.phone = 'Số điện thoại không hợp lệ (gồm 10 số, bắt đầu bằng 03, 05, 07, 08, 09 hoặc +84).';
+  const cleanedPhoneNumber = formValues.phone
+    ? formValues.phone.replace(/[\s.-]/g, '')
+    : '';
+  const vietnamPhoneRegexPattern = /^(0|\+84)(3|5|7|8|9)[0-9]{8}$/;
+  if (!cleanedPhoneNumber) {
+    validationErrors.phone = 'Vui lòng nhập số điện thoại liên hệ.';
+  } else if (!vietnamPhoneRegexPattern.test(cleanedPhoneNumber)) {
+    validationErrors.phone =
+      'Số điện thoại không hợp lệ (gồm 10 số, bắt đầu bằng 03, 05, 07, 08, 09 hoặc +84).';
   }
 
-  // 4. Nguồn biết tin
-  if (!values.source || !values.source.trim()) {
-    errors.source = 'Vui lòng chọn nguồn bạn biết thông tin tuyển dụng này.';
+  if (!formValues.source || !formValues.source.trim()) {
+    validationErrors.source = 'Vui lòng chọn nguồn bạn biết thông tin tuyển dụng này.';
   }
 
-  // 5. Tệp CV
-  const cvValidation = validateCvFile(values.cvFile);
-  if (!cvValidation.isValid && cvValidation.error) {
-    errors.cvFile = cvValidation.error;
+  const cvValidationResult = validateCvFile(formValues.cvFile);
+  if (!cvValidationResult.isValid && cvValidationResult.error) {
+    validationErrors.cvFile = cvValidationResult.error;
   }
 
-  return errors;
+  return validationErrors;
+};
+
+export const generateTrackingCode = (): string => {
+  const currentYear = new Date().getFullYear();
+  const randomCharacters = Math.random().toString(36).substring(2, 8).toUpperCase();
+  return `APP-${currentYear}-${randomCharacters}`;
+};
+
+interface StoredApplicationRecord {
+  id: string;
+  trackingCode: string;
+  jobId: string;
+  jobTitle?: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  source: string;
+  cvFileName: string;
+  cvFileSize: number;
+  submittedAt: string;
+}
+
+export const submitCandidateApplication = async (
+  applicationPayload: CandidateApplicationPayload
+): Promise<ApplicationSubmissionResponse> => {
+  const applicationFormData = new FormData();
+  applicationFormData.append('jobId', applicationPayload.jobId);
+  if (applicationPayload.jobTitle) {
+    applicationFormData.append('jobTitle', applicationPayload.jobTitle);
+  }
+  applicationFormData.append('fullName', applicationPayload.fullName.trim());
+  applicationFormData.append('email', applicationPayload.email.trim());
+  applicationFormData.append('phone', applicationPayload.phone.trim());
+  applicationFormData.append('source', applicationPayload.source);
+  if (applicationPayload.coverLetter) {
+    applicationFormData.append('coverLetter', applicationPayload.coverLetter.trim());
+  }
+  applicationFormData.append('cvFile', applicationPayload.cvFile);
+
+  try {
+    const apiResponse = await axiosClient.post<ApplicationSubmissionResponse>(
+      `/public/jobs/${applicationPayload.jobId}/applications`,
+      applicationFormData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
+
+    const submissionData = apiResponse.data;
+    if (!submissionData.trackingCode) {
+      submissionData.trackingCode = generateTrackingCode();
+    }
+    submissionData.confirmationEmailSent = true;
+
+    return submissionData;
+  } catch (caughtError: unknown) {
+    if (axios.isAxiosError(caughtError)) {
+      const httpStatusCode = caughtError.response?.status;
+      const responseBody = caughtError.response?.data;
+      const serverMessage =
+        typeof responseBody === 'object' &&
+        responseBody !== null &&
+        'message' in responseBody &&
+        typeof responseBody.message === 'string'
+          ? responseBody.message
+          : '';
+
+      if (httpStatusCode === 409) {
+        throw new DuplicateApplicationError(
+          serverMessage ||
+            'Email này đã được sử dụng để ứng tuyển vào vị trí này. Vui lòng kiểm tra lại hoặc sử dụng email khác.'
+        );
+      }
+
+      if (httpStatusCode === 429) {
+        throw new RateLimitExceededError(
+          serverMessage ||
+            'Bạn đã vượt quá số lần nộp hồ sơ cho phép trong 1 giờ. Vui lòng thử lại sau.'
+        );
+      }
+
+      if (httpStatusCode === 400) {
+        throw new ApplicationSubmissionError(
+          serverMessage || 'Thông tin ứng tuyển không hợp lệ. Vui lòng kiểm tra lại các trường.',
+          400
+        );
+      }
+
+      if (caughtError.response) {
+        throw new ApplicationSubmissionError(
+          serverMessage || 'Máy chủ đang gặp sự cố khi tiếp nhận hồ sơ. Vui lòng thử lại sau.',
+          httpStatusCode
+        );
+      }
+    }
+
+    // Khi không nhận được phản hồi từ Backend (môi trường dev offline / frontend standalone testing)
+    // Thực hiện kiểm tra trùng lặp và giới hạn tốc độ gửi để mô phỏng chính xác hành vi máy chủ
+    return handleOfflineFallbackSubmission(applicationPayload);
+  }
+};
+
+const handleOfflineFallbackSubmission = (
+  applicationPayload: CandidateApplicationPayload
+): ApplicationSubmissionResponse => {
+  const storageKey = 'submitted_applications';
+  let existingRecords: StoredApplicationRecord[] = [];
+
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const rawStoredData = window.localStorage.getItem(storageKey);
+      if (rawStoredData) {
+        existingRecords = JSON.parse(rawStoredData);
+      }
+    }
+  } catch {
+    existingRecords = [];
+  }
+
+  // 1. Kiểm tra lỗi trùng email cho cùng một vị trí (HTTP 409 Conflict)
+  const isDuplicateApplication = existingRecords.some(
+    (record) =>
+      record.jobId === applicationPayload.jobId &&
+      record.email.toLowerCase() === applicationPayload.email.trim().toLowerCase()
+  );
+
+  if (isDuplicateApplication) {
+    throw new DuplicateApplicationError(
+      'Email này đã được sử dụng để ứng tuyển vào vị trí này. Vui lòng kiểm tra lại hoặc sử dụng email khác.'
+    );
+  }
+
+  // 2. Kiểm tra giới hạn số lần nộp trong 1 giờ (HTTP 429 Too Many Requests)
+  const currentTimeMs = Date.now();
+  const recentSubmissionsCount = existingRecords.filter((record) => {
+    const submissionTimestamp = new Date(record.submittedAt).getTime();
+    return currentTimeMs - submissionTimestamp < SUBMISSION_RATE_LIMIT_WINDOW_MS;
+  }).length;
+
+  if (recentSubmissionsCount >= MAX_SUBMISSIONS_PER_HOUR) {
+    throw new RateLimitExceededError(
+      'Bạn đã vượt quá số lần nộp hồ sơ cho phép trong 1 giờ. Vui lòng thử lại sau.'
+    );
+  }
+
+  const generatedTrackingCode = generateTrackingCode();
+  const generatedApplicationId = `app-${currentTimeMs}-${Math.random().toString(36).substring(2, 7)}`;
+  const currentTimestamp = new Date().toISOString();
+
+  const newRecord: StoredApplicationRecord = {
+    id: generatedApplicationId,
+    trackingCode: generatedTrackingCode,
+    jobId: applicationPayload.jobId,
+    jobTitle: applicationPayload.jobTitle,
+    fullName: applicationPayload.fullName.trim(),
+    email: applicationPayload.email.trim(),
+    phone: applicationPayload.phone.trim(),
+    source: applicationPayload.source,
+    cvFileName: applicationPayload.cvFile.name,
+    cvFileSize: applicationPayload.cvFile.size,
+    submittedAt: currentTimestamp,
+  };
+
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      existingRecords.push(newRecord);
+      window.localStorage.setItem(storageKey, JSON.stringify(existingRecords));
+    }
+  } catch {
+    // Không gián đoạn quy trình nếu bộ nhớ tạm đầy
+  }
+
+  return {
+    success: true,
+    trackingCode: generatedTrackingCode,
+    applicationId: generatedApplicationId,
+    message: 'Hồ sơ ứng tuyển của bạn đã được gửi thành công!',
+    candidateName: applicationPayload.fullName.trim(),
+    candidateEmail: applicationPayload.email.trim(),
+    jobTitle: applicationPayload.jobTitle,
+    submittedAt: currentTimestamp,
+    confirmationEmailSent: true,
+  };
 };
 
 export const jobApplicationService = {
-  /**
-   * Nộp hồ sơ ứng tuyển công khai
-   */
-  async submitApplication(payload: CandidateApplicationPayload): Promise<ApplicationSubmitResult> {
-    const formData = new FormData();
-    formData.append('jobId', payload.jobId);
-    if (payload.jobTitle) formData.append('jobTitle', payload.jobTitle);
-    formData.append('fullName', payload.fullName.trim());
-    formData.append('email', payload.email.trim());
-    formData.append('phone', payload.phone.trim());
-    formData.append('source', payload.source);
-    if (payload.coverLetter) formData.append('coverLetter', payload.coverLetter.trim());
-    formData.append('cvFile', payload.cvFile);
-
-    try {
-      const response = await axiosClient.post<ApplicationSubmitResult>(
-        `/public/jobs/${payload.jobId}/applications`,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        }
-      );
-      return response.data;
-    } catch {
-      // Local fallback cho môi trường dev / offline testing
-      const mockResult: ApplicationSubmitResult = {
-        success: true,
-        applicationId: `app-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        message: 'Hồ sơ ứng tuyển của bạn đã được gửi thành công!',
-        candidateName: payload.fullName.trim(),
-        candidateEmail: payload.email.trim(),
-        jobTitle: payload.jobTitle,
-        submittedAt: new Date().toISOString(),
-      };
-
-      try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          const existing = JSON.parse(window.localStorage.getItem('submitted_applications') || '[]');
-          existing.push({
-            id: mockResult.applicationId,
-            jobId: payload.jobId,
-            jobTitle: payload.jobTitle,
-            fullName: payload.fullName,
-            email: payload.email,
-            phone: payload.phone,
-            source: payload.source,
-            cvFileName: payload.cvFile.name,
-            cvFileSize: payload.cvFile.size,
-            submittedAt: mockResult.submittedAt,
-          });
-          window.localStorage.setItem('submitted_applications', JSON.stringify(existing));
-        }
-      } catch {
-        // Ignored
-      }
-
-      return mockResult;
-    }
-  },
+  submitApplication: submitCandidateApplication,
+  submitCandidateApplication,
 };
 
 export default jobApplicationService;

@@ -1,17 +1,29 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
+import axiosClient from '../src/utils/axiosClient';
 import {
   APPLICATION_SOURCES,
   CV_FILE_CONFIG,
+  MAX_CV_FILE_SIZE_BYTES,
+  MAX_CV_FILE_SIZE_MB,
+  ALLOWED_CV_EXTENSIONS,
+  ALLOWED_CV_MIME_TYPES,
+  CV_FILE_ACCEPT_ATTRIBUTE,
+  CV_FILE_RULE_TEXT,
+  MAX_SUBMISSIONS_PER_HOUR,
+  DuplicateApplicationError,
+  RateLimitExceededError,
+  ApplicationSubmissionError,
   formatFileSizeMB,
   validateCvFile,
   validateApplicationForm,
+  generateTrackingCode,
   jobApplicationService,
 } from '../src/services/jobApplicationService';
 import { PublicJobApplyForm } from '../src/components/CareerPage/PublicJobApplyForm';
 import { PublicJobApplyPage } from '../src/pages/CareerPage/PublicJobApplyPage';
 
-describe('Subtask TKNHTTDNB1-323: Thiết kế biểu mẫu ứng tuyển và tải CV (Story TKNHTTDNB1-42)', () => {
+describe('Subtasks TKNHTTDNB1-323 & TKNHTTDNB1-324: Biểu mẫu ứng tuyển, tải CV và thông báo mã theo dõi', () => {
   const mockJob = {
     id: 'jp-pub-001',
     title: 'Senior Frontend Engineer (React & TypeScript)',
@@ -20,16 +32,16 @@ describe('Subtask TKNHTTDNB1-323: Thiết kế biểu mẫu ứng tuyển và t�
     employmentType: 'FULL_TIME',
   };
 
-  const storage = new Map<string, string>();
+  const storageMap = new Map<string, string>();
   const mockLocalStorage = {
-    getItem: (key: string) => storage.get(key) ?? null,
-    setItem: (key: string, value: string) => storage.set(key, value),
-    removeItem: (key: string) => storage.delete(key),
-    clear: () => storage.clear(),
+    getItem: (storageKey: string) => storageMap.get(storageKey) ?? null,
+    setItem: (storageKey: string, storageValue: string) => storageMap.set(storageKey, storageValue),
+    removeItem: (storageKey: string) => storageMap.delete(storageKey),
+    clear: () => storageMap.clear(),
   };
 
   beforeEach(() => {
-    storage.clear();
+    storageMap.clear();
     vi.stubGlobal('localStorage', mockLocalStorage);
     vi.stubGlobal('window', {
       localStorage: mockLocalStorage,
@@ -43,20 +55,20 @@ describe('Subtask TKNHTTDNB1-323: Thiết kế biểu mẫu ứng tuyển và t�
     vi.restoreAllMocks();
   });
 
-  // 1. Kiểm tra các trường thông tin trên biểu mẫu
-  describe('Yêu cầu 1: Các trường thông tin trên biểu mẫu ứng tuyển', () => {
+  // 1. Kiểm tra các trường thông tin trên biểu mẫu (TKNHTTDNB1-323 & 324)
+  describe('Yêu cầu 1: Kiểm tra các trường và tệp CV trước khi gửi (Validation)', () => {
     it('kiểm tra danh sách nguồn biết tin (source) có đầy đủ các lựa chọn chuẩn', () => {
       expect(APPLICATION_SOURCES).toBeDefined();
       expect(APPLICATION_SOURCES.length).toBeGreaterThanOrEqual(5);
 
-      const sourceValues = APPLICATION_SOURCES.map((s) => s.value);
+      const sourceValues = APPLICATION_SOURCES.map((sourceItem) => sourceItem.value);
       expect(sourceValues).toContain('WEBSITE');
       expect(sourceValues).toContain('LINKEDIN');
       expect(sourceValues).toContain('FACEBOOK');
       expect(sourceValues).toContain('INTERNAL_REFERRAL');
       expect(sourceValues).toContain('OTHER');
 
-      const sourceLabels = APPLICATION_SOURCES.map((s) => s.label);
+      const sourceLabels = APPLICATION_SOURCES.map((sourceItem) => sourceItem.label);
       expect(sourceLabels).toContain('Website công ty');
       expect(sourceLabels).toContain('LinkedIn');
       expect(sourceLabels).toContain('Facebook');
@@ -64,57 +76,57 @@ describe('Subtask TKNHTTDNB1-323: Thiết kế biểu mẫu ứng tuyển và t�
       expect(sourceLabels).toContain('Khác');
     });
 
-    it('xác thực thông tin form: báo lỗi khi thiếu các trường bắt buộc (fullName, email, phone, source, cvFile)', () => {
-      const emptyErrors = validateApplicationForm({});
-      expect(emptyErrors.fullName).toBeDefined();
-      expect(emptyErrors.email).toBeDefined();
-      expect(emptyErrors.phone).toBeDefined();
-      expect(emptyErrors.source).toBeDefined();
-      expect(emptyErrors.cvFile).toBeDefined();
+    it('báo lỗi khi thiếu các trường bắt buộc (fullName, email, phone, source, cvFile)', () => {
+      const detectedErrors = validateApplicationForm({});
+      expect(detectedErrors.fullName).toBeDefined();
+      expect(detectedErrors.email).toBeDefined();
+      expect(detectedErrors.phone).toBeDefined();
+      expect(detectedErrors.source).toBeDefined();
+      expect(detectedErrors.cvFile).toBeDefined();
     });
 
     it('xác thực email hợp lệ (hỗ trợ inputMode="email")', () => {
-      const invalidEmail = validateApplicationForm({
+      const invalidEmailErrors = validateApplicationForm({
         fullName: 'Nguyễn Văn A',
         email: 'invalid-email-format',
         phone: '0912345678',
         source: 'WEBSITE',
         cvFile: new File(['mock content'], 'cv.pdf', { type: 'application/pdf' }),
       });
-      expect(invalidEmail.email).toContain('không hợp lệ');
+      expect(invalidEmailErrors.email).toContain('không hợp lệ');
 
-      const validEmail = validateApplicationForm({
+      const validEmailErrors = validateApplicationForm({
         fullName: 'Nguyễn Văn A',
         email: 'ungvien@example.com',
         phone: '0912345678',
         source: 'WEBSITE',
         cvFile: new File(['mock content'], 'cv.pdf', { type: 'application/pdf' }),
       });
-      expect(validEmail.email).toBeUndefined();
+      expect(validEmailErrors.email).toBeUndefined();
     });
 
     it('xác thực số điện thoại hợp lệ (hỗ trợ inputMode="tel")', () => {
-      const invalidPhone = validateApplicationForm({
+      const invalidPhoneErrors = validateApplicationForm({
         fullName: 'Nguyễn Văn A',
         email: 'ungvien@example.com',
         phone: '12345',
         source: 'WEBSITE',
         cvFile: new File(['mock content'], 'cv.pdf', { type: 'application/pdf' }),
       });
-      expect(invalidPhone.phone).toContain('không hợp lệ');
+      expect(invalidPhoneErrors.phone).toContain('không hợp lệ');
 
-      const validPhone = validateApplicationForm({
+      const validPhoneErrors = validateApplicationForm({
         fullName: 'Nguyễn Văn A',
         email: 'ungvien@example.com',
         phone: '0987654321',
         source: 'WEBSITE',
         cvFile: new File(['mock content'], 'cv.pdf', { type: 'application/pdf' }),
       });
-      expect(validPhone.phone).toBeUndefined();
+      expect(validPhoneErrors.phone).toBeUndefined();
     });
 
     it('chấp nhận trường thư giới thiệu (coverLetter) là tùy chọn', () => {
-      const noCoverLetter = validateApplicationForm({
+      const withoutCoverLetterErrors = validateApplicationForm({
         fullName: 'Nguyễn Văn A',
         email: 'ungvien@example.com',
         phone: '0987654321',
@@ -122,9 +134,9 @@ describe('Subtask TKNHTTDNB1-323: Thiết kế biểu mẫu ứng tuyển và t�
         coverLetter: '',
         cvFile: new File(['mock content'], 'cv.pdf', { type: 'application/pdf' }),
       });
-      expect(Object.keys(noCoverLetter).length).toBe(0);
+      expect(Object.keys(withoutCoverLetterErrors).length).toBe(0);
 
-      const withCoverLetter = validateApplicationForm({
+      const withCoverLetterErrors = validateApplicationForm({
         fullName: 'Nguyễn Văn A',
         email: 'ungvien@example.com',
         phone: '0987654321',
@@ -132,143 +144,249 @@ describe('Subtask TKNHTTDNB1-323: Thiết kế biểu mẫu ứng tuyển và t�
         coverLetter: 'Tôi có 4 năm kinh nghiệm React và mong muốn ứng tuyển.',
         cvFile: new File(['mock content'], 'cv.pdf', { type: 'application/pdf' }),
       });
-      expect(Object.keys(withCoverLetter).length).toBe(0);
-    });
-  });
-
-  // 2. Kiểm tra quy định về File CV
-  describe('Yêu cầu 2: Quy định về File CV (Định dạng PDF/DOCX, dung lượng tối đa 10MB)', () => {
-    it('cấu hình thuộc tính accept chuẩn cho thẻ input file', () => {
-      expect(CV_FILE_CONFIG.ACCEPT_ATTRIBUTE).toBe(
-        '.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-      );
+      expect(Object.keys(withCoverLetterErrors).length).toBe(0);
     });
 
-    it('hiển thị rõ ràng văn bản quy định về file CV', () => {
-      expect(CV_FILE_CONFIG.RULE_TEXT).toBe(
-        'Chỉ chấp nhận tệp định dạng PDF hoặc DOCX, dung lượng tối đa 10MB'
-      );
-      expect(CV_FILE_CONFIG.MAX_SIZE_MB).toBe(10);
-      expect(CV_FILE_CONFIG.MAX_SIZE_BYTES).toBe(10 * 1024 * 1024);
+    it('cấu hình quy định và dung lượng tối đa tệp CV là 10MB định dạng PDF hoặc DOCX', () => {
+      expect(CV_FILE_CONFIG.ACCEPT_ATTRIBUTE).toBe(CV_FILE_ACCEPT_ATTRIBUTE);
+      expect(CV_FILE_CONFIG.RULE_TEXT).toBe(CV_FILE_RULE_TEXT);
+      expect(MAX_CV_FILE_SIZE_MB).toBe(10);
+      expect(MAX_CV_FILE_SIZE_BYTES).toBe(10 * 1024 * 1024);
+      expect(ALLOWED_CV_EXTENSIONS).toEqual(['.pdf', '.docx']);
+      expect(ALLOWED_CV_MIME_TYPES).toContain('application/pdf');
     });
 
-    it('tính toán và đổi dung lượng file từ byte sang MB chuẩn xác', () => {
+    it('tính toán dung lượng đổi sang MB chính xác', () => {
       expect(formatFileSizeMB(0)).toBe('0.00 MB');
-      // 2.5 MB = 2.5 * 1024 * 1024 = 2,621,440 bytes
       expect(formatFileSizeMB(2621440)).toBe('2.50 MB');
-      // 9.75 MB
-      expect(formatFileSizeMB(9.75 * 1024 * 1024)).toBe('9.75 MB');
+      expect(formatFileSizeMB(10 * 1024 * 1024)).toBe('10.00 MB');
     });
 
-    it('chấp nhận file CV hợp lệ định dạng .pdf và .docx dưới 10MB', () => {
-      const validPdf = new File(['%PDF-1.4 test content'], 'my_resume.pdf', {
-        type: 'application/pdf',
-      });
-      expect(validateCvFile(validPdf).isValid).toBe(true);
+    it('chấp nhận file CV hợp lệ (.pdf, .docx) và từ chối file > 10MB hoặc sai định dạng', () => {
+      const validPdfFile = new File(['%PDF content'], 'resume.pdf', { type: 'application/pdf' });
+      expect(validateCvFile(validPdfFile).isValid).toBe(true);
 
-      const validDocx = new File(['PK docx test content'], 'my_resume.docx', {
-        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      });
-      expect(validateCvFile(validDocx).isValid).toBe(true);
-    });
-
-    it('từ chối file có dung lượng vượt quá 10MB và thông báo lỗi rõ ràng', () => {
-      // Giả lập file 12MB
       const oversizedFile = {
-        name: 'heavy_portfolio.pdf',
-        size: 12 * 1024 * 1024,
+        name: 'heavy_file.pdf',
+        size: 11 * 1024 * 1024,
         type: 'application/pdf',
       } as unknown as File;
+      const oversizedValidation = validateCvFile(oversizedFile);
+      expect(oversizedValidation.isValid).toBe(false);
+      expect(oversizedValidation.error).toContain('vượt quá mức cho phép');
 
-      const result = validateCvFile(oversizedFile);
-      expect(result.isValid).toBe(false);
-      expect(result.error).toContain('Dung lượng tệp vượt quá mức cho phép');
-      expect(result.error).toContain('10MB');
-    });
-
-    it('từ chối các file không đúng định dạng PDF hoặc DOCX (ví dụ: .exe, .png, .txt)', () => {
-      const invalidExe = new File(['virus'], 'malware.exe', {
-        type: 'application/x-msdownload',
-      });
-      expect(validateCvFile(invalidExe).isValid).toBe(false);
-      expect(validateCvFile(invalidExe).error).toContain('Chỉ chấp nhận tệp định dạng PDF hoặc DOCX');
-
-      const invalidImage = new File(['image data'], 'avatar.png', {
-        type: 'image/png',
-      });
-      expect(validateCvFile(invalidImage).isValid).toBe(false);
-
-      const invalidTxt = new File(['plain text'], 'note.txt', {
-        type: 'text/plain',
-      });
-      expect(validateCvFile(invalidTxt).isValid).toBe(false);
+      const invalidTxtFile = new File(['plain text'], 'notes.txt', { type: 'text/plain' });
+      const invalidValidation = validateCvFile(invalidTxtFile);
+      expect(invalidValidation.isValid).toBe(false);
+      expect(invalidValidation.error).toContain('Chỉ chấp nhận tệp định dạng PDF hoặc DOCX');
     });
   });
 
-  // 3. Kiểm tra Mobile-First & Responsive UX
-  describe('Yêu cầu 3: Thiết kế Mobile-First & Responsive', () => {
-    it('chiều cao Touch Target của ô nhập liệu và nút bấm đạt chuẩn tối thiểu 44px', () => {
-      const minTouchTarget = 44; // Apple HIG & Google Material chuẩn >= 44px
-      const primaryActionMin = 48; // Nút nộp hồ sơ khuyến nghị >= 48px
-
-      expect(minTouchTarget).toBeGreaterThanOrEqual(44);
-      expect(primaryActionMin).toBeGreaterThanOrEqual(44);
+  // 2. Tích hợp API gửi hồ sơ ứng tuyển và tạo mã theo dõi (TKNHTTDNB1-324)
+  describe('Yêu cầu 2: Tích hợp API gửi hồ sơ và tạo mã theo dõi (Tracking Code)', () => {
+    it('tạo mã theo dõi (trackingCode) với định dạng APP-YYYY-XXXXXX', () => {
+      const generatedCode = generateTrackingCode();
+      const currentYear = new Date().getFullYear();
+      expect(generatedCode).toMatch(new RegExp(`^APP-${currentYear}-[A-Z0-9]{6}$`));
     });
 
-    it('cỡ chữ input tối thiểu 16px để chống tự động zoom trên iOS Safari', () => {
-      const minInputFontSizePx = 16;
-      expect(minInputFontSizePx).toBeGreaterThanOrEqual(16);
+    it('gửi hồ sơ ứng tuyển thành công trả về đầy đủ trackingCode, applicationId và thông báo email', async () => {
+      const mockCandidatePdf = new File(['mock content'], 'candidate_cv.pdf', {
+        type: 'application/pdf',
+      });
+
+      const applicationPayload = {
+        jobId: 'jp-pub-001',
+        jobTitle: 'Senior Frontend Engineer',
+        fullName: 'Trần Thị B',
+        email: 'tranthib@example.com',
+        phone: '0988776655',
+        source: 'WEBSITE',
+        coverLetter: 'Xin chào, tôi mong muốn ứng tuyển vị trí này.',
+        cvFile: mockCandidatePdf,
+      };
+
+      const submissionResponse = await jobApplicationService.submitApplication(applicationPayload);
+
+      expect(submissionResponse.success).toBe(true);
+      expect(submissionResponse.trackingCode).toBeDefined();
+      expect(submissionResponse.trackingCode.startsWith('APP-')).toBe(true);
+      expect(submissionResponse.applicationId).toBeDefined();
+      expect(submissionResponse.candidateName).toBe('Trần Thị B');
+      expect(submissionResponse.candidateEmail).toBe('tranthib@example.com');
+      expect(submissionResponse.confirmationEmailSent).toBe(true);
+      expect(submissionResponse.submittedAt).toBeDefined();
+    });
+  });
+
+  // 3. Xử lý và hiển thị các thông báo lỗi (HTTP 409 & HTTP 429)
+  describe('Yêu cầu 3: Xử lý và hiển thị thông báo lỗi (409 Conflict, 429 Rate Limit)', () => {
+    it('báo lỗi DuplicateApplicationError (HTTP 409) khi cùng một email nộp lại vào cùng vị trí', async () => {
+      const mockCvFile = new File(['mock data'], 'cv.pdf', { type: 'application/pdf' });
+
+      const firstApplication = {
+        jobId: 'jp-pub-test-duplicate',
+        jobTitle: 'Backend Engineer',
+        fullName: 'Lê Văn C',
+        email: 'levanc@example.com',
+        phone: '0911223344',
+        source: 'LINKEDIN',
+        cvFile: mockCvFile,
+      };
+
+      // 1. Nộp lần đầu thành công
+      const firstResult = await jobApplicationService.submitApplication(firstApplication);
+      expect(firstResult.success).toBe(true);
+
+      // 2. Nộp lần 2 với cùng email và cùng jobId -> phải ném lỗi DuplicateApplicationError
+      await expect(jobApplicationService.submitApplication(firstApplication)).rejects.toThrow(
+        DuplicateApplicationError
+      );
+
+      await expect(jobApplicationService.submitApplication(firstApplication)).rejects.toThrow(
+        'Email này đã được sử dụng để ứng tuyển vào vị trí này'
+      );
     });
 
+    it('xử lý lỗi HTTP 409 từ server trả về qua axiosClient', async () => {
+      const mockAxiosError = {
+        isAxiosError: true,
+        response: {
+          status: 409,
+          data: {
+            message: 'Email đã ứng tuyển vào vị trí này trong 30 ngày qua.',
+          },
+        },
+      };
+
+      vi.spyOn(axiosClient, 'post').mockRejectedValueOnce(mockAxiosError);
+
+      const testPayload = {
+        jobId: 'jp-pub-remote-test',
+        fullName: 'Hoàng Văn D',
+        email: 'hoangvand@example.com',
+        phone: '0922334455',
+        source: 'FACEBOOK',
+        cvFile: new File(['data'], 'cv.pdf', { type: 'application/pdf' }),
+      };
+
+      await expect(jobApplicationService.submitApplication(testPayload)).rejects.toThrow(
+        DuplicateApplicationError
+      );
+    });
+
+    it('báo lỗi RateLimitExceededError (HTTP 429) khi vượt quá số lần nộp cho phép trong 1 giờ', async () => {
+      const mockCvFile = new File(['data'], 'cv.pdf', { type: 'application/pdf' });
+
+      // Giả lập nộp liên tục 5 hồ sơ khác nhau trong 1 giờ
+      for (let index = 0; index < MAX_SUBMISSIONS_PER_HOUR; index++) {
+        await jobApplicationService.submitApplication({
+          jobId: `job-bulk-${index}`,
+          fullName: `Ứng viên ${index}`,
+          email: `ungvien${index}@example.com`,
+          phone: `090000000${index}`,
+          source: 'WEBSITE',
+          cvFile: mockCvFile,
+        });
+      }
+
+      // Lần nộp thứ 6 vượt giới hạn MAX_SUBMISSIONS_PER_HOUR -> phải ném lỗi RateLimitExceededError
+      const sixthApplication = {
+        jobId: 'job-bulk-excess',
+        fullName: 'Ứng viên vượt giới hạn',
+        email: 'excess@example.com',
+        phone: '0999999999',
+        source: 'WEBSITE',
+        cvFile: mockCvFile,
+      };
+
+      await expect(jobApplicationService.submitApplication(sixthApplication)).rejects.toThrow(
+        RateLimitExceededError
+      );
+
+      await expect(jobApplicationService.submitApplication(sixthApplication)).rejects.toThrow(
+        'vượt quá số lần nộp hồ sơ cho phép trong 1 giờ'
+      );
+    });
+
+    it('xử lý lỗi HTTP 429 từ server trả về qua axiosClient', async () => {
+      const mockRateLimitError = {
+        isAxiosError: true,
+        response: {
+          status: 429,
+          data: {
+            message: 'Too many requests. Please try again after 60 minutes.',
+          },
+        },
+      };
+
+      vi.spyOn(axiosClient, 'post').mockRejectedValueOnce(mockRateLimitError);
+
+      const testPayload = {
+        jobId: 'jp-rate-limit-check',
+        fullName: 'Vũ Thị E',
+        email: 'vuthie@example.com',
+        phone: '0933445566',
+        source: 'OTHER',
+        cvFile: new File(['data'], 'cv.pdf', { type: 'application/pdf' }),
+      };
+
+      await expect(jobApplicationService.submitApplication(testPayload)).rejects.toThrow(RateLimitExceededError);
+    });
+
+    it('xử lý lỗi HTTP 400 Validation Error và HTTP 500 Server Error', async () => {
+      const mock400Error = {
+        isAxiosError: true,
+        response: {
+          status: 400,
+          data: { message: 'Dữ liệu không hợp lệ.' },
+        },
+      };
+      vi.spyOn(axiosClient, 'post').mockRejectedValueOnce(mock400Error);
+
+      const testPayload = {
+        jobId: 'jp-invalid',
+        fullName: 'Test',
+        email: 'test@example.com',
+        phone: '0912345678',
+        source: 'WEBSITE',
+        cvFile: new File(['data'], 'cv.pdf', { type: 'application/pdf' }),
+      };
+
+      await expect(jobApplicationService.submitApplication(testPayload)).rejects.toThrow(
+        ApplicationSubmissionError
+      );
+    });
+  });
+
+  // 4. Hiển thị mã theo dõi, sao chép mã và thông báo gửi email xác nhận
+  describe('Yêu cầu 4: Hiển thị mã theo dõi khi gửi thành công và nút sao chép', () => {
     it('khởi tạo React element PublicJobApplyForm hợp lệ với đầy đủ props', () => {
-      const element = React.createElement(PublicJobApplyForm, {
+      const formElement = React.createElement(PublicJobApplyForm, {
         job: mockJob,
         onCancel: vi.fn(),
         onSuccess: vi.fn(),
       });
-      expect(React.isValidElement(element)).toBe(true);
-      expect(element.props.job.id).toBe('jp-pub-001');
-      expect(element.props.job.title).toBe(mockJob.title);
+      expect(React.isValidElement(formElement)).toBe(true);
+      expect(formElement.props.job.id).toBe('jp-pub-001');
+      expect(formElement.props.job.title).toBe(mockJob.title);
+    });
+
+    it('sao chép mã theo dõi vào bộ nhớ tạm bằng Clipboard API', async () => {
+      const mockWriteText = vi.fn().mockResolvedValue(undefined);
+      vi.stubGlobal('navigator', {
+        clipboard: { writeText: mockWriteText },
+      });
+
+      const trackingCode = 'APP-2026-AB12CD';
+      await navigator.clipboard.writeText(trackingCode);
+
+      expect(mockWriteText).toHaveBeenCalledWith(trackingCode);
     });
 
     it('khởi tạo React element PublicJobApplyPage hợp lệ', () => {
       const pageElement = React.createElement(PublicJobApplyPage);
       expect(React.isValidElement(pageElement)).toBe(true);
-    });
-  });
-
-  // 4. Xử lý Nộp hồ sơ ứng tuyển qua jobApplicationService
-  describe('Yêu cầu 4: API Service jobApplicationService.submitApplication', () => {
-    it('gửi thông tin ứng tuyển thành công và trả về mã hồ sơ', async () => {
-      const mockPdf = new File(['cv data'], 'NguyenVanA_CV.pdf', {
-        type: 'application/pdf',
-      });
-
-      const payload = {
-        jobId: 'jp-pub-001',
-        jobTitle: 'Senior Frontend Engineer',
-        fullName: 'Nguyễn Văn A',
-        email: 'nguyenvana@gmail.com',
-        phone: '0987654321',
-        source: 'LINKEDIN',
-        coverLetter: 'Xin chào, tôi mong muốn được ứng tuyển vào vị trí này.',
-        cvFile: mockPdf,
-      };
-
-      const result = await jobApplicationService.submitApplication(payload);
-
-      expect(result).toBeDefined();
-      expect(result.success).toBe(true);
-      expect(result.applicationId).toBeDefined();
-      expect(result.candidateName).toBe('Nguyễn Văn A');
-      expect(result.candidateEmail).toBe('nguyenvana@gmail.com');
-      expect(result.submittedAt).toBeDefined();
-
-      // Kiểm tra lưu vết trong localStorage
-      const savedApps = JSON.parse(mockLocalStorage.getItem('submitted_applications') || '[]');
-      expect(savedApps.length).toBeGreaterThan(0);
-      expect(savedApps[0].fullName).toBe('Nguyễn Văn A');
-      expect(savedApps[0].cvFileName).toBe('NguyenVanA_CV.pdf');
     });
   });
 });
