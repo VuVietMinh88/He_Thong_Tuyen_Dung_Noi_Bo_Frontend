@@ -25,7 +25,7 @@ export interface MergeHistoryRecord {
   id: string;
   primaryCandidateId: string;
   duplicateCandidateId: string;
-  mergedAt: string; // ISO timestamp
+  mergedAt: string; // ISO timestamp (Asia/Ho_Chi_Minh)
   expiresAt: string; // 24 giờ sau mergedAt
   canUndo: boolean;
   originalPrimary: UnifiedCandidate;
@@ -33,3 +33,19 @@ export interface MergeHistoryRecord {
   fieldSelections: MergeFieldSelection;
 }
 
+export interface MergeCandidatesPayload {
+  primaryCandidateId: string;
+  duplicateCandidateId: string;
+  fieldSelections: MergeFieldSelection;
+}
+
+export interface DuplicateCheckParams {
+  email?: string;
+  phone?: string;
+  candidateId?: string;
+}
+
+export interface MergeResultResponse {
+  mergedCandidate: UnifiedCandidate;
+  mergeRecord: MergeHistoryRecord;
+}

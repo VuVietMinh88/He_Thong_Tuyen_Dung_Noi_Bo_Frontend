@@ -21,7 +21,7 @@ import type {
 } from '../../types/duplicateCandidate';
 import type { UnifiedCandidate } from '../../types/candidate';
 import { CANDIDATE_STAGE_CONFIG } from '../../types/candidate';
-import { duplicateCandidateService } from '../../services/duplicateCandidateService';
+import { candidateMergeService } from '../../services/candidateMergeService';
 
 interface DuplicateCandidateCompareModalProps {
   comparison: DuplicateCandidateComparison;
@@ -57,17 +57,7 @@ export const DuplicateCandidateCompareModal: React.FC<DuplicateCandidateCompareM
   if (!isOpen) return null;
 
   const formatDateVN = (dateString: string): string => {
-    try {
-      const date = new Date(dateString);
-      return new Intl.DateTimeFormat('vi-VN', {
-        timeZone: 'Asia/Ho_Chi_Minh',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-      }).format(date);
-    } catch {
-      return dateString;
-    }
+    return candidateMergeService.formatVietnamDateTime(dateString);
   };
 
   const handleSelectField = (field: keyof MergeFieldSelection, source: CandidateDataSource) => {
@@ -78,11 +68,11 @@ export const DuplicateCandidateCompareModal: React.FC<DuplicateCandidateCompareM
     try {
       setIsSubmitting(true);
       setError(null);
-      const { mergedCandidate } = await duplicateCandidateService.mergeCandidates(
-        primaryCandidate,
-        duplicateCandidate,
-        selections
-      );
+      const { mergedCandidate } = await candidateMergeService.mergeCandidates({
+        primaryCandidateId: primaryCandidate.id,
+        duplicateCandidateId: duplicateCandidate.id,
+        fieldSelections: selections,
+      });
       setShowConfirmModal(false);
       onMergeSuccess(mergedCandidate);
       onClose();
@@ -488,12 +478,57 @@ export const DuplicateCandidateCompareModal: React.FC<DuplicateCandidateCompareM
               </div>
             </div>
 
-            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-              Hồ sơ <strong className="text-slate-900">{duplicateCandidate.candidateCode}</strong> sẽ được hợp nhất vào{' '}
-              <strong className="text-slate-900">{primaryCandidate.candidateCode}</strong>.
-              Toàn bộ lịch sử các đợt ứng tuyển, CV, Tags và Notes sẽ được giữ nguyên.
-              Bạn có <strong>24 giờ</strong> để hoàn tác thao tác này.
-            </p>
+            <div className="space-y-2">
+              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                Hồ sơ <strong className="text-slate-900">{duplicateCandidate.candidateCode}</strong> sẽ được hợp nhất vào{' '}
+                <strong className="text-slate-900">{primaryCandidate.candidateCode}</strong>.
+              </p>
+
+              {/* Tóm tắt thông tin chính đã chọn giữ lại (AC 2) */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1.5 text-xs">
+                <span className="font-bold text-slate-800 block mb-1">Tóm tắt thông tin chuẩn được giữ lại:</span>
+                <div className="flex justify-between text-slate-600">
+                  <span>Họ và tên:</span>
+                  <strong className="text-slate-900">
+                    {selections.fullName === 'primary' ? primaryCandidate.fullName : duplicateCandidate.fullName}
+                  </strong>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Email liên hệ:</span>
+                  <strong className="text-slate-900 font-mono">
+                    {selections.email === 'primary' ? primaryCandidate.email : duplicateCandidate.email}
+                  </strong>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Số điện thoại:</span>
+                  <strong className="text-slate-900 font-mono">
+                    {selections.phone === 'primary' ? primaryCandidate.phone : duplicateCandidate.phone}
+                  </strong>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Chức danh:</span>
+                  <strong className="text-slate-900">
+                    {selections.currentTitle === 'primary'
+                      ? primaryCandidate.currentTitle || 'Mặc định'
+                      : duplicateCandidate.currentTitle || 'Mặc định'}
+                  </strong>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Đánh giá sao:</span>
+                  <strong className="text-amber-600 font-bold">
+                    {selections.rating === 'primary' ? primaryCandidate.rating : duplicateCandidate.rating} / 5 sao
+                  </strong>
+                </div>
+              </div>
+
+              {/* Cam kết bảo toàn dữ liệu */}
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-2.5 text-xs text-emerald-900 flex items-start gap-2">
+                <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                <span className="leading-relaxed">
+                  <strong>Bảo toàn 100%:</strong> Toàn bộ lịch sử các đợt ứng tuyển ({allApplications.length} đợt), tệp CV, Nhãn (Tags) và Ghi chú nội bộ của cả hai hồ sơ sẽ được tích hợp đầy đủ và có thể hoàn tác trong vòng <strong>24 giờ</strong>.
+                </span>
+              </div>
+            </div>
 
             <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
               <button
