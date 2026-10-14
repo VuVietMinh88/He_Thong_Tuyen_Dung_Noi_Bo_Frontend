@@ -17,7 +17,6 @@ import {
   Building2,
   Clock,
   Send,
-  Check,
   ChevronRight,
 } from 'lucide-react';
 import type { JobPostingData } from '../../services/jobPostingService';
@@ -27,9 +26,10 @@ import {
   formatJobLevel,
   getDeadlineStatus,
 } from '../../services/jobPostingService';
-import { useToast } from '../notifications/useToast';
+import { toast } from '../notifications';
 import JobDeadlineBadge from './JobDeadlineBadge';
 import JobExpiredBanner from './JobExpiredBanner';
+import PublicJobApplyForm from './PublicJobApplyForm';
 
 export interface MobileJobDetailsProps {
   job: JobPostingData;
@@ -42,13 +42,9 @@ export const MobileJobDetails: React.FC<MobileJobDetailsProps> = ({
   onBack,
   onApplySuccess,
 }) => {
-  let notify: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void = () => {};
-  try {
-    const toast = useToast();
-    notify = toast.notify;
-  } catch {
-    // Graceful fallback if rendered outside ToastProvider
-  }
+  const notify = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
+    toast[type](message);
+  };
 
   // State: Lưu tin tuyển dụng (Bookmark)
   const [isSaved, setIsSaved] = useState<boolean>(() => {
@@ -63,13 +59,6 @@ export const MobileJobDetails: React.FC<MobileJobDetailsProps> = ({
 
   // State: Mở Form Ứng tuyển nhanh
   const [isApplyDrawerOpen, setIsApplyDrawerOpen] = useState(false);
-  const [candidateName, setCandidateName] = useState('');
-  const [candidateEmail, setCandidateEmail] = useState('');
-  const [candidatePhone, setCandidatePhone] = useState('');
-  const [candidateNote, setCandidateNote] = useState('');
-  const [cvFileName, setCvFileName] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSubmittedSuccess, setIsSubmittedSuccess] = useState(false);
 
   // Định dạng thông tin hiển thị
   const salaryText = formatSalaryDisplay(job);
@@ -125,22 +114,6 @@ export const MobileJobDetails: React.FC<MobileJobDetailsProps> = ({
     notify('Đã sao chép liên kết tin tuyển dụng vào bộ nhớ tạm!', 'success');
   };
 
-  // Xử lý nộp hồ sơ ứng tuyển
-  const handleSubmitApplication = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!candidateName.trim() || !candidateEmail.trim() || !candidatePhone.trim()) {
-      notify('Vui lòng điền đầy đủ họ tên, email và số điện thoại.', 'error');
-      return;
-    }
-
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setIsSubmittedSuccess(true);
-      notify('Nộp hồ sơ ứng tuyển thành công! Nhà tuyển dụng sẽ sớm liên hệ với bạn.', 'success');
-      if (onApplySuccess) onApplySuccess();
-    }, 700);
-  };
 
   // Cuộn mượt lên đầu trang khi component mount
   useEffect(() => {
@@ -572,161 +545,22 @@ export const MobileJobDetails: React.FC<MobileJobDetailsProps> = ({
           {/* Backdrop click to close */}
           <div
             className="flex-1"
-            onClick={() => !isSubmitting && setIsApplyDrawerOpen(false)}
+            onClick={() => setIsApplyDrawerOpen(false)}
           />
 
           {/* Bottom Sheet Modal */}
-          <div className="relative max-h-[90vh] w-full max-w-2xl mx-auto rounded-t-3xl bg-white p-5 sm:p-6 shadow-2xl overflow-y-auto animate-in slide-in-from-bottom duration-300">
+          <div className="relative max-h-[92vh] w-full max-w-2xl mx-auto rounded-t-3xl bg-white p-4 sm:p-6 shadow-2xl overflow-y-auto animate-in slide-in-from-bottom duration-300">
             {/* Thanh kéo trang trí */}
-            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-200" />
+            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-200" />
 
-            {isSubmittedSuccess ? (
-              <div className="py-8 text-center space-y-4">
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-                  <Check className="h-8 w-8" />
-                </div>
-                <h3 className="text-xl font-black text-slate-900">
-                  Ứng tuyển thành công!
-                </h3>
-                <p className="text-xs text-slate-600 leading-relaxed max-w-sm mx-auto">
-                  Hồ sơ cho vị trí <strong>{job.title}</strong> đã được gửi tới bộ phận Tuyển dụng. Chúng tôi sẽ phản hồi trong vòng 2 ngày làm việc.
-                </p>
-                <button
-                  type="button"
-                  data-testid="finish-apply-button"
-                  onClick={() => {
-                    setIsApplyDrawerOpen(false);
-                    setIsSubmittedSuccess(false);
-                  }}
-                  className="w-full min-h-[48px] rounded-xl bg-indigo-600 text-sm font-bold text-white shadow-md hover:bg-indigo-700"
-                >
-                  Xác nhận &amp; Đóng
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmitApplication} className="space-y-4">
-                <div className="border-b border-slate-100 pb-3">
-                  <h3 className="text-base font-extrabold text-slate-900">
-                    Ứng tuyển: {job.title}
-                  </h3>
-                  <p className="text-[11px] text-slate-500">
-                    Điền nhanh thông tin dưới đây để nhận lịch phỏng vấn sớm nhất.
-                  </p>
-                </div>
-
-                {/* Họ tên */}
-                <div>
-                  <label htmlFor="cand-name" className="block text-xs font-bold text-slate-700 mb-1">
-                    Họ và tên *
-                  </label>
-                  <input
-                    id="cand-name"
-                    type="text"
-                    required
-                    value={candidateName}
-                    onChange={(e) => setCandidateName(e.target.value)}
-                    placeholder="Ví dụ: Nguyễn Văn A"
-                    className="w-full min-h-[44px] rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                  />
-                </div>
-
-                {/* Email & Phone */}
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label htmlFor="cand-email" className="block text-xs font-bold text-slate-700 mb-1">
-                      Địa chỉ Email *
-                    </label>
-                    <input
-                      id="cand-email"
-                      type="email"
-                      required
-                      value={candidateEmail}
-                      onChange={(e) => setCandidateEmail(e.target.value)}
-                      placeholder="email@example.com"
-                      className="w-full min-h-[44px] rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="cand-phone" className="block text-xs font-bold text-slate-700 mb-1">
-                      Số điện thoại *
-                    </label>
-                    <input
-                      id="cand-phone"
-                      type="tel"
-                      required
-                      value={candidatePhone}
-                      onChange={(e) => setCandidatePhone(e.target.value)}
-                      placeholder="0912 345 678"
-                      className="w-full min-h-[44px] rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                    />
-                  </div>
-                </div>
-
-                {/* Tải CV */}
-                <div>
-                  <label htmlFor="cand-cv" className="block text-xs font-bold text-slate-700 mb-1">
-                    Tải lên CV (PDF / DOCX)
-                  </label>
-                  <input
-                    id="cand-cv"
-                    type="file"
-                    accept=".pdf,.doc,.docx"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        setCvFileName(e.target.files[0].name);
-                      }
-                    }}
-                    className="w-full min-h-[44px] cursor-pointer rounded-xl border border-dashed border-slate-300 bg-slate-50/50 px-3 py-2 text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-indigo-700"
-                  />
-                  {cvFileName && (
-                    <p className="mt-1 text-[11px] text-emerald-600 font-semibold">
-                      ✓ Đã chọn: {cvFileName}
-                    </p>
-                  )}
-                </div>
-
-                {/* Lời nhắn */}
-                <div>
-                  <label htmlFor="cand-note" className="block text-xs font-bold text-slate-700 mb-1">
-                    Lời nhắn / Giới thiệu bản thân
-                  </label>
-                  <textarea
-                    id="cand-note"
-                    rows={2}
-                    value={candidateNote}
-                    onChange={(e) => setCandidateNote(e.target.value)}
-                    placeholder="Mô tả tóm tắt kinh nghiệm hoặc kỹ năng nổi bật của bạn..."
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                  />
-                </div>
-
-                {/* Nút hành động */}
-                <div className="flex items-center gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsApplyDrawerOpen(false)}
-                    disabled={isSubmitting}
-                    className="min-h-[48px] rounded-xl border border-slate-200 px-4 text-xs font-bold text-slate-600 hover:bg-slate-50"
-                  >
-                    Đóng
-                  </button>
-                  <button
-                    type="submit"
-                    data-testid="submit-application-button"
-                    disabled={isSubmitting}
-                    className="flex flex-1 min-h-[48px] items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-bold text-white shadow-md shadow-indigo-600/30 hover:bg-indigo-700 disabled:opacity-50"
-                  >
-                    {isSubmitting ? (
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    ) : (
-                      <Send className="h-4 w-4" />
-                    )}
-                    Nộp hồ sơ ngay
-                  </button>
-                </div>
-              </form>
-            )}
+            <PublicJobApplyForm
+              job={job}
+              isModalOrDrawer={true}
+              onCancel={() => setIsApplyDrawerOpen(false)}
+              onSuccess={() => {
+                if (onApplySuccess) onApplySuccess();
+              }}
+            />
           </div>
         </div>
       )}

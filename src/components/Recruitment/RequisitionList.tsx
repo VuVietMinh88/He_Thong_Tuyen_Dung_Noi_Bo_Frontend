@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { differenceInDays, parseISO, startOfDay } from 'date-fns';
 import { AlertCircle, X, Edit, Copy, Inbox, RefreshCcw } from 'lucide-react';
 import { businessService, type Requisition, type Position, type Department } from '../../services/business.service';
 
@@ -11,6 +10,20 @@ export interface RequisitionListProps {
   onEdit: (item: Requisition) => void;
   onClone: (item: Requisition) => void;
 }
+
+const startOfDay = (d: Date): Date => {
+  const res = new Date(d);
+  res.setHours(0, 0, 0, 0);
+  return res;
+};
+
+const parseISO = (str: string): Date => new Date(str);
+
+const differenceInDays = (d1: Date, d2: Date): number => {
+  const utc1 = Date.UTC(d1.getFullYear(), d1.getMonth(), d1.getDate());
+  const utc2 = Date.UTC(d2.getFullYear(), d2.getMonth(), d2.getDate());
+  return Math.floor((utc1 - utc2) / (1000 * 60 * 60 * 24));
+};
 
 const STATUSES = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'OPEN', 'FILLED', 'CANCELLED'];
 
