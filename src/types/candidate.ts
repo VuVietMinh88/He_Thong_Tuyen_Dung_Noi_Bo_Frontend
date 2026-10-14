@@ -27,6 +27,8 @@ export interface CandidateProfile {
   appliedJobId?: string;
   appliedJobTitle?: string;
   departmentName?: string;
+  currentTitle?: string;
+  experienceYears?: number;
   source?: string;
   status?: string;
   cvUrl?: string;

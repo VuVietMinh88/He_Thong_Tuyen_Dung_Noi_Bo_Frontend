@@ -11,6 +11,8 @@ import {
   Eye,
   RefreshCw,
   Star,
+  LayoutGrid,
+  List,
 } from 'lucide-react';
 import type {
   CandidateProfile,
@@ -19,6 +21,7 @@ import type {
 } from '../../types/candidate';
 import { candidateService } from '../../services/candidateService';
 import { CandidateDetailModal } from '../../components/Candidate/CandidateDetailModal';
+import CandidateKanbanBoard from '../../components/Candidate/CandidateKanbanBoard';
 
 export const CandidateManagementPage: React.FC = () => {
   const [candidateList, setCandidateList] = useState<CandidateProfile[]>([]);
@@ -27,6 +30,8 @@ export const CandidateManagementPage: React.FC = () => {
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<
     CvParsingStatus | 'ALL'
   >('ALL');
+  const [selectedJobId, setSelectedJobId] = useState('ALL');
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
 
   // Quản lý Modal chi tiết hồ sơ & đối chiếu gợi ý CV
   const [selectedCandidate, setSelectedCandidate] =
@@ -39,6 +44,7 @@ export const CandidateManagementPage: React.FC = () => {
       const filterCriteria: CandidateFilterCriteria = {
         keyword: searchKeyword,
         cvParsingStatus: selectedStatusFilter,
+        jobId: selectedJobId === 'ALL' ? undefined : selectedJobId,
       };
       const resultList = await candidateService.getCandidates(filterCriteria);
       setCandidateList(resultList);
@@ -47,7 +53,7 @@ export const CandidateManagementPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [searchKeyword, selectedStatusFilter]);
+  }, [searchKeyword, selectedStatusFilter, selectedJobId]);
 
   useEffect(() => {
     let isSubscribed = true;
@@ -57,6 +63,7 @@ export const CandidateManagementPage: React.FC = () => {
         const filterCriteria: CandidateFilterCriteria = {
           keyword: searchKeyword,
           cvParsingStatus: selectedStatusFilter,
+          jobId: selectedJobId === 'ALL' ? undefined : selectedJobId,
         };
         const resultList = await candidateService.getCandidates(filterCriteria);
         if (isSubscribed) {
@@ -78,7 +85,24 @@ export const CandidateManagementPage: React.FC = () => {
     return () => {
       isSubscribed = false;
     };
-  }, [searchKeyword, selectedStatusFilter]);
+  }, [searchKeyword, selectedStatusFilter, selectedJobId]);
+
+  const visibleCandidates = selectedJobId === 'ALL'
+    ? candidateList
+    : candidateList.filter((candidate) => candidate.appliedJobId === selectedJobId);
+
+  const jobOptions = Array.from(
+    candidateList.reduce((jobs, candidate) => {
+      if (candidate.appliedJobId) {
+        jobs.set(
+          candidate.appliedJobId,
+          candidate.appliedJobTitle || 'Vị trí chưa xác định',
+        );
+      }
+      return jobs;
+    }, new Map<string, string>()),
+    ([id, title]) => ({ id, title }),
+  );
 
   const handleOpenCandidateDetail = (candidateItem: CandidateProfile) => {
     setSelectedCandidate(candidateItem);
@@ -205,9 +229,64 @@ export const CandidateManagementPage: React.FC = () => {
             <option value="DISMISSED">Đã bỏ qua</option>
           </select>
         </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor="candidate-job-filter" className="text-xs font-medium text-gray-600 dark:text-gray-400">
+            Vị trí:
+          </label>
+          <select
+            id="candidate-job-filter"
+            value={selectedJobId}
+            onChange={(event) => setSelectedJobId(event.target.value)}
+            className="max-w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+          >
+            <option value="ALL">Tất cả vị trí</option>
+            {jobOptions.map((job) => (
+              <option key={job.id} value={job.id}>{job.title}</option>
+            ))}
+          </select>
+          <div className="ml-auto inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800" aria-label="Chế độ xem ứng viên">
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              aria-pressed={viewMode === 'list'}
+              className={`inline-flex min-h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold ${
+                viewMode === 'list' ? 'bg-white text-indigo-700 shadow-sm dark:bg-gray-700 dark:text-indigo-300' : 'text-gray-500'
+              }`}
+            >
+              <List className="h-3.5 w-3.5" />
+              Danh sách
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('kanban')}
+              aria-pressed={viewMode === 'kanban'}
+              className={`inline-flex min-h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold ${
+                viewMode === 'kanban' ? 'bg-white text-indigo-700 shadow-sm dark:bg-gray-700 dark:text-indigo-300' : 'text-gray-500'
+              }`}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              Kanban
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Bảng danh sách ứng viên */}
+      {viewMode === 'kanban' ? (
+        isLoading ? (
+          <div className="flex items-center justify-center gap-3 rounded-xl border border-gray-200 bg-white p-12 text-sm text-gray-500" role="status">
+            <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+            Đang tải danh sách hồ sơ ứng viên...
+          </div>
+        ) : (
+          <CandidateKanbanBoard
+            candidates={visibleCandidates}
+            selectedJobId={selectedJobId === 'ALL' ? undefined : selectedJobId}
+            onSelectCandidate={handleOpenCandidateDetail}
+          />
+        )
+      ) : (
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center p-12 text-center">
@@ -216,7 +295,7 @@ export const CandidateManagementPage: React.FC = () => {
               Đang tải danh sách hồ sơ ứng viên...
             </p>
           </div>
-        ) : candidateList.length === 0 ? (
+        ) : visibleCandidates.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-12 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400 dark:bg-gray-800">
               <FileText className="h-6 w-6" />
@@ -254,7 +333,7 @@ export const CandidateManagementPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                {candidateList.map((candidateItem) => (
+                {visibleCandidates.map((candidateItem) => (
                   <tr
                     key={candidateItem.id}
                     className="transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/40"
@@ -366,6 +445,7 @@ export const CandidateManagementPage: React.FC = () => {
           </div>
         )}
       </div>
+      )}
 
       {/* Modal chi tiết hồ sơ & xác nhận dữ liệu gợi ý CV */}
       <CandidateDetailModal
