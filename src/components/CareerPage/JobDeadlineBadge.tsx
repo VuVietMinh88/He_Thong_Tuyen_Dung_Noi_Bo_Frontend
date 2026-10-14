@@ -36,7 +36,7 @@ export const JobDeadlineBadge: React.FC<JobDeadlineBadgeProps> = ({
           container: 'bg-rose-50 text-rose-700 border-rose-200/80',
           iconColor: 'text-rose-600',
           icon: XCircle,
-          label: customText || badgeText,
+          label: customText || 'Hết hạn',
         };
       case 'CLOSING_SOON':
         return {

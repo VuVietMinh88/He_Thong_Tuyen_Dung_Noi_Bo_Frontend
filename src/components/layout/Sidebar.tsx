@@ -37,6 +37,13 @@ const menuItems: SidebarMenuItem[] = [
     permissions: ['REQUISITIONS_READ_ALL', 'REQUISITIONS_READ_SCOPED'],
   },
   {
+    label: 'Quản lý tin tuyển dụng',
+    to: '/job-postings',
+    icon: '📢',
+    roles: Object.values(ROLES),
+    permissions: ['JOB_POSTINGS_READ_ALL', 'JOB_POSTINGS_READ_SCOPED'],
+  },
+  {
     label: 'Định biên & Ngân sách',
     to: '/headcount-budget',
     icon: '💰',

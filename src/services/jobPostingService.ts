@@ -323,6 +323,15 @@ export const mapRequisitionToJobPosting = (
  * Service API cho tin tuyển dụng
  */
 export const jobPostingService = {
+  async getManageableJobPostings(): Promise<JobPostingData[]> {
+    const response = await axiosClient.get<{ items: JobPostingData[] } | JobPostingData[]>(
+      '/job-postings',
+      { params: { size: 100 } },
+    );
+    const items = Array.isArray(response.data) ? response.data : response.data.items;
+    return items.filter((posting) => posting.status === 'PUBLISHED' || posting.status === 'CLOSED');
+  },
+
   /**
    * Lấy danh sách các yêu cầu tuyển dụng đã duyệt (status = APPROVED) (AC1)
    */
@@ -585,6 +594,15 @@ export const jobPostingService = {
         auditLogs: [newAuditLog],
       };
     }
+  },
+
+  async unpublishJobPosting(id: string): Promise<JobPostingData> {
+    if (!id.trim()) throw new Error('Không tìm thấy mã tin tuyển dụng cần gỡ.');
+
+    const response = await axiosClient.post<JobPostingData>(
+      `/job-postings/${encodeURIComponent(id)}/unpublish`,
+    );
+    return response.data;
   },
 
   /**
@@ -1200,6 +1218,14 @@ export interface DeadlineStatusResult {
   badgeText: string;
   badgeVariant: 'open' | 'closing_soon' | 'expired';
 }
+
+export const isJobApplicationUnavailable = (
+  job: Pick<JobPostingData, 'status' | 'publishCareerPage' | 'deadline'>,
+  referenceDate?: Date,
+): boolean =>
+  job.status === 'CLOSED'
+  || job.publishCareerPage === false
+  || checkJobDeadlineStatus(job.deadline, referenceDate).isExpired;
 
 /**
  * Logic so sánh hạn chót (deadline) với thời gian thực tế để tính số ngày còn lại

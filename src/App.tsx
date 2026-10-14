@@ -35,6 +35,7 @@ import PublicJobDetailPage from "./pages/CareerPage/PublicJobDetailPage";
 import PublicJobApplyPage from "./pages/CareerPage/PublicJobApplyPage";
 import ApplicationLookupPage from "./pages/CareerPage/ApplicationLookupPage";
 import InternalReferralPage from "./pages/Referral/InternalReferralPage";
+import JobPostingManagementPage from "./pages/Recruitment/JobPostingManagementPage";
 import CandidateManagementPage from "./pages/Candidate/CandidateManagementPage";
 import UnifiedCandidateProfilePage from "./pages/Candidate/UnifiedCandidateProfilePage";
 
@@ -231,6 +232,17 @@ function App() {
                 element={
                   <MainLayout>
                     <ImportExcelUI />
+                  </MainLayout>
+                }
+              />
+            </Route>
+
+            <Route element={<ProtectedRoute requiredPermissions={["JOB_POSTINGS_READ_ALL", "JOB_POSTINGS_READ_SCOPED"]} />}>
+              <Route
+                path="/job-postings"
+                element={
+                  <MainLayout>
+                    <JobPostingManagementPage />
                   </MainLayout>
                 }
               />

@@ -120,9 +120,16 @@ describe('Task TKNHTTDNB1-319: Job Expiry Status & Application Constraints (User
       });
 
       expect(React.isValidElement(element)).toBe(true);
-      if (React.isValidElement<{ className?: string; 'data-status'?: string }>(element)) {
+      if (React.isValidElement<{
+        className?: string;
+        'data-status'?: string;
+        children?: React.ReactNode;
+      }>(element)) {
         expect(element.props['data-status']).toBe('EXPIRED');
         expect(element.props.className).toContain('bg-rose-50');
+        const children = React.Children.toArray(element.props.children);
+        expect(React.isValidElement<{ children: string }>(children[1]) && children[1].props.children)
+          .toBe('Hết hạn');
         expect(element.props.className).toContain('text-rose-700');
       }
     });

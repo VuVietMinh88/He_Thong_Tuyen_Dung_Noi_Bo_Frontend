@@ -20,6 +20,7 @@ import {
   Lock,
   Loader2,
   Clock,
+  Globe2,
 } from 'lucide-react';
 import {
   jobPostingService,
@@ -33,6 +34,8 @@ import {
   type ApprovalModalMode,
 } from './JobPostingApprovalModal';
 import { JobPostingAuditHistory } from './JobPostingAuditHistory';
+import { usePermission } from '../../hooks/usePermission';
+import { JobDeadlineBadge } from '../CareerPage/JobDeadlineBadge';
 
 export interface JobPostingPreviewApprovalProps {
   jobPostingId?: string;
@@ -132,12 +135,14 @@ export const JobPostingPreviewApproval: React.FC<JobPostingPreviewApprovalProps>
   onStatusChange,
 }) => {
   const toastContext = useContext(ToastContext);
+  const { can } = usePermission();
 
   const [posting, setPosting] = useState<JobPostingData>(initialData || DEFAULT_MOCK_POSTING);
   const [activeTab, setActiveTab] = useState<'preview' | 'history'>('preview');
   const [deviceMode, setDeviceMode] = useState<'desktop' | 'mobile'>('desktop');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(Boolean(jobPostingId));
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [unpublishConfirmOpen, setUnpublishConfirmOpen] = useState(false);
 
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
@@ -161,7 +166,6 @@ export const JobPostingPreviewApproval: React.FC<JobPostingPreviewApprovalProps>
     if (!jobPostingId) return;
 
     let isMounted = true;
-    setIsLoading(true);
 
     jobPostingService
       .getJobPostingById(jobPostingId)
@@ -238,6 +242,7 @@ export const JobPostingPreviewApproval: React.FC<JobPostingPreviewApprovalProps>
             role: 'Trưởng phòng Tuyển dụng & Đãi ngộ',
             department: 'Ban Quản trị Nguồn nhân lực',
           };
+
           const createdLog: JobPostingAuditLog = {
             id: `log-act-${Date.now()}`,
             postingId: posting.id || '',
@@ -272,6 +277,51 @@ export const JobPostingPreviewApproval: React.FC<JobPostingPreviewApprovalProps>
     }
   };
 
+  const handleUnpublish = async () => {
+    if (!posting.id || !can('edit', 'job')) return;
+    setIsSubmitting(true);
+    setLocalMessage(null);
+    try {
+      const response = await jobPostingService.unpublishJobPosting(posting.id);
+      const now = new Date().toISOString();
+      const updated: JobPostingData = {
+        ...posting,
+        ...response,
+        status: 'CLOSED',
+        publishCareerPage: false,
+        publishInternal: false,
+        updatedAt: response.updatedAt || now,
+      };
+      const log: JobPostingAuditLog = {
+        id: `log-unpublish-${Date.now()}`,
+        postingId: posting.id,
+        action: 'CLOSED',
+        actionName: 'Gỡ tin tuyển dụng',
+        actor: posting.publishedBy || posting.createdBy || {
+          id: '',
+          name: 'Nhân sự tuyển dụng',
+          email: '',
+        },
+        timestamp: now,
+        fromStatus: posting.status,
+        toStatus: 'CLOSED',
+        note: 'Tin tuyển dụng đã được gỡ khỏi các kênh đăng tuyển.',
+      };
+      updated.auditLogs = [log, ...(response.auditLogs ?? posting.auditLogs ?? [])];
+      setPosting(updated);
+      setUnpublishConfirmOpen(false);
+      showNotify('Đã gỡ tin tuyển dụng khỏi các kênh đăng tuyển.', 'success');
+      onStatusChange?.(updated);
+    } catch (error: unknown) {
+      const message = error instanceof Error
+        ? error.message
+        : 'Không thể gỡ tin tuyển dụng. Vui lòng thử lại.';
+      showNotify(message, 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Render Status Badge
   const renderStatusBadge = (status: JobPostingStatus) => {
     switch (status) {
@@ -281,6 +331,13 @@ export const JobPostingPreviewApproval: React.FC<JobPostingPreviewApprovalProps>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 border border-emerald-300">
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
             Đã duyệt xuất bản
+          </span>
+        );
+      case 'CLOSED':
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+            <Globe2 className="h-3.5 w-3.5" />
+            Đã gỡ
           </span>
         );
       case 'PENDING_APPROVAL':
@@ -373,6 +430,7 @@ export const JobPostingPreviewApproval: React.FC<JobPostingPreviewApprovalProps>
                 Xem Trước &amp; Duyệt Tin Tuyển Dụng
               </h1>
               {renderStatusBadge(posting.status)}
+              <JobDeadlineBadge deadline={posting.deadline} size="sm" />
             </div>
           </div>
 
@@ -412,7 +470,7 @@ export const JobPostingPreviewApproval: React.FC<JobPostingPreviewApprovalProps>
             <button
               type="button"
               onClick={() => handleOpenModal('REQUEST_REVISION')}
-              disabled={isSubmitting || posting.status === 'PUBLISHED'}
+              disabled={isSubmitting || posting.status === 'PUBLISHED' || posting.status === 'CLOSED'}
               className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100 active:scale-98 disabled:opacity-50 transition-all cursor-pointer"
             >
               <RotateCcw className="h-3.5 w-3.5" />
@@ -423,12 +481,23 @@ export const JobPostingPreviewApproval: React.FC<JobPostingPreviewApprovalProps>
             <button
               type="button"
               onClick={() => handleOpenModal('APPROVE')}
-              disabled={isSubmitting || posting.status === 'PUBLISHED'}
+              disabled={isSubmitting || posting.status === 'PUBLISHED' || posting.status === 'CLOSED'}
               className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 active:scale-98 disabled:opacity-50 transition-all cursor-pointer"
             >
               <Check className="h-3.5 w-3.5 stroke-[2.5]" />
               <span>Duyệt xuất bản</span>
             </button>
+            {posting.status === 'PUBLISHED' && posting.publishCareerPage && can('edit', 'job') && (
+              <button
+                type="button"
+                onClick={() => setUnpublishConfirmOpen(true)}
+                disabled={isSubmitting}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-bold text-rose-700 transition-all hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Globe2 className="h-3.5 w-3.5" />
+                Gỡ tin
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -688,6 +757,49 @@ export const JobPostingPreviewApproval: React.FC<JobPostingPreviewApprovalProps>
         onConfirm={handleModalConfirm}
         onClose={() => setModalOpen(false)}
       />
+      {unpublishConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" role="presentation">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="unpublish-job-title"
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 id="unpublish-job-title" className="text-lg font-bold text-slate-900">
+                  Xác nhận gỡ tin tuyển dụng?
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Tin <strong>{posting.title}</strong> sẽ được gỡ khỏi các kênh đăng tuyển và ứng viên sẽ không thể nộp hồ sơ mới.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setUnpublishConfirmOpen(false)}
+                disabled={isSubmitting}
+                className="min-h-10 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleUnpublish()}
+                disabled={isSubmitting}
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 text-sm font-bold text-white hover:bg-rose-700 disabled:cursor-wait disabled:opacity-60"
+              >
+                {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                {isSubmitting ? 'Đang gỡ tin…' : 'Xác nhận gỡ tin'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 };
