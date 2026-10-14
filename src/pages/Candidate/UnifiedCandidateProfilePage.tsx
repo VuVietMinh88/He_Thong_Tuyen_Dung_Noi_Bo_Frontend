@@ -46,6 +46,14 @@ import { MatchingScoreBadge } from '../../components/Candidate/MatchingScoreBadg
 import { CandidateCriteriaEvaluationCard } from '../../components/Candidate/CandidateCriteriaEvaluationCard';
 import { resolveCandidateMatchingEvaluation } from '../../utils/candidateMatchingHelper';
 
+import CandidateInteractionTimeline from '../../components/Candidate/CandidateInteractionTimeline';
+import MoveStageModal from '../../components/Candidate/MoveStageModal';
+import RejectCandidateModal from '../../components/Candidate/RejectCandidateModal';
+import type {
+  MoveCandidateStagePayload,
+  RejectCandidatePayload,
+} from '../../services/candidateStageService';
+
 const PIPELINE_STEPS: { stage: CandidateStage; label: string; stepNumber: number }[] = [
   { stage: 'NEW', label: 'Hồ sơ mới', stepNumber: 1 },
   { stage: 'SCREENING', label: 'Sàng lọc', stepNumber: 2 },
@@ -67,7 +75,9 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
   const [isCoverLetterExpanded, setIsCoverLetterExpanded] = useState<boolean>(false);
   const [hoverRating, setHoverRating] = useState<number | null>(null);
   const [mobileTab, setMobileTab] = useState<'profile' | 'cv'>('profile');
-  const [contentTab, setContentTab] = useState<'overview' | 'history' | 'notes'>('overview');
+  const [contentTab, setContentTab] = useState<'overview' | 'history' | 'notes' | 'timeline'>('overview');
+  const [isMoveStageModalOpen, setIsMoveStageModalOpen] = useState(false);
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
 
   // Duplicate candidate & Merge history states (AC 1, AC 2, AC 4)
   const [duplicateComparison, setDuplicateComparison] = useState<DuplicateCandidateComparison | null>(null);
@@ -160,6 +170,32 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
   const activeApplication: ApplicationRecord | undefined = candidate?.applications.find(
     (app) => app.id === activeAppId
   ) || candidate?.applications[0];
+
+  const handleApplicationStageUpdated = (
+    stage: CandidateStage,
+    payload: MoveCandidateStagePayload | RejectCandidatePayload,
+  ) => {
+    setCandidate((previousCandidate) => {
+      if (!previousCandidate) return previousCandidate;
+      return {
+        ...previousCandidate,
+        applications: previousCandidate.applications.map((application) => (
+          application.id === activeAppId
+            ? {
+                ...application,
+                stage,
+                ...(stage === 'REJECTED' && 'reason' in payload
+                  ? { rejectionReason: payload.reason }
+                  : {}),
+              }
+            : application
+        )),
+        updatedAt: new Date().toISOString(),
+      };
+    });
+    setIsMoveStageModalOpen(false);
+    setIsRejectModalOpen(false);
+  };
 
   // Handle rating change
   const handleRatingChange = async (newRating: number) => {
@@ -517,8 +553,9 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
           </div>
 
           {!isTerminated ? (
-            <div className="grid grid-cols-5 gap-2 sm:gap-4 relative">
-              {PIPELINE_STEPS.map((step) => {
+            <>
+              <div className="grid grid-cols-5 gap-2 sm:gap-4 relative">
+                {PIPELINE_STEPS.map((step) => {
                 const currentStepNum = stageConfig.stepNumber;
                 const isPassed = currentStepNum > step.stepNumber;
                 const isCurrent = currentStepNum === step.stepNumber;
@@ -561,9 +598,26 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
                       {step.label}
                     </span>
                   </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+              <div className="mt-4 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsMoveStageModalOpen(true)}
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700"
+                >
+                  Chuyển giai đoạn
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsRejectModalOpen(true)}
+                  className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+                >
+                  Từ chối ứng viên
+                </button>
+              </div>
+            </>
           ) : (
             <div
               className={`p-3.5 rounded-xl border flex items-start gap-3 ${
@@ -640,6 +694,18 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
             >
               <MessageSquare className="w-4 h-4" />
               Ghi chú nội bộ ({candidate.notes.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setContentTab('timeline')}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all ${
+                contentTab === 'timeline'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              <Clock className="w-4 h-4" />
+              Nhật ký tương tác
             </button>
           </div>
 
@@ -747,6 +813,11 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
               onAddNote={handleAddNote}
             />
           )}
+
+          {/* Tab 4: Candidate Interaction Timeline */}
+          {contentTab === 'timeline' && (
+            <CandidateInteractionTimeline candidateId={candidate.id} />
+          )}
         </div>
 
         {/* Right Column (45% on lg): Inline CV Preview (Sticky) */}
@@ -788,6 +859,25 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
           isOpen={isCompareModalOpen}
           onClose={() => setIsCompareModalOpen(false)}
           onMergeSuccess={handleMergeSuccess}
+        />
+      )}
+      {candidate && activeApplication && isMoveStageModalOpen && (
+        <MoveStageModal
+          candidateId={candidate.id}
+          candidateName={candidate.fullName}
+          applicationId={activeApplication.id}
+          currentStage={activeApplication.stage}
+          onClose={() => setIsMoveStageModalOpen(false)}
+          onSuccess={(payload) => handleApplicationStageUpdated(payload.toStage, payload)}
+        />
+      )}
+      {candidate && activeApplication && isRejectModalOpen && (
+        <RejectCandidateModal
+          candidateId={candidate.id}
+          candidateName={candidate.fullName}
+          applicationId={activeApplication.id}
+          onClose={() => setIsRejectModalOpen(false)}
+          onSuccess={(payload) => handleApplicationStageUpdated('REJECTED', payload)}
         />
       )}
     </div>
