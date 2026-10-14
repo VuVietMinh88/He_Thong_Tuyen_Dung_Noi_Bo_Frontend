@@ -49,6 +49,7 @@ import { slaService } from '../../services/slaService';
 import { CandidateSearchFilterPanel } from '../../components/Candidate/CandidateSearchFilterPanel';
 import { filterCandidatesCombined } from '../../utils/candidateFilterHelper';
 import { AddToTalentPoolModal } from '../../components/Candidate/AddToTalentPoolModal';
+import { SmartTalentMatchingPanel } from '../../components/Candidate/SmartTalentMatchingPanel';
 
 type PendingStageAction = {
   candidate: CandidateProfile;
@@ -78,7 +79,7 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
     useState<CandidateCombinedFilterState>(DEFAULT_COMBINED_FILTER_STATE);
 
   const [onlyOverdueSla, setOnlyOverdueSla] = useState<boolean>(false);
-  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'talent-matching'>('list');
   const [selectedSortOrder, setSelectedSortOrder] =
     useState<CandidateSortOption>(DEFAULT_CANDIDATE_SORT_OPTION);
 
@@ -459,6 +460,18 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
             <LayoutGrid className="h-3.5 w-3.5" />
             Kanban
           </button>
+          <button
+            type="button"
+            data-testid="view-talent-matching-btn"
+            onClick={() => setViewMode('talent-matching')}
+            aria-pressed={viewMode === 'talent-matching'}
+            className={`inline-flex min-h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold ${
+              viewMode === 'talent-matching' ? 'bg-white text-indigo-700 shadow-sm dark:bg-gray-700 dark:text-indigo-300' : 'text-gray-500'
+            }`}
+          >
+            <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+            Gợi ý Kho tiềm năng
+          </button>
         </div>
       </div>
 
@@ -497,8 +510,15 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
         </div>
       )}
 
-      {/* Bảng danh sách ứng viên */}
-      {viewMode === 'kanban' ? (
+      {/* Bảng danh sách ứng viên hoặc Gợi ý Kho tiềm năng */}
+      {viewMode === 'talent-matching' ? (
+        <SmartTalentMatchingPanel
+          jobOptions={jobOptions}
+          onCandidateAssigned={() => {
+            fetchCandidates();
+          }}
+        />
+      ) : viewMode === 'kanban' ? (
         isLoading ? (
           <div className="flex items-center justify-center gap-3 rounded-xl border border-gray-200 bg-white p-12 text-sm text-gray-500" role="status">
             <Loader2 className="h-5 w-5 animate-spin text-blue-600" />

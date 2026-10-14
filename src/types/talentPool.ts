@@ -93,3 +93,63 @@ export interface TalentPoolEntry {
   addedAt: string;
   addedBy?: string;
 }
+
+/**
+ * Types cho Gợi ý kho tiềm năng & Tái kích hoạt cho vị trí mới (Task Jira: TKNHTTDNB1-397)
+ */
+export interface TalentPoolCandidateSuggestion {
+  id: string;
+  candidateId: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  avatarUrl?: string;
+  category: string;
+  experienceYears: number;
+  currentTitle?: string;
+  previousAppliedJobTitle?: string;
+  skills: string[];
+  matchedSkills: string[];
+  missingSkills?: string[];
+  matchScore: number; // 0-100%
+  notes?: string;
+  addedToPoolAt: string;
+  contactRecommendation?: string;
+  isAssigned?: boolean;
+  assignedJobId?: string;
+  assignedStage?: string;
+}
+
+export interface TalentPoolSearchParams {
+  keyword?: string;
+  category?: string;
+  minMatchScore?: number;
+  sortBy?: 'MATCH_SCORE_DESC' | 'EXPERIENCE_DESC' | 'DATE_DESC';
+}
+
+export interface AssignTalentToJobPayload {
+  candidateId: string;
+  jobId: string;
+  jobTitle?: string;
+  initialStage: string;
+  notes?: string;
+}
+
+export interface TalentPoolCandidateHistory {
+  candidateId: string;
+  candidateName: string;
+  addedAt: string;
+  addedBy: string;
+  category: string;
+  recruiterNotes: string;
+  tags: string[];
+  contactRecommendation?: string;
+  previousApplication?: {
+    jobTitle: string;
+    department: string;
+    appliedAt: string;
+    lastStage: string;
+    interviewNotes?: string;
+  };
+}
+
