@@ -24,16 +24,24 @@ import { tokenService } from '../../services/token.service';
 import usePermission from '../../hooks/usePermission';
 import { useToast } from '../../components/notifications/useToast';
 import { candidateProfileService, CandidateAccessDeniedError } from '../../services/candidateProfileService';
+import { duplicateCandidateService } from '../../services/duplicateCandidateService';
 import type {
   UnifiedCandidate,
   ApplicationRecord,
   CandidateStage,
 } from '../../types/candidate';
+import type {
+  DuplicateCandidateComparison,
+  MergeHistoryRecord,
+} from '../../types/duplicateCandidate';
 import { CANDIDATE_STAGE_CONFIG } from '../../types/candidate';
 import InlineCVPreview from '../../components/Candidate/InlineCVPreview';
 import ApplicationHistoryList from '../../components/Candidate/ApplicationHistoryList';
 import CandidateTagsManager from '../../components/Candidate/CandidateTagsManager';
 import InternalNotesSection from '../../components/Candidate/InternalNotesSection';
+import DuplicateCandidateBanner from '../../components/Candidate/DuplicateCandidateBanner';
+import MergeUndoBanner from '../../components/Candidate/MergeUndoBanner';
+import DuplicateCandidateCompareModal from '../../components/Candidate/DuplicateCandidateCompareModal';
 
 const PIPELINE_STEPS: { stage: CandidateStage; label: string; stepNumber: number }[] = [
   { stage: 'NEW', label: 'Hồ sơ mới', stepNumber: 1 },
@@ -58,9 +66,14 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
   const [mobileTab, setMobileTab] = useState<'profile' | 'cv'>('profile');
   const [contentTab, setContentTab] = useState<'overview' | 'history' | 'notes'>('overview');
 
+  // Duplicate candidate & Merge history states (AC 1, AC 2, AC 4)
+  const [duplicateComparison, setDuplicateComparison] = useState<DuplicateCandidateComparison | null>(null);
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState<boolean>(false);
+  const [activeMergeRecord, setActiveMergeRecord] = useState<MergeHistoryRecord | null>(null);
+
   const currentUser = tokenService.getUserData();
 
-  // Load candidate profile
+  // Load candidate profile & detect duplicate
   const fetchCandidate = useCallback(async () => {
     if (!id) return;
     try {
@@ -84,6 +97,14 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
           data.applications[0];
         setActiveAppId(currentApp.id);
       }
+
+      // Phát hiện hồ sơ trùng (AC 1)
+      const dup = await duplicateCandidateService.detectDuplicate(data);
+      setDuplicateComparison(dup);
+
+      // Kiểm tra bản ghi gộp còn hạn hoàn tác (AC 4)
+      const mergeRec = duplicateCandidateService.getActiveMergeRecord(data.id);
+      setActiveMergeRecord(mergeRec);
     } catch (err: unknown) {
       if (err instanceof CandidateAccessDeniedError || (err as { status?: number })?.status === 403) {
         setHasAccess(false);
@@ -105,6 +126,28 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
   useEffect(() => {
     fetchCandidate();
   }, [fetchCandidate]);
+
+  // Xử lý sau khi gộp thành công (AC 3 & AC 4)
+  const handleMergeSuccess = (mergedCandidate: UnifiedCandidate) => {
+    setCandidate(mergedCandidate);
+    setDuplicateComparison(null);
+    const mergeRec = duplicateCandidateService.getActiveMergeRecord(mergedCandidate.id);
+    setActiveMergeRecord(mergeRec);
+    addToast({
+      type: 'success',
+      message: 'Đã gộp hồ sơ thành công! Toàn bộ lịch sử các đợt ứng tuyển, CV, Tags và Notes đã được hợp nhất.',
+    });
+  };
+
+  // Xử lý sau khi hoàn tác thành công (AC 4)
+  const handleUndoSuccess = () => {
+    setActiveMergeRecord(null);
+    fetchCandidate();
+    addToast({
+      type: 'success',
+      message: 'Đã hoàn tác gộp hồ sơ thành công. Hai hồ sơ đã được khôi phục trạng thái ban đầu.',
+    });
+  };
 
   // Selected application
   const activeApplication: ApplicationRecord | undefined = candidate?.applications.find(
@@ -315,6 +358,22 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* 1. Thanh cảnh báo phát hiện trùng lặp hồ sơ (AC 1) */}
+      {duplicateComparison && (
+        <DuplicateCandidateBanner
+          comparison={duplicateComparison}
+          onOpenCompare={() => setIsCompareModalOpen(true)}
+        />
+      )}
+
+      {/* 2. Thanh trạng thái & Hoàn tác gộp trong 24 giờ (AC 4) */}
+      {activeMergeRecord && (
+        <MergeUndoBanner
+          mergeRecord={activeMergeRecord}
+          onUndoSuccess={handleUndoSuccess}
+        />
+      )}
 
       {/* Main Candidate Header Card */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-5 sm:p-6">
@@ -695,6 +754,16 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Modal So sánh & Gộp hồ sơ ứng viên trùng (AC 2, AC 3 & AC 4) */}
+      {duplicateComparison && (
+        <DuplicateCandidateCompareModal
+          comparison={duplicateComparison}
+          isOpen={isCompareModalOpen}
+          onClose={() => setIsCompareModalOpen(false)}
+          onMergeSuccess={handleMergeSuccess}
+        />
+      )}
     </div>
   );
 };
