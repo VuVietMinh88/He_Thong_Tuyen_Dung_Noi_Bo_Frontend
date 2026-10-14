@@ -7,11 +7,13 @@ import {
   CircleHelp,
   Clock3,
   FileSearch,
+  RotateCcw,
   Search,
   ShieldCheck,
 } from 'lucide-react';
 import PublicFooter from '../../components/CareerPage/PublicFooter';
 import PublicJobHeader from '../../components/CareerPage/PublicJobHeader';
+import WithdrawApplicationModal from '../../components/CareerPage/WithdrawApplicationModal';
 import {
   applicationLookupService,
   ApplicationLookupError,
@@ -87,6 +89,7 @@ export const ApplicationLookupPage: React.FC = () => {
   const [value, setValue] = useState('');
   const [result, setResult] = useState<ApplicationLookupResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -122,6 +125,9 @@ export const ApplicationLookupPage: React.FC = () => {
 
   const statusHistory = result?.timeline ?? [];
   const terminalStatus = result?.status === 'REJECTED' || result?.status === 'WITHDRAWN';
+  const canWithdraw = result?.status === 'RECEIVED'
+    || result?.status === 'IN_REVIEW'
+    || result?.status === 'INTERVIEW';
   const currentStageIndex = result ? getStageIndex(result.status, statusHistory) : -1;
 
   return (
@@ -367,8 +373,41 @@ export const ApplicationLookupPage: React.FC = () => {
                     Thông tin hồ sơ được bảo mật. Nếu cần hỗ trợ, vui lòng liên hệ đội ngũ tuyển dụng.
                   </p>
                 </div>
+                {canWithdraw && (
+                  <div className="mt-5 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setIsWithdrawModalOpen(true)}
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-white px-4 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 focus:outline-none focus:ring-4 focus:ring-rose-100"
+                    >
+                      <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                      Rút hồ sơ
+                    </button>
+                  </div>
+                )}
               </div>
             </section>
+          )}
+
+          {result && (
+            <WithdrawApplicationModal
+              isOpen={isWithdrawModalOpen}
+              applicationCode={result.applicationCode}
+              onClose={() => setIsWithdrawModalOpen(false)}
+              onWithdrawn={(reason) => {
+                const withdrawnAt = new Date().toISOString();
+                setResult((currentResult) => currentResult
+                  ? {
+                    ...currentResult,
+                    status: 'WITHDRAWN',
+                    timeline: [
+                      ...(currentResult.timeline ?? []),
+                      { status: 'WITHDRAWN', occurredAt: withdrawnAt, note: reason },
+                    ],
+                  }
+                  : currentResult);
+              }}
+            />
           )}
 
           {!isLoading && !result && !error && !hasSearched && (

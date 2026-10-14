@@ -67,4 +67,23 @@ describe('applicationLookupService', () => {
     await expect(applicationLookupService.lookup('applicationCode', 'APP-500'))
       .rejects.toBe(requestError);
   });
+
+  it('withdraws an application with the required reason', async () => {
+    const patch = vi.spyOn(axiosClient, 'patch').mockResolvedValueOnce({ data: {} });
+
+    await applicationLookupService.withdraw(' APP/2026 01 ', '  Lý do cá nhân  ');
+
+    expect(patch).toHaveBeenCalledWith(
+      '/public/applications/APP%2F2026%2001/withdraw',
+      { reason: 'Lý do cá nhân' },
+    );
+  });
+
+  it('rejects an empty withdrawal reason without calling the API', async () => {
+    const patch = vi.spyOn(axiosClient, 'patch');
+
+    await expect(applicationLookupService.withdraw('APP-2026-001', '   '))
+      .rejects.toThrow('Vui lòng nhập lý do rút hồ sơ.');
+    expect(patch).not.toHaveBeenCalled();
+  });
 });

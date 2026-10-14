@@ -96,6 +96,18 @@ export const applicationLookupService = {
       throw error;
     }
   },
+
+  async withdraw(applicationCode: string, reason: string): Promise<void> {
+    const trimmedCode = applicationCode.trim();
+    const trimmedReason = reason.trim();
+    if (!trimmedCode) throw new Error('Mã hồ sơ không được để trống.');
+    if (!trimmedReason) throw new Error('Vui lòng nhập lý do rút hồ sơ.');
+
+    await axiosClient.patch(
+      `/public/applications/${encodeURIComponent(trimmedCode)}/withdraw`,
+      { reason: trimmedReason },
+    );
+  },
 };
 
 export default applicationLookupService;
