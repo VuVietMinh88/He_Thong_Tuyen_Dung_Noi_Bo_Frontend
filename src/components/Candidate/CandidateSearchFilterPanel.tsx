@@ -14,6 +14,7 @@ import {
   GraduationCap,
   Sparkles,
   Users,
+  BookmarkPlus,
 } from 'lucide-react';
 import type {
   CandidateCombinedFilterState,
@@ -33,6 +34,8 @@ import {
   EDUCATION_LABELS,
   STAGE_LABELS,
 } from '../../utils/candidateFilterHelper';
+import { SavedFilterDropdown } from './SavedFilterDropdown';
+import { SaveFilterModal } from './SaveFilterModal';
 
 export interface CandidateSearchFilterPanelProps {
   filters: CandidateCombinedFilterState;
@@ -66,6 +69,7 @@ export const CandidateSearchFilterPanel: React.FC<CandidateSearchFilterPanelProp
   const panelId = useId();
   const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded);
   const [customSkillInput, setCustomSkillInput] = useState<string>('');
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState<boolean>(false);
 
   // Draft state trong panel để hỗ trợ nút "Áp dụng bộ lọc"
   const [draftFilters, setDraftFilters] =
@@ -237,8 +241,8 @@ export const CandidateSearchFilterPanel: React.FC<CandidateSearchFilterPanelProp
           )}
         </div>
 
-        {/* Nút bật/tắt bảng bộ lọc nâng cao (Collapsible Filter Panel) - AC 4 */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Nút bật/tắt bảng bộ lọc nâng cao & menu Bộ lọc đã lưu - AC 2 & AC 4 */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             type="button"
             id={`filter-panel-toggle-${panelId}`}
@@ -268,6 +272,19 @@ export const CandidateSearchFilterPanel: React.FC<CandidateSearchFilterPanelProp
               <ChevronDown className="h-4 w-4 text-slate-500" />
             )}
           </button>
+
+          {/* Menu chọn & Sử dụng bộ lọc nhanh (Saved Presets Dropdown) - AC 2 */}
+          <SavedFilterDropdown
+            currentFilters={filters}
+            jobOptions={jobOptions}
+            onSelectPreset={(preset) => {
+              setDraftFilters(preset.filters);
+              onChangeFilters(preset.filters);
+              if (onApplyFilters) {
+                onApplyFilters(preset.filters);
+              }
+            }}
+          />
 
           {activeCount > 0 && (
             <button
@@ -318,14 +335,26 @@ export const CandidateSearchFilterPanel: React.FC<CandidateSearchFilterPanelProp
             </span>
           ))}
 
-          <button
-            type="button"
-            data-testid="clear-all-active-badges-btn"
-            onClick={handleResetAll}
-            className="ml-auto text-xs font-medium text-slate-500 hover:text-rose-600 underline decoration-dotted transition-colors dark:text-slate-400 dark:hover:text-rose-400"
-          >
-            Xóa tất cả ({activeBadges.length})
-          </button>
+          <div className="ml-auto flex items-center gap-3">
+            <button
+              type="button"
+              data-testid="save-current-filter-from-badges-btn"
+              onClick={() => setIsSaveModalOpen(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors"
+            >
+              <BookmarkPlus className="h-3.5 w-3.5" />
+              <span>Lưu bộ lọc này</span>
+            </button>
+
+            <button
+              type="button"
+              data-testid="clear-all-active-badges-btn"
+              onClick={handleResetAll}
+              className="text-xs font-medium text-slate-500 hover:text-rose-600 underline decoration-dotted transition-colors dark:text-slate-400 dark:hover:text-rose-400"
+            >
+              Xóa tất cả ({activeBadges.length})
+            </button>
+          </div>
         </div>
       )}
 
@@ -678,6 +707,15 @@ export const CandidateSearchFilterPanel: React.FC<CandidateSearchFilterPanelProp
           </div>
         </div>
       )}
+
+      {/* Modal Lưu bộ lọc hiện tại (AC 1) */}
+      <SaveFilterModal
+        isOpen={isSaveModalOpen}
+        onClose={() => setIsSaveModalOpen(false)}
+        currentFilters={filters}
+        jobOptions={jobOptions}
+        onSuccess={() => {}}
+      />
     </div>
   );
 };
