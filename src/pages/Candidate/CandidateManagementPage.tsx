@@ -10,6 +10,7 @@ import {
   Clock,
   Eye,
   RefreshCw,
+  Star,
 } from 'lucide-react';
 import type {
   CandidateProfile,
@@ -269,6 +270,31 @@ export const CandidateManagementPage: React.FC = () => {
                       {candidateItem.trackingCode && (
                         <div className="mt-1 font-mono text-[11px] text-gray-400">
                           {candidateItem.trackingCode}
+                        </div>
+                      )}
+                      {/* Hiển thị mức đánh giá sao và nhãn phục vụ sàng lọc nhanh */}
+                      {(Boolean(candidateItem.rating) ||
+                        (candidateItem.tags && candidateItem.tags.length > 0)) && (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          {Boolean(candidateItem.rating) && (
+                            <span className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300">
+                              <Star className="h-3 w-3 fill-amber-400 text-amber-500" />
+                              {candidateItem.rating}/5
+                            </span>
+                          )}
+                          {candidateItem.tags?.slice(0, 2).map((tagItem) => (
+                            <span
+                              key={tagItem.id}
+                              className={`rounded px-1.5 py-0.5 text-[10px] font-medium border ${tagItem.colorClass || 'border-gray-200 bg-gray-100 text-gray-700'}`}
+                            >
+                              {tagItem.name}
+                            </span>
+                          ))}
+                          {(candidateItem.tags?.length || 0) > 2 && (
+                            <span className="text-[10px] text-gray-400">
+                              +{(candidateItem.tags?.length || 0) - 2}
+                            </span>
+                          )}
                         </div>
                       )}
                     </td>

@@ -12,10 +12,14 @@ import {
 } from 'lucide-react';
 import type {
   CandidateProfile,
+  CandidateTag,
+  CandidateInternalNote,
   CvSuggestedCandidateInfo,
 } from '../../types/candidate';
 import { CvSuggestionConfirmBox } from './CvSuggestionConfirmBox';
+import { CandidateScreeningWidget } from './CandidateScreeningWidget';
 import { candidateService } from '../../services/candidateService';
+import { tokenService } from '../../services/token.service';
 import { toast } from '../notifications';
 
 export interface CandidateDetailModalProps {
@@ -184,6 +188,104 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
     }
   };
 
+  // Lấy thông tin tài khoản người dùng hiện tại để ghi nhận tác giả ghi chú
+  const currentLoggedInUser = tokenService.getUserData();
+  const currentUserName = currentLoggedInUser?.fullName || 'Chuyên viên Tuyển dụng';
+  const currentUserRole = currentLoggedInUser?.roles?.[0] || 'Recruiter';
+
+  // Thao tác chấm sao nhanh 1-5 sao
+  // Tại sao: Recruiter chỉ cần 1 cú click để cập nhật mức đánh giá sao sơ loại
+  const handleRatingChange = async (selectedRating: number): Promise<void> => {
+    if (!currentCandidate) return;
+    try {
+      await candidateService.updateCandidateRating(
+        currentCandidate.id,
+        selectedRating
+      );
+      const updatedCandidateProfile: CandidateProfile = {
+        ...currentCandidate,
+        rating: selectedRating,
+        updatedAt: new Date().toISOString(),
+      };
+      setCurrentCandidate(updatedCandidateProfile);
+      if (onProfileUpdated) {
+        onProfileUpdated(updatedCandidateProfile);
+      }
+      toast.success(
+        selectedRating > 0
+          ? `Đã cập nhật đánh giá ${selectedRating}/5 sao cho ứng viên.`
+          : 'Đã xóa đánh giá sao.'
+      );
+    } catch (caughtError: unknown) {
+      const errorMessage =
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Không thể cập nhật mức đánh giá sao.';
+      toast.error(errorMessage);
+    }
+  };
+
+  // Thao tác gắn/bỏ nhãn phân loại hồ sơ
+  // Tại sao: Lưu tức thời thay đổi nhãn để Recruiter xử lý nhanh nhiều hồ sơ liên tiếp
+  const handleTagsChange = async (updatedTags: CandidateTag[]): Promise<void> => {
+    if (!currentCandidate) return;
+    try {
+      await candidateService.updateCandidateTags(
+        currentCandidate.id,
+        updatedTags
+      );
+      const updatedCandidateProfile: CandidateProfile = {
+        ...currentCandidate,
+        tags: updatedTags,
+        updatedAt: new Date().toISOString(),
+      };
+      setCurrentCandidate(updatedCandidateProfile);
+      if (onProfileUpdated) {
+        onProfileUpdated(updatedCandidateProfile);
+      }
+    } catch (caughtError: unknown) {
+      const errorMessage =
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Không thể cập nhật danh sách nhãn hồ sơ.';
+      toast.error(errorMessage);
+    }
+  };
+
+  // Thao tác thêm ghi chú nội bộ bảo mật
+  // Tại sao: Bắt buộc lưu rõ Tên người viết và thời điểm để phục vụ đối chiếu nội bộ
+  const handleAddInternalNote = async (
+    noteContent: string,
+    category?: CandidateInternalNote['category']
+  ): Promise<void> => {
+    if (!currentCandidate) return;
+    try {
+      const newNote = await candidateService.addInternalNote(
+        currentCandidate.id,
+        noteContent,
+        currentUserName,
+        currentUserRole,
+        category
+      );
+      const updatedCandidateProfile: CandidateProfile = {
+        ...currentCandidate,
+        notes: [newNote, ...(currentCandidate.notes || [])],
+        updatedAt: new Date().toISOString(),
+      };
+      setCurrentCandidate(updatedCandidateProfile);
+      if (onProfileUpdated) {
+        onProfileUpdated(updatedCandidateProfile);
+      }
+      toast.success('Đã lưu ghi chú nội bộ thành công.');
+    } catch (caughtError: unknown) {
+      const errorMessage =
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Không thể lưu ghi chú nội bộ.';
+      toast.error(errorMessage);
+    }
+  };
+
   return (
     <div
       role="dialog"
@@ -239,6 +341,20 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
               isProcessing={isProcessingAction}
             />
           </div>
+
+          {/* CỤM GIAO DIỆN SÀNG LỌC NHANH: ĐÁNH GIÁ SAO, GẮN NHÃN VÀ GHI CHÚ NỘI BỘ (SUBTASK TKNHTTDNB1-384) */}
+          <CandidateScreeningWidget
+            candidateId={currentCandidate.id}
+            candidateName={currentCandidate.fullName}
+            candidateStarRating={currentCandidate.rating || 0}
+            selectedScreeningTags={currentCandidate.tags || []}
+            internalNotes={currentCandidate.notes || []}
+            currentUserName={currentUserName}
+            currentUserRole={currentUserRole}
+            onRatingChange={handleRatingChange}
+            onTagsChange={handleTagsChange}
+            onAddNote={handleAddInternalNote}
+          />
 
           {/* Khối thông tin tệp CV đính kèm */}
           <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 dark:border-gray-800 dark:bg-gray-850">
