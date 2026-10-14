@@ -19,6 +19,7 @@ import { tokenService } from '../../services/token.service';
 import { interviewService } from '../../services/interviewService';
 import { useToast } from '../../components/notifications/useToast';
 import type { InterviewSchedulePayload } from '../../types/interview';
+import CandidateResponseStatus from '../../components/Candidate/CandidateResponseStatus';
 
 export const PersonalInterviewSchedulePage: React.FC = () => {
   const navigate = useNavigate();
@@ -348,6 +349,7 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
                             Hôm nay
                           </span>
                         )}
+                        <CandidateResponseStatus response={item.candidateResponse} />
                       </div>
 
                       <p className="text-xs sm:text-sm text-slate-600 font-medium">
