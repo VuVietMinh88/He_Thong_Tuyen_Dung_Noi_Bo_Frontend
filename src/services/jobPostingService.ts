@@ -1188,36 +1188,114 @@ export const formatJobLevel = (level?: string): string => {
   }
 };
 
+export type DeadlineCategory = 'OPEN' | 'CLOSING_SOON' | 'EXPIRED';
+
+export interface DeadlineStatusResult {
+  text: string;
+  isUrgent: boolean;
+  isExpired: boolean;
+  isClosingSoon: boolean;
+  daysRemaining: number | null;
+  status: DeadlineCategory;
+  badgeText: string;
+  badgeVariant: 'open' | 'closing_soon' | 'expired';
+}
+
 /**
- * Tính toán tình trạng hạn nộp hồ sơ (AC2)
+ * Logic so sánh hạn chót (deadline) với thời gian thực tế để tính số ngày còn lại
+ * và gán trạng thái phù hợp (User Story S3-02 / Task TKNHTTDNB1-319 AC3)
  */
-export const getDeadlineStatus = (
-  deadlineStr?: string
-): { text: string; isUrgent: boolean; isExpired: boolean; daysRemaining: number | null } => {
-  if (!deadlineStr) return { text: 'Không giới hạn', isUrgent: false, isExpired: false, daysRemaining: null };
+export const checkJobDeadlineStatus = (
+  deadlineStr?: string,
+  referenceDate: Date = new Date()
+): DeadlineStatusResult => {
+  if (!deadlineStr) {
+    return {
+      text: 'Không giới hạn',
+      isUrgent: false,
+      isExpired: false,
+      isClosingSoon: false,
+      daysRemaining: null,
+      status: 'OPEN',
+      badgeText: 'Đang mở tuyển dụng',
+      badgeVariant: 'open',
+    };
+  }
+
   try {
     const deadline = new Date(deadlineStr);
-    const today = new Date();
+    const today = new Date(referenceDate);
     today.setHours(0, 0, 0, 0);
-    const diffMs = deadline.getTime() - today.getTime();
+    const deadlineZero = new Date(deadline);
+    deadlineZero.setHours(0, 0, 0, 0);
+
+    const diffMs = deadlineZero.getTime() - today.getTime();
     const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
     if (diffDays < 0) {
-      return { text: 'Đã hết hạn', isUrgent: false, isExpired: true, daysRemaining: diffDays };
+      return {
+        text: 'Đã hết hạn',
+        isUrgent: false,
+        isExpired: true,
+        isClosingSoon: false,
+        daysRemaining: diffDays,
+        status: 'EXPIRED',
+        badgeText: 'Đã đóng tuyển dụng',
+        badgeVariant: 'expired',
+      };
     }
-    if (diffDays === 0) {
-      return { text: 'Hôm nay', isUrgent: true, isExpired: false, daysRemaining: 0 };
+
+    if (diffDays <= 3) {
+      const closingText = diffDays === 0 ? 'Hôm nay' : `Hết hạn trong ${diffDays} ngày`;
+      return {
+        text: diffDays === 0 ? 'Hôm nay' : `Còn ${diffDays} ngày`,
+        isUrgent: true,
+        isExpired: false,
+        isClosingSoon: true,
+        daysRemaining: diffDays,
+        status: 'CLOSING_SOON',
+        badgeText: closingText,
+        badgeVariant: 'closing_soon',
+      };
     }
-    if (diffDays <= 5) {
-      return { text: `Còn ${diffDays} ngày`, isUrgent: true, isExpired: false, daysRemaining: diffDays };
-    }
+
+    // Còn hạn (Open - từ 4 ngày trở lên)
     const day = String(deadline.getDate()).padStart(2, '0');
     const month = String(deadline.getMonth() + 1).padStart(2, '0');
     const year = deadline.getFullYear();
-    return { text: `${day}/${month}/${year}`, isUrgent: false, isExpired: false, daysRemaining: diffDays };
+    const formattedDate = `${day}/${month}/${year}`;
+
+    return {
+      text: formattedDate,
+      isUrgent: diffDays <= 5,
+      isExpired: false,
+      isClosingSoon: false,
+      daysRemaining: diffDays,
+      status: 'OPEN',
+      badgeText: `Còn ${diffDays} ngày`,
+      badgeVariant: 'open',
+    };
   } catch {
-    return { text: deadlineStr, isUrgent: false, isExpired: false, daysRemaining: null };
+    return {
+      text: deadlineStr,
+      isUrgent: false,
+      isExpired: false,
+      isClosingSoon: false,
+      daysRemaining: null,
+      status: 'OPEN',
+      badgeText: deadlineStr,
+      badgeVariant: 'open',
+    };
   }
+};
+
+/**
+ * Tính toán tình trạng hạn nộp hồ sơ (AC2 / Task TKNHTTDNB1-319)
+ */
+export const getDeadlineStatus = (
+  deadlineStr?: string
+): DeadlineStatusResult => {
+  return checkJobDeadlineStatus(deadlineStr);
 };
 
 export default jobPostingService;

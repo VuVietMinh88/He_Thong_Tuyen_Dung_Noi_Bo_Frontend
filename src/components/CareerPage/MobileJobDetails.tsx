@@ -28,6 +28,8 @@ import {
   getDeadlineStatus,
 } from '../../services/jobPostingService';
 import { useToast } from '../notifications/useToast';
+import JobDeadlineBadge from './JobDeadlineBadge';
+import JobExpiredBanner from './JobExpiredBanner';
 
 export interface MobileJobDetailsProps {
   job: JobPostingData;
@@ -207,6 +209,11 @@ export const MobileJobDetails: React.FC<MobileJobDetailsProps> = ({
 
       {/* 2. NỘI DUNG CHÍNH (Được padding bottom pb-28 để KHÔNG bị che bởi Sticky Action Bar - AC2) */}
       <main className="mx-auto max-w-2xl px-4 py-5 pb-32 space-y-5">
+        {/* Banner thông báo nhẹ khi tin tuyển dụng đã hết hạn (AC2) */}
+        {deadlineInfo.isExpired && (
+          <JobExpiredBanner message="Vị trí tuyển dụng này đã đóng, vui lòng tham khảo các vị trí khác." />
+        )}
+
         {/* Khối Header chi tiết tin tuyển dụng (AC1) */}
         <section
           data-testid="job-header-section"
@@ -228,6 +235,8 @@ export const MobileJobDetails: React.FC<MobileJobDetailsProps> = ({
               <Clock className="h-3.5 w-3.5" />
               {employmentTypeText}
             </span>
+            {/* Huy hiệu trạng thái hạn nộp hồ sơ (AC1) */}
+            <JobDeadlineBadge deadline={job.deadline} size="sm" />
           </div>
 
           {/* Job Title */}
@@ -281,14 +290,20 @@ export const MobileJobDetails: React.FC<MobileJobDetailsProps> = ({
             <div
               data-testid="deadline-badge"
               className={`flex items-center gap-2 rounded-2xl p-3 border ${
-                deadlineInfo.isUrgent
+                deadlineInfo.isExpired
                   ? 'bg-rose-50/80 border-rose-200/80'
+                  : deadlineInfo.isClosingSoon
+                  ? 'bg-amber-50/80 border-amber-200/80'
                   : 'bg-slate-50 border-slate-200/70'
               }`}
             >
               <div
                 className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-xs ${
-                  deadlineInfo.isUrgent ? 'bg-rose-600' : 'bg-slate-600'
+                  deadlineInfo.isExpired
+                    ? 'bg-rose-600'
+                    : deadlineInfo.isClosingSoon
+                    ? 'bg-amber-600'
+                    : 'bg-slate-600'
                 }`}
               >
                 <Calendar className="h-4 w-4" />
@@ -296,14 +311,22 @@ export const MobileJobDetails: React.FC<MobileJobDetailsProps> = ({
               <div className="min-w-0">
                 <span
                   className={`block text-[10px] font-semibold uppercase tracking-wider ${
-                    deadlineInfo.isUrgent ? 'text-rose-700 font-bold' : 'text-slate-500'
+                    deadlineInfo.isExpired
+                      ? 'text-rose-700 font-bold'
+                      : deadlineInfo.isClosingSoon
+                      ? 'text-amber-700 font-bold'
+                      : 'text-slate-500'
                   }`}
                 >
                   Hạn nộp hồ sơ
                 </span>
                 <span
                   className={`block truncate text-xs sm:text-sm font-bold ${
-                    deadlineInfo.isUrgent ? 'text-rose-900' : 'text-slate-900'
+                    deadlineInfo.isExpired
+                      ? 'text-rose-900'
+                      : deadlineInfo.isClosingSoon
+                      ? 'text-amber-900'
+                      : 'text-slate-900'
                   }`}
                 >
                   {deadlineInfo.text}
@@ -521,15 +544,21 @@ export const MobileJobDetails: React.FC<MobileJobDetailsProps> = ({
             )}
           </button>
 
-          {/* Nút Ứng tuyển ngay (Chính, Nổi bật, Touch target >= 48px) */}
+          {/* Nút Ứng tuyển ngay (Chính, Nổi bật, Touch target >= 48px, tự động disabled khi hết hạn - AC2) */}
           <button
             type="button"
             data-testid="bottom-apply-button"
-            onClick={() => setIsApplyDrawerOpen(true)}
-            className="flex h-12 min-h-[48px] flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 px-5 text-sm sm:text-base font-extrabold text-white shadow-lg shadow-indigo-600/30 transition hover:from-indigo-700 hover:to-violet-700 active:scale-[0.98]"
+            data-disabled={deadlineInfo.isExpired}
+            disabled={deadlineInfo.isExpired}
+            onClick={() => !deadlineInfo.isExpired && setIsApplyDrawerOpen(true)}
+            className={`flex h-12 min-h-[48px] flex-1 items-center justify-center gap-2 rounded-2xl px-5 text-sm sm:text-base font-extrabold transition ${
+              deadlineInfo.isExpired
+                ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none active:scale-100'
+                : 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-600/30 transition hover:from-indigo-700 hover:to-violet-700 active:scale-[0.98]'
+            }`}
           >
             <Send className="h-4 w-4" />
-            Ứng tuyển ngay
+            {deadlineInfo.isExpired ? 'Đã hết hạn ứng tuyển' : 'Ứng tuyển ngay'}
           </button>
         </div>
       </aside>

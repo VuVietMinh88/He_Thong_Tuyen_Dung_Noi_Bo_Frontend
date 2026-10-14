@@ -20,6 +20,8 @@ import {
   getDeadlineStatus,
 } from '../../services/jobPostingService';
 import { useToast } from '../notifications/useToast';
+import JobDeadlineBadge from './JobDeadlineBadge';
+import JobExpiredBanner from './JobExpiredBanner';
 
 export interface JobDetailModalProps {
   job: JobPostingData | null;
@@ -158,11 +160,8 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
               <span className="rounded-lg bg-slate-200/70 px-2.5 py-1 text-xs font-medium text-slate-700">
                 {levelText}
               </span>
-              {deadlineInfo.isUrgent && (
-                <span className="rounded-lg bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-600 border border-rose-200/60">
-                  {deadlineInfo.text}
-                </span>
-              )}
+              {/* Huy hiệu trạng thái hạn nộp hồ sơ (AC1) */}
+              <JobDeadlineBadge deadline={job.deadline} size="sm" />
             </div>
 
             <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
@@ -219,6 +218,10 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
 
         {/* Modal Body */}
         <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-8">
+          {/* Banner thông báo khi tin hết hạn (AC2) */}
+          {deadlineInfo.isExpired && (
+            <JobExpiredBanner message="Vị trí tuyển dụng này đã đóng, vui lòng tham khảo các vị trí khác." />
+          )}
           {isSubmittedSuccess ? (
             <div className="py-12 text-center space-y-4">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
@@ -447,11 +450,17 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => setIsApplying(true)}
-                className="inline-flex min-h-[48px] items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-2.5 text-sm font-bold text-white shadow-md shadow-indigo-600/30 hover:from-indigo-700 hover:to-violet-700 active:scale-95 transition"
+                data-testid="modal-apply-button"
+                disabled={deadlineInfo.isExpired}
+                onClick={() => !deadlineInfo.isExpired && setIsApplying(true)}
+                className={`inline-flex min-h-[48px] items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold transition ${
+                  deadlineInfo.isExpired
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none active:scale-100'
+                    : 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/30 hover:from-indigo-700 hover:to-violet-700 active:scale-95'
+                }`}
               >
                 <Send className="h-4 w-4" />
-                Ứng tuyển vị trí này
+                {deadlineInfo.isExpired ? 'Đã hết hạn ứng tuyển' : 'Ứng tuyển vị trí này'}
               </button>
             </div>
           </div>

@@ -5,7 +5,6 @@ import {
   Calendar,
   Banknote,
   Users,
-  Clock,
   ArrowRight,
 } from 'lucide-react';
 import type { JobPostingData } from '../../services/jobPostingService';
@@ -15,6 +14,7 @@ import {
   formatJobLevel,
   getDeadlineStatus,
 } from '../../services/jobPostingService';
+import JobDeadlineBadge from './JobDeadlineBadge';
 
 export interface JobCardProps {
   job: JobPostingData;
@@ -72,12 +72,8 @@ export const JobCard: React.FC<JobCardProps> = ({
             <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
               {levelText}
             </span>
-            {deadlineInfo.isUrgent && (
-              <span className="flex items-center gap-1 rounded-lg bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-600 border border-rose-200/60 animate-pulse">
-                <Clock className="h-3 w-3" />
-                {deadlineInfo.text}
-              </span>
-            )}
+            {/* Huy hiệu trạng thái hạn nộp (AC1) */}
+            <JobDeadlineBadge deadline={job.deadline} size="sm" />
           </div>
 
           {/* Job Title */}
@@ -144,11 +140,17 @@ export const JobCard: React.FC<JobCardProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => onApplyNow?.(job) || onViewDetail(job)}
-            className="flex-1 md:flex-initial min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 active:scale-95"
+            data-testid={`job-card-apply-${job.id}`}
+            disabled={deadlineInfo.isExpired}
+            onClick={() => !deadlineInfo.isExpired && (onApplyNow?.(job) || onViewDetail(job))}
+            className={`flex-1 md:flex-initial min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl px-5 py-2.5 text-sm font-semibold transition ${
+              deadlineInfo.isExpired
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                : 'bg-indigo-600 text-white shadow-xs hover:bg-indigo-700 active:scale-95'
+            }`}
           >
-            <span>Ứng tuyển</span>
-            <ArrowRight className="h-4 w-4" />
+            <span>{deadlineInfo.isExpired ? 'Đã hết hạn' : 'Ứng tuyển'}</span>
+            {!deadlineInfo.isExpired && <ArrowRight className="h-4 w-4" />}
           </button>
         </div>
       </article>
@@ -179,12 +181,8 @@ export const JobCard: React.FC<JobCardProps> = ({
             </span>
           </div>
 
-          {deadlineInfo.isUrgent && (
-            <span className="flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-0.5 text-[11px] font-bold text-rose-600 border border-rose-200/60 animate-pulse">
-              <Clock className="h-3 w-3" />
-              {deadlineInfo.text}
-            </span>
-          )}
+          {/* Huy hiệu trạng thái hạn nộp (AC1) */}
+          <JobDeadlineBadge deadline={job.deadline} size="sm" />
         </div>
 
         {/* Job Title */}
@@ -276,11 +274,17 @@ export const JobCard: React.FC<JobCardProps> = ({
         </button>
         <button
           type="button"
-          onClick={() => onApplyNow?.(job) || onViewDetail(job)}
-          className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 py-2 px-3 text-xs font-semibold text-white shadow-xs transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 active:scale-95"
+          data-testid={`job-card-apply-${job.id}`}
+          disabled={deadlineInfo.isExpired}
+          onClick={() => !deadlineInfo.isExpired && (onApplyNow?.(job) || onViewDetail(job))}
+          className={`flex-1 min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl py-2 px-3 text-xs font-semibold transition ${
+            deadlineInfo.isExpired
+              ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+              : 'bg-indigo-600 text-white shadow-xs hover:bg-indigo-700 active:scale-95'
+          }`}
         >
-          <span>Ứng tuyển</span>
-          <ArrowRight className="h-3.5 w-3.5" />
+          <span>{deadlineInfo.isExpired ? 'Đã hết hạn' : 'Ứng tuyển'}</span>
+          {!deadlineInfo.isExpired && <ArrowRight className="h-3.5 w-3.5" />}
         </button>
       </div>
     </article>
