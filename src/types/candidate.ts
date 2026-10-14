@@ -46,10 +46,41 @@ export interface CandidateProfile {
   updatedAt?: string;
 }
 
+/**
+ * Tùy chọn sắp xếp hồ sơ ứng viên theo điểm phù hợp hoặc thời gian nộp (Task TKNHTTDNB1-411 / Story TKNHTTDNB1-57)
+ */
+export type CandidateSortOption =
+  | 'SCORE_DESC' // Điểm phù hợp: Cao đến thấp (Gợi ý đọc trước)
+  | 'SCORE_ASC' // Điểm phù hợp: Thấp đến cao
+  | 'APPLIED_AT_DESC'; // Ngày nộp hồ sơ: Mới nhất
+
+export const DEFAULT_CANDIDATE_SORT_OPTION: CandidateSortOption = 'SCORE_DESC';
+
+export interface CandidateSortConfig {
+  value: CandidateSortOption;
+  label: string;
+}
+
+export const CANDIDATE_SORT_OPTIONS: CandidateSortConfig[] = [
+  {
+    value: 'SCORE_DESC',
+    label: 'Điểm phù hợp: Cao đến thấp (Gợi ý đọc trước)',
+  },
+  {
+    value: 'SCORE_ASC',
+    label: 'Điểm phù hợp: Thấp đến cao',
+  },
+  {
+    value: 'APPLIED_AT_DESC',
+    label: 'Ngày nộp hồ sơ: Mới nhất',
+  },
+];
+
 export interface CandidateFilterCriteria {
   keyword?: string;
   jobId?: string;
   cvParsingStatus?: CvParsingStatus | 'ALL';
+  sortBy?: CandidateSortOption;
 }
 
 /**

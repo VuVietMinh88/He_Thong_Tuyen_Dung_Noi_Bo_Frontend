@@ -11,8 +11,14 @@ import type {
   ScreeningCatalogTag,
   CandidateScreeningUpdatePayload,
 } from '../types/candidate';
-import { DEFAULT_SCREENING_CATALOG_TAGS } from '../types/candidate';
-import { resolveCandidateMatchingEvaluation } from '../utils/candidateMatchingHelper';
+import {
+  DEFAULT_SCREENING_CATALOG_TAGS,
+  DEFAULT_CANDIDATE_SORT_OPTION,
+} from '../types/candidate';
+import {
+  resolveCandidateMatchingEvaluation,
+  sortCandidatesByMatchingScore,
+} from '../utils/candidateMatchingHelper';
 
 const STORAGE_KEY_CANDIDATE_PROFILES = 'smart_recruit_candidate_profiles';
 const STORAGE_KEY_CANDIDATES = 'smart_recruit_unified_candidates';
@@ -271,18 +277,34 @@ export const candidateService = {
   // ==========================================
 
   /**
-   * Lấy danh sách hồ sơ ứng viên (có hỗ trợ bộ lọc)
+   * Lấy danh sách hồ sơ ứng viên (có hỗ trợ bộ lọc và sắp xếp theo điểm phù hợp gợi ý) - Task TKNHTTDNB1-411
    */
   async getCandidates(
     filterCriteria?: CandidateFilterCriteria
   ): Promise<CandidateProfile[]> {
+    const selectedSortOption = filterCriteria?.sortBy || DEFAULT_CANDIDATE_SORT_OPTION;
+
     try {
-      const apiResponse = await axiosClient.get<CandidateProfile[]>('/recruitment/candidates');
+      const apiResponse = await axiosClient.get<CandidateProfile[]>('/recruitment/candidates', {
+        params: {
+          keyword: filterCriteria?.keyword,
+          cvParsingStatus: filterCriteria?.cvParsingStatus,
+          jobId: filterCriteria?.jobId,
+          sortBy: selectedSortOption,
+        },
+      });
       if (Array.isArray(apiResponse.data) && apiResponse.data.length > 0) {
-        return apiResponse.data;
+        // Chuẩn hóa điểm phù hợp và áp dụng sắp xếp theo thứ tự yêu cầu
+        const mappedApiCandidates = apiResponse.data.map((candidateItem) => ({
+          ...candidateItem,
+          matchingEvaluation:
+            candidateItem.matchingEvaluation ||
+            resolveCandidateMatchingEvaluation(candidateItem),
+        }));
+        return sortCandidatesByMatchingScore(mappedApiCandidates, selectedSortOption);
       }
     } catch {
-      // Dùng dữ liệu bộ nhớ cục bộ khi backend chưa sẵn sàng
+      // Tại sao: Khi backend chưa sẵn sàng hoặc môi trường offline, chuyển xuống xử lý mock fallback từ localStorage
     }
 
     let candidateList = loadCandidateProfilesFromStorage();
@@ -311,12 +333,15 @@ export const candidateService = {
     }
 
     // Đảm bảo mỗi hồ sơ ứng viên đều có kết quả đánh giá 3 tiêu chí và điểm tổng phù hợp (TKNHTTDNB1-410)
-    return candidateList.map((candidateItem) => ({
+    const evaluatedCandidateList = candidateList.map((candidateItem) => ({
       ...candidateItem,
       matchingEvaluation:
         candidateItem.matchingEvaluation ||
         resolveCandidateMatchingEvaluation(candidateItem),
     }));
+
+    // Sắp xếp danh sách hồ sơ theo tiêu chí điểm phù hợp hoặc thời gian nộp (TKNHTTDNB1-411)
+    return sortCandidatesByMatchingScore(evaluatedCandidateList, selectedSortOption);
   },
 
   /**
