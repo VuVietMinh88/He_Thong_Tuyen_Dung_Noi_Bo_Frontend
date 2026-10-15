@@ -17,6 +17,7 @@ import {
   ArrowDown,
   FolderHeart,
   Plus,
+  FileSpreadsheet,
 } from 'lucide-react';
 import type {
   CandidateProfile,
@@ -52,6 +53,8 @@ import { filterCandidatesCombined } from '../../utils/candidateFilterHelper';
 import { AddToTalentPoolModal } from '../../components/Candidate/AddToTalentPoolModal';
 import { SmartTalentMatchingPanel } from '../../components/Candidate/SmartTalentMatchingPanel';
 import { ManualCandidateCreateModal } from '../../components/Candidate/ManualCandidateCreateModal';
+import { CandidateExportExcelButton } from '../../components/Candidate/CandidateExportExcelButton';
+import { toast, ToastContext } from '../../components/notifications';
 
 type PendingStageAction = {
   candidate: CandidateProfile;
@@ -285,6 +288,41 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
     setIsTalentPoolModalOpen(true);
   };
 
+  // Trạng thái & Hàm xử lý xuất Excel nhanh các ứng viên đã chọn từ thanh hàng loạt (Task Jira TKNHTTDNB1-422)
+  const toastContext = React.useContext(ToastContext);
+  const [isBulkExporting, setIsBulkExporting] = useState<boolean>(false);
+
+  const handleExportSelectedCandidates = async () => {
+    if (selectedCandidateIds.length === 0) return;
+    setIsBulkExporting(true);
+    try {
+      const result = await candidateService.exportCandidates(candidateList, {
+        scope: 'SELECTED_ONLY',
+        candidateIds: selectedCandidateIds,
+        format: 'xlsx',
+      });
+      if (toastContext?.notify) {
+        toastContext.notify(
+          `Xuất thành công ${result.count} ứng viên đã chọn ra tệp "${result.filename}"`,
+          'success'
+        );
+      } else {
+        toast.success(
+          `Xuất thành công ${result.count} ứng viên đã chọn ra tệp "${result.filename}"`
+        );
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Xuất file Excel thất bại.';
+      if (toastContext?.notify) {
+        toastContext.notify(msg, 'error');
+      } else {
+        toast.error(msg);
+      }
+    } finally {
+      setIsBulkExporting(false);
+    }
+  };
+
   const renderStatusBadge = (parsingStatus: CvParsingStatus) => {
     switch (parsingStatus) {
       case 'PENDING_CONFIRMATION':
@@ -356,6 +394,18 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
             />
             Làm mới
           </button>
+
+          {/* Nút Xuất Excel danh sách ứng viên (Task Jira TKNHTTDNB1-422 / User Story S5-08) */}
+          <CandidateExportExcelButton
+            candidates={visibleCandidates}
+            selectedCandidateIds={selectedCandidateIds}
+            filterCriteria={{
+              keyword: combinedFilters.keyword,
+              jobId: combinedFilters.jobId,
+              cvParsingStatus: combinedFilters.cvParsingStatus,
+              sortBy: selectedSortOrder,
+            }}
+          />
 
           {/* Nút Thêm ứng viên thủ công (Task Jira TKNHTTDNB1-406 / User Story S5-06) */}
           <button
@@ -512,6 +562,26 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
               className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-indigo-100/70 dark:text-slate-300 dark:hover:bg-indigo-900/50"
             >
               Bỏ chọn
+            </button>
+            {/* Nút Xuất Excel nhanh các ứng viên đã chọn (Task Jira TKNHTTDNB1-422) */}
+            <button
+              type="button"
+              data-testid="bulk-export-excel-btn"
+              onClick={handleExportSelectedCandidates}
+              disabled={isBulkExporting}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-2xs hover:bg-emerald-50 transition-colors disabled:opacity-60 dark:border-emerald-700 dark:bg-gray-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+              title="Xuất trực tiếp các ứng viên đang chọn ra file Excel"
+            >
+              {isBulkExporting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              )}
+              <span>
+                {isBulkExporting
+                  ? 'Đang xuất file...'
+                  : `Xuất Excel (${selectedCandidateIds.length})`}
+              </span>
             </button>
             <button
               type="button"

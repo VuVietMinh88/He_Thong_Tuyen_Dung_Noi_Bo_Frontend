@@ -451,3 +451,22 @@ export interface CreateManualCandidateDto {
   cvUrl?: string;
 }
 
+/**
+ * Types cho Thao tác xuất Excel danh sách ứng viên (Task Jira: TKNHTTDNB1-422 / User Story S5-08)
+ */
+export type CandidateExportScope = 'ALL_FILTERED' | 'SELECTED_ONLY';
+
+export interface CandidateExportOptions {
+  scope: CandidateExportScope;
+  format?: 'xlsx' | 'csv';
+  customFilename?: string;
+  candidateIds?: string[];
+  filterCriteria?: CandidateFilterCriteria;
+}
+
+export interface CandidateExportResult {
+  filename: string;
+  count: number;
+  format: 'xlsx' | 'csv';
+}
+

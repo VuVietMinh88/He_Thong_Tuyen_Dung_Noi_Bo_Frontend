@@ -11,6 +11,8 @@ import type {
   ScreeningCatalogTag,
   CandidateScreeningUpdatePayload,
   CreateManualCandidateDto,
+  CandidateExportOptions,
+  CandidateExportResult,
 } from '../types/candidate';
 import {
   DEFAULT_SCREENING_CATALOG_TAGS,
@@ -20,6 +22,12 @@ import {
   resolveCandidateMatchingEvaluation,
   sortCandidatesByMatchingScore,
 } from '../utils/candidateMatchingHelper';
+import {
+  generateCandidateExportFilename,
+  exportCandidatesToExcel,
+  exportCandidatesToCsv,
+  downloadBlobFile,
+} from '../utils/candidateExportHelper';
 
 const STORAGE_KEY_CANDIDATE_PROFILES = 'smart_recruit_candidate_profiles';
 const STORAGE_KEY_CANDIDATES = 'smart_recruit_unified_candidates';
@@ -1103,6 +1111,76 @@ export const candidateService = {
     saveCandidateProfilesToStorage(updatedProfiles);
 
     return evaluatedCandidate;
+  },
+
+  /**
+   * Xuất danh sách ứng viên ra tệp Excel (.xlsx) hoặc CSV (Task Jira: TKNHTTDNB1-422 / User Story S5-08)
+   * Tự động điều phối: Thử gọi API Backend lấy Blob/Stream; nếu backend chưa sẵn sàng hoặc offline,
+   * chuyển đổi sang xử lý phía client sử dụng thư viện SheetJS để người dùng tải file ngay lập tức.
+   */
+  async exportCandidates(
+    candidates: CandidateProfile[],
+    options?: CandidateExportOptions
+  ): Promise<CandidateExportResult> {
+    const scope = options?.scope || 'ALL_FILTERED';
+    const format = options?.format || 'xlsx';
+    let targetCandidates = [...candidates];
+
+    if (scope === 'SELECTED_ONLY') {
+      const selectedIds = options?.candidateIds || [];
+      targetCandidates = targetCandidates.filter((c) => selectedIds.includes(c.id));
+    }
+
+    if (targetCandidates.length === 0) {
+      throw new Error(
+        scope === 'SELECTED_ONLY'
+          ? 'Chưa có ứng viên nào được chọn để xuất file.'
+          : 'Danh sách ứng viên hiện tại rỗng, không thể xuất file.'
+      );
+    }
+
+    const filename =
+      options?.customFilename || generateCandidateExportFilename(new Date(), format);
+
+    // 1. Thử gọi API Backend nếu endpoint có sẵn
+    try {
+      const response = await axiosClient.post<Blob>(
+        '/recruitment/candidates/export-excel',
+        {
+          candidateIds: targetCandidates.map((c) => c.id),
+          scope,
+          format,
+          filterCriteria: options?.filterCriteria,
+        },
+        {
+          responseType: 'blob',
+          headers: {
+            Accept:
+              format === 'xlsx'
+                ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                : 'text/csv',
+          },
+          timeout: 45000,
+        }
+      );
+
+      if (response && response.data && response.data.size > 0) {
+        downloadBlobFile(response.data, filename);
+        return {
+          filename,
+          count: targetCandidates.length,
+          format,
+        };
+      }
+    } catch {
+      // Khi API chưa sẵn sàng hoặc môi trường offline, tự động fallback sang xử lý client-side bằng SheetJS
+    }
+
+    // 2. Fallback xử lý cục bộ bằng thư viện SheetJS
+    if (format === 'csv') {
+      return exportCandidatesToCsv(targetCandidates, filename);
+    }
+    return exportCandidatesToExcel(targetCandidates, filename);
   },
 };
 
