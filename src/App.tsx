@@ -41,6 +41,7 @@ import UnifiedCandidateProfilePage from "./pages/Candidate/UnifiedCandidateProfi
 import CandidateEvaluationSummaryPage from "./pages/Candidate/CandidateEvaluationSummaryPage";
 import SlaSettingsPage from "./pages/SLA/SlaSettingsPage";
 import PersonalInterviewSchedulePage from "./pages/Interview/PersonalInterviewSchedulePage";
+import OnboardingChecklistPage from "./pages/Onboarding/OnboardingChecklistPage";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -363,6 +364,14 @@ function App() {
                 element={
                   <MainLayout>
                     <SlaSettingsPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/onboarding/checklist-templates"
+                element={
+                  <MainLayout>
+                    <OnboardingChecklistPage />
                   </MainLayout>
                 }
               />

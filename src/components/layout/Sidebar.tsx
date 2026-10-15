@@ -93,6 +93,13 @@ const menuItems: SidebarMenuItem[] = [
     permissions: ['ORGANIZATION_READ_ALL'],
   },
   {
+    label: 'Mẫu Checklist tiếp nhận',
+    to: '/onboarding/checklist-templates',
+    icon: '📋',
+    roles: [ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER],
+    permissions: ['ORGANIZATION_READ_ALL'],
+  },
+  {
     label: 'Quản lý CV / Ứng viên',
     to: '/candidates',
     icon: '📄',
