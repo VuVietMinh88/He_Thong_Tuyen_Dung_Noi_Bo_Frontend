@@ -432,6 +432,49 @@ export function calculatePresetDateRange(preset: SourceDatePreset): {
   }
 }
 
+/**
+ * Tính toán các danh hiệu so sánh nổi bật (Benchmark Highlights)
+ */
+export function calculateBenchmarkHighlights(
+  sources: CandidateSourceMetric[],
+): import('../types/candidateSourceReport').SourceComparisonBenchmark {
+  const activeSources = sources.filter((s) => s.totalApplications > 0);
+  if (activeSources.length === 0) {
+    return {
+      highestVolumeSource: null,
+      highestHireRateSource: null,
+      fastestHiringSource: null,
+      lowestQualitySource: null,
+    };
+  }
+
+  // 1. Nguồn mang lại lượng ứng viên lớn nhất
+  const highestVolumeSource =
+    [...activeSources].sort((a, b) => b.totalApplications - a.totalApplications)[0] || null;
+
+  // 2. Nguồn có tỷ lệ tuyển dụng thành công cao nhất (ROI cao nhất)
+  const highestHireRateSource =
+    [...activeSources].sort((a, b) => b.hireRate - a.hireRate)[0] || null;
+
+  // 3. Nguồn tuyển dụng nhanh nhất
+  const sourcesWithHires = activeSources.filter((s) => s.hiredCount > 0);
+  const fastestHiringSource =
+    sourcesWithHires.length > 0
+      ? [...sourcesWithHires].sort((a, b) => a.avgDaysToHire - b.avgDaysToHire)[0]
+      : null;
+
+  // 4. Nguồn cần tối ưu hóa sàng lọc (Tỷ lệ đạt chuẩn thấp nhất)
+  const lowestQualitySource =
+    [...activeSources].sort((a, b) => a.qualificationRate - b.qualificationRate)[0] || null;
+
+  return {
+    highestVolumeSource,
+    highestHireRateSource,
+    fastestHiringSource,
+    lowestQualitySource,
+  };
+}
+
 export const candidateSourceReportService = {
   /**
    * Lấy danh mục bộ lọc
@@ -465,7 +508,11 @@ export const candidateSourceReportService = {
       });
 
       if (res?.data?.sources && Array.isArray(res.data.sources)) {
-        return res.data as SourceQualityReportData;
+        const benchmark = calculateBenchmarkHighlights(res.data.sources);
+        return {
+          ...res.data,
+          benchmark,
+        } as SourceQualityReportData;
       }
     } catch {
       // Fallback local analytical computation
@@ -473,12 +520,50 @@ export const candidateSourceReportService = {
 
     const rawInputs = generateMockSourceRawData(filters);
     const { sources, kpi } = computeSourceQualityMetrics(rawInputs);
+    const benchmark = calculateBenchmarkHighlights(sources);
 
     return {
       filters,
       kpi,
       sources,
+      benchmark,
       updatedAt: new Date().toISOString(),
+    };
+  },
+
+  /**
+   * Gọi API lấy dữ liệu so sánh đối đầu giữa các nguồn
+   * (Jira Task TKNHTTDNB1-579 - User Story S9-02)
+   */
+  async getSourceComparisonReport(filters: SourceReportFilterState): Promise<{
+    sources: CandidateSourceMetric[];
+    kpi: SourceReportSummaryKpi;
+    benchmark: import('../types/candidateSourceReport').SourceComparisonBenchmark;
+  }> {
+    try {
+      const res = await axiosClient.get('/recruitment/reports/sources/comparison', {
+        params: {
+          preset: filters.datePreset,
+          startDate: filters.startDate,
+          endDate: filters.endDate,
+          departmentId: filters.departmentId,
+          jobOpeningId: filters.jobOpeningId,
+          campaignId: filters.campaignId,
+        },
+      });
+
+      if (res?.data?.sources && Array.isArray(res.data.sources)) {
+        return res.data;
+      }
+    } catch {
+      // Fallback
+    }
+
+    const report = await this.getSourceQualityReport(filters);
+    return {
+      sources: report.sources,
+      kpi: report.kpi,
+      benchmark: report.benchmark || calculateBenchmarkHighlights(report.sources),
     };
   },
 };

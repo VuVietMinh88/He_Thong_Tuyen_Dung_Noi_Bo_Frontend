@@ -87,9 +87,17 @@ export interface SourceReportFilterOptions {
   campaigns: CampaignOption[];
 }
 
+export interface SourceComparisonBenchmark {
+  highestVolumeSource: CandidateSourceMetric | null; // Nguồn mang lại lượng ứng viên lớn nhất
+  highestHireRateSource: CandidateSourceMetric | null; // Nguồn có tỷ lệ tuyển dụng thành công cao nhất (ROI cao nhất)
+  fastestHiringSource: CandidateSourceMetric | null; // Nguồn có thời gian tuyển trung bình nhanh nhất
+  lowestQualitySource: CandidateSourceMetric | null; // Nguồn cần tối ưu hóa sàng lọc (đông hồ sơ nhưng tỷ lệ rớt cao)
+}
+
 export interface SourceQualityReportData {
   filters: SourceReportFilterState;
   kpi: SourceReportSummaryKpi;
   sources: CandidateSourceMetric[];
+  benchmark?: SourceComparisonBenchmark;
   updatedAt: string;
 }
