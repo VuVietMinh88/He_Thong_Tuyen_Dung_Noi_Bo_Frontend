@@ -59,9 +59,42 @@ export interface RatingLevelDefinition {
   activeButtonClass: string;
 }
 
+export type InterviewConclusion = 'RECOMMENDED' | 'CONSIDER' | 'NOT_RECOMMENDED';
+
+export interface ConclusionOptionConfig {
+  key: InterviewConclusion;
+  label: string;
+  shortLabel: string;
+  description: string;
+  activeButtonClass: string;
+  activeBadgeClass: string;
+  idleButtonClass: string;
+  badgeClass: string;
+}
+
 export interface InterviewEvaluationFormValues {
   criteriaEvaluations: Record<string, CriterionEvaluationRecord>;
   generalNotes?: string;
+  conclusion?: InterviewConclusion | null;
+  isLocked?: boolean;
+}
+
+export interface InterviewEvaluationSubmitData {
+  criteriaEvaluations: Record<string, CriterionEvaluationRecord>;
+  calculatedTotalScore: number | null;
+  generalNotes: string;
+  conclusion: InterviewConclusion;
+  isLocked: boolean;
+  submittedAt: string;
+}
+
+export interface InterviewEvaluationAccessParams {
+  isAuthorized?: boolean;
+  currentUserId?: string;
+  currentUserEmail?: string;
+  interviewerIds?: string[];
+  interviewerEmails?: string[];
+  interviewers?: Array<{ id: string; email?: string; name?: string }>;
 }
 
 /**
@@ -114,3 +147,49 @@ export const RATING_LEVEL_DEFINITIONS: Record<CriterionScoreValue, RatingLevelDe
 export const AVAILABLE_SCORE_OPTIONS: CriterionScoreValue[] = [1, 2, 3, 4, 5];
 
 export const DEFAULT_FRAMEWORK_VERSION = 'v1.0';
+
+/**
+ * Cấu hình 3 lựa chọn kết luận phỏng vấn bắt buộc (AC 2 - TKNHTTDNB1-464)
+ * - Nên tuyển (RECOMMENDED): Màu xanh lá (Emerald)
+ * - Cân nhắc (CONSIDER): Màu vàng hổ phách (Amber)
+ * - Không nên tuyển (NOT_RECOMMENDED): Màu đỏ hồng (Rose)
+ */
+export const CONCLUSION_OPTIONS_CONFIG: Record<InterviewConclusion, ConclusionOptionConfig> = {
+  RECOMMENDED: {
+    key: 'RECOMMENDED',
+    label: 'Nên tuyển',
+    shortLabel: 'Nên tuyển',
+    description: 'Ứng viên đáp ứng tốt khung năng lực, tư duy giải quyết vấn đề và phù hợp với định hướng vị trí.',
+    activeButtonClass: 'bg-emerald-600 text-white border-emerald-600 shadow-md ring-2 ring-emerald-300',
+    activeBadgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    idleButtonClass: 'border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:bg-emerald-50/40',
+    badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+  },
+  CONSIDER: {
+    key: 'CONSIDER',
+    label: 'Cân nhắc',
+    shortLabel: 'Cân nhắc',
+    description: 'Ứng viên đáp ứng một phần tiêu chí nhưng cần đánh giá thêm, xem xét mức lương hoặc vị trí phụ.',
+    activeButtonClass: 'bg-amber-600 text-white border-amber-600 shadow-md ring-2 ring-amber-300',
+    activeBadgeClass: 'bg-amber-50 text-amber-700 border-amber-200',
+    idleButtonClass: 'border-slate-200 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/40',
+    badgeClass: 'bg-amber-100 text-amber-800 border-amber-200',
+  },
+  NOT_RECOMMENDED: {
+    key: 'NOT_RECOMMENDED',
+    label: 'Không nên tuyển',
+    shortLabel: 'Không nên tuyển',
+    description: 'Ứng viên chưa đáp ứng yêu cầu năng lực cốt lõi hoặc không phù hợp với định hướng hiện tại.',
+    activeButtonClass: 'bg-rose-600 text-white border-rose-600 shadow-md ring-2 ring-rose-300',
+    activeBadgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
+    idleButtonClass: 'border-slate-200 bg-white text-slate-700 hover:border-rose-300 hover:bg-rose-50/40',
+    badgeClass: 'bg-rose-100 text-rose-800 border-rose-200',
+  },
+};
+
+export const AVAILABLE_CONCLUSION_OPTIONS: InterviewConclusion[] = [
+  'RECOMMENDED',
+  'CONSIDER',
+  'NOT_RECOMMENDED',
+];
+
