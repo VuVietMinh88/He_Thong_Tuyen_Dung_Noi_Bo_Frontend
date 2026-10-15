@@ -8,6 +8,8 @@ import type {
   CheckInterviewConflictPayload,
   InterviewConflictCheckResult,
   ConflictItemDetail,
+  BatchCreateInterviewSchedulePayload,
+  BatchCreateInterviewScheduleResult,
 } from '../types/interview';
 import {
   MOCK_INTERNAL_INTERVIEWERS,
@@ -814,6 +816,88 @@ class InterviewService {
     } catch {
       // Ignored
     }
+  }
+
+  /**
+   * Tạo lịch phỏng vấn đồng loạt cho nhiều ứng viên (Task Jira TKNHTTDNB1-433 / User Story S6-01)
+   */
+  async batchCreateInterviewSchedules(
+    payload: BatchCreateInterviewSchedulePayload
+  ): Promise<BatchCreateInterviewScheduleResult> {
+    const { settings, slots } = payload;
+    if (!slots || slots.length === 0) {
+      throw new InterviewApiError('Danh sách ca phỏng vấn rỗng, không thể tạo lịch.', 400);
+    }
+
+    // 1. Thử gọi API Backend nếu có sẵn endpoint
+    try {
+      const response = await axiosClient.post<BatchCreateInterviewScheduleResult>(
+        '/recruitment/interviews/batch-schedule',
+        payload
+      );
+      if (response?.data && Array.isArray(response.data.scheduledInterviews)) {
+        return response.data;
+      }
+    } catch {
+      // Khi API chưa sẵn sàng hoặc offline, tự động fallback lưu cục bộ
+    }
+
+    // 2. Fallback xử lý cục bộ: Tạo từng lịch phỏng vấn tương ứng
+    const scheduledInterviews: InterviewSchedulePayload[] = [];
+
+    const interviewerDetails: InterviewerInfo[] = settings.interviewerIds.map((id) => {
+      const found =
+        settings.interviewers?.find((i) => i.id === id) ||
+        MOCK_INTERNAL_INTERVIEWERS.find((i) => i.id === id);
+      return (
+        found || {
+          id,
+          name: `Người phỏng vấn (${id})`,
+          role: 'Hội đồng phỏng vấn',
+          email: `${id}@smartrecruitment.vn`,
+        }
+      );
+    });
+
+    for (const slot of slots) {
+      const interviewItem: InterviewSchedulePayload = {
+        id: `intv-batch-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        candidateId: slot.candidate.candidateId,
+        candidateName: slot.candidate.candidateName,
+        candidateEmail: slot.candidate.candidateEmail,
+        applicationId: slot.candidate.applicationId || `app-${slot.candidate.candidateId}`,
+        jobTitle: slot.candidate.jobTitle || 'Vị trí ứng tuyển',
+        roundName:
+          slot.candidate.interviewRound ||
+          slot.candidate.customRoundName ||
+          settings.defaultRoundName ||
+          'Vòng Chuyên môn & Kỹ thuật',
+        roundType: slot.candidate.roundType || settings.defaultRoundType || 'TECHNICAL',
+        interviewDate: settings.interviewDate,
+        interviewTime: slot.startTime,
+        scheduledDateTimeISO: slot.startDateTimeISO,
+        startTime: slot.startTime,
+        durationMinutes: slot.durationMinutes,
+        format: settings.format,
+        locationOrLink: settings.locationOrLink,
+        interviewers: interviewerDetails,
+        interviewerIds: settings.interviewerIds,
+        notes: settings.notes,
+        status: 'SCHEDULED',
+        createdAt: new Date().toISOString(),
+        createdByName: 'Chuyên viên Tuyển dụng',
+      };
+
+      scheduledInterviews.push(interviewItem);
+      this.saveInterviewToStorage(interviewItem);
+      this.syncInterviewToTimeline(interviewItem);
+    }
+
+    return {
+      totalScheduled: scheduledInterviews.length,
+      scheduledInterviews,
+      message: `Đã tạo thành công lịch phỏng vấn đồng loạt cho ${scheduledInterviews.length} ứng viên.`,
+    };
   }
 }
 

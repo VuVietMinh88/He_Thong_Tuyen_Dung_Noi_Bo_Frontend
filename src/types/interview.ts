@@ -384,3 +384,64 @@ export const MOCK_INTERNAL_INTERVIEWERS: InterviewerInfo[] = [
 ];
 
 export * from './interviewEvaluation';
+
+/**
+ * Types cho Xếp lịch phỏng vấn đồng loạt nhiều ứng viên (Task Jira TKNHTTDNB1-433 / User Story S6-01)
+ */
+export interface BatchCandidateScheduleItem {
+  candidateId: string;
+  candidateName: string;
+  candidateEmail?: string;
+  applicationId?: string;
+  jobTitle?: string;
+  departmentName?: string;
+  interviewRound?: string;
+  roundType?: InterviewRoundType;
+  customRoundName?: string;
+}
+
+export interface BatchInterviewScheduleSettings {
+  interviewDate: string; // Định dạng YYYY-MM-DD
+  startFirstSlotTime: string; // Định dạng HH:mm
+  durationMinutes: number; // Thời lượng mỗi ca (phút): 30, 45, 60...
+  breakMinutes: number; // Nghỉ giãn cách giữa 2 ca (phút): 0, 5, 10, 15...
+  format: InterviewFormat; // ONLINE hoặc OFFLINE
+  locationOrLink: string; // Link Google Meet / Zoom hoặc tên phòng họp
+  interviewerIds: string[]; // Danh sách ID người phỏng vấn
+  interviewers?: InterviewerInfo[];
+  defaultRoundType?: InterviewRoundType;
+  defaultRoundName?: string;
+  notes?: string;
+}
+
+export interface CalculatedCandidateSlot {
+  candidate: BatchCandidateScheduleItem;
+  slotNumber: number; // Ca 1, Ca 2...
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  startDateTimeISO: string;
+  endDateTimeISO: string;
+  durationMinutes: number;
+  breakAfterMinutes: number;
+}
+
+export interface BatchScheduleValidationErrors {
+  interviewDate?: string;
+  startFirstSlotTime?: string;
+  durationMinutes?: string;
+  breakMinutes?: string;
+  interviewerIds?: string;
+  locationOrLink?: string;
+  candidates?: string;
+}
+
+export interface BatchCreateInterviewSchedulePayload {
+  settings: BatchInterviewScheduleSettings;
+  slots: CalculatedCandidateSlot[];
+}
+
+export interface BatchCreateInterviewScheduleResult {
+  totalScheduled: number;
+  scheduledInterviews: InterviewSchedulePayload[];
+  message: string;
+}

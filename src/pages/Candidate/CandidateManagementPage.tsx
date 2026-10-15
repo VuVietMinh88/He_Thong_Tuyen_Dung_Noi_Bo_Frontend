@@ -18,6 +18,7 @@ import {
   FolderHeart,
   Plus,
   FileSpreadsheet,
+  CalendarDays,
 } from 'lucide-react';
 import type {
   CandidateProfile,
@@ -54,6 +55,7 @@ import { AddToTalentPoolModal } from '../../components/Candidate/AddToTalentPool
 import { SmartTalentMatchingPanel } from '../../components/Candidate/SmartTalentMatchingPanel';
 import { ManualCandidateCreateModal } from '../../components/Candidate/ManualCandidateCreateModal';
 import { CandidateExportExcelButton } from '../../components/Candidate/CandidateExportExcelButton';
+import { BatchInterviewScheduleModal } from '../../components/Candidate/BatchInterviewScheduleModal';
 import { toast, ToastContext } from '../../components/notifications';
 
 type PendingStageAction = {
@@ -101,6 +103,9 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
 
   // Quản lý biểu mẫu thêm ứng viên thủ công (Task Jira TKNHTTDNB1-406 / User Story S5-06)
   const [isManualCreateModalOpen, setIsManualCreateModalOpen] = useState<boolean>(false);
+
+  // Modal xếp lịch phỏng vấn đồng loạt (Task Jira TKNHTTDNB1-433 / User Story S6-01)
+  const [isBatchScheduleModalOpen, setIsBatchScheduleModalOpen] = useState<boolean>(false);
 
   const fetchCandidates = useCallback(async () => {
     setIsLoading(true);
@@ -583,6 +588,17 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
                   : `Xuất Excel (${selectedCandidateIds.length})`}
               </span>
             </button>
+            {/* Nút Xếp lịch phỏng vấn đồng loạt (Task Jira TKNHTTDNB1-433 / User Story S6-01) */}
+            <button
+              type="button"
+              data-testid="bulk-schedule-interviews-btn"
+              onClick={() => setIsBatchScheduleModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-purple-300 bg-white px-3 py-1.5 text-xs font-semibold text-purple-700 shadow-2xs hover:bg-purple-50 transition-colors dark:border-purple-700 dark:bg-gray-800 dark:text-purple-300 dark:hover:bg-purple-950/40"
+              title="Xếp lịch phỏng vấn đồng loạt cho các ứng viên đang chọn"
+            >
+              <CalendarDays className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+              <span>Xếp lịch phỏng vấn ({selectedCandidateIds.length})</span>
+            </button>
             <button
               type="button"
               data-testid="bulk-add-to-talent-pool-btn"
@@ -940,6 +956,24 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
           if (shouldClose) {
             setIsManualCreateModalOpen(false);
           }
+        }}
+      />
+
+      {/* Modal xếp lịch phỏng vấn đồng loạt cho nhiều ứng viên (Task Jira TKNHTTDNB1-433 / User Story S6-01) */}
+      <BatchInterviewScheduleModal
+        isOpen={isBatchScheduleModalOpen}
+        candidates={candidateList.filter((c) => selectedCandidateIds.includes(c.id))}
+        onClose={() => setIsBatchScheduleModalOpen(false)}
+        onSuccess={(result) => {
+          setIsBatchScheduleModalOpen(false);
+          setSelectedCandidateIds([]);
+          const successMessage = `Đã xếp lịch phỏng vấn thành công cho ${result.totalScheduled} ứng viên!`;
+          if (toastContext?.notify) {
+            toastContext.notify(successMessage, 'success');
+          } else {
+            toast.success(successMessage);
+          }
+          fetchCandidates();
         }}
       />
     </div>
