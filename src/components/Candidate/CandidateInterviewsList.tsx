@@ -10,9 +10,12 @@ import {
   ExternalLink,
   Copy,
   Check,
+  Award,
 } from 'lucide-react';
 import type { InterviewSchedulePayload } from '../../types/interview';
 import CandidateResponseStatus from './CandidateResponseStatus';
+import { InterviewEvaluationModal } from '../Interview/InterviewEvaluationModal';
+import { resolveEvaluationCriteriaForJob } from '../../utils/interviewEvaluationHelper';
 
 interface CandidateInterviewsListProps {
   interviews: InterviewSchedulePayload[];
@@ -28,6 +31,7 @@ export const CandidateInterviewsList: React.FC<CandidateInterviewsListProps> = (
   onStatusChange,
 }) => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [evaluatingInterview, setEvaluatingInterview] = useState<InterviewSchedulePayload | null>(null);
 
   const handleCopy = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
@@ -235,30 +239,68 @@ export const CandidateInterviewsList: React.FC<CandidateInterviewsListProps> = (
                 </div>
               )}
 
-              {/* Action buttons (Hoàn thành / Hủy lịch) */}
-              {!isCompleted && !isCancelled && onStatusChange && (
-                <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onStatusChange(item.id || '', 'CANCELLED')}
-                    className="px-2.5 py-1 text-xs font-semibold text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                  >
-                    Hủy lịch hẹn
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onStatusChange(item.id || '', 'COMPLETED')}
-                    className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition cursor-pointer"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    Đánh dấu đã hoàn thành
-                  </button>
-                </div>
-              )}
+              {/* Action buttons (Đánh giá năng lực / Hoàn thành / Hủy lịch) */}
+              <div className="mt-3 pt-2 border-t border-slate-100 flex flex-wrap items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEvaluatingInterview(item)}
+                  className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition cursor-pointer shadow-2xs"
+                >
+                  <Award className="w-3.5 h-3.5 text-indigo-600" />
+                  Đánh giá năng lực
+                </button>
+
+                {!isCompleted && !isCancelled && onStatusChange && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => onStatusChange(item.id || '', 'CANCELLED')}
+                      className="px-2.5 py-1 text-xs font-semibold text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                    >
+                      Hủy lịch hẹn
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onStatusChange(item.id || '', 'COMPLETED')}
+                      className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Đánh dấu đã hoàn thành
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           );
         })}
       </div>
+
+      {/* Modal Đánh giá năng lực phỏng vấn */}
+      {evaluatingInterview && (
+        <InterviewEvaluationModal
+          isOpen={true}
+          onClose={() => setEvaluatingInterview(null)}
+          candidateName={evaluatingInterview.candidateName}
+          candidateEmail={evaluatingInterview.candidateEmail}
+          jobTitle={evaluatingInterview.jobTitle || 'Chức danh ứng tuyển'}
+          interviewRound={evaluatingInterview.roundName || evaluatingInterview.interviewRound}
+          interviewDate={evaluatingInterview.interviewDate}
+          interviewTime={evaluatingInterview.interviewTime}
+          interviewFormat={evaluatingInterview.format}
+          locationOrLink={evaluatingInterview.locationOrLink}
+          interviewerNames={evaluatingInterview.interviewers?.map((interviewLeader) => interviewLeader.name) || []}
+          frameworkName={`Khung năng lực ${evaluatingInterview.jobTitle || 'Chuyên môn'}`}
+          frameworkCode="CF-STD-2026"
+          frameworkVersion="v1.0"
+          criteria={resolveEvaluationCriteriaForJob(evaluatingInterview.jobTitle)}
+          onSubmit={() => {
+            setEvaluatingInterview(null);
+          }}
+          onSaveDraft={() => {
+            setEvaluatingInterview(null);
+          }}
+        />
+      )}
     </div>
   );
 };
