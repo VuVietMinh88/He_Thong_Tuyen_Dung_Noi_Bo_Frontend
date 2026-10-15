@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   User,
   Briefcase,
@@ -16,12 +16,15 @@ import {
   FileQuestion,
   Sparkles,
   Lock,
+  Unlock,
   ShieldAlert,
   Send,
   AlertTriangle,
   XCircle,
   HelpCircle,
   Check,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import type {
   EvaluationCriterionItem,
@@ -29,6 +32,7 @@ import type {
   CriterionEvaluationRecord,
   RatingLevelDefinition,
   InterviewConclusion,
+  PeerInterviewerEvaluation,
 } from '../../types/interviewEvaluation';
 import {
   RATING_LEVEL_DEFINITIONS,
@@ -44,10 +48,15 @@ import {
   validateAllCriteriaEvaluations,
   validateInterviewConclusion,
   checkInterviewEvaluationAccess,
+  calculateRemainingReopenTime,
+  checkIsRecruiterRole,
+  isPeerReviewVisible,
 } from '../../utils/interviewEvaluationHelper';
+import { interviewEvaluationService } from '../../services/interviewEvaluationService';
 
 export interface InterviewEvaluationFormProps {
   // 1. Thông tin ứng viên & buổi phỏng vấn (AC 1)
+  candidateId?: string;
   candidateName: string;
   candidateEmail?: string;
   jobTitle: string;
@@ -58,13 +67,15 @@ export interface InterviewEvaluationFormProps {
   locationOrLink?: string;
   interviewerNames?: string[];
 
-  // Phân quyền truy cập người phỏng vấn (AC 1 - TKNHTTDNB1-464)
+  // Phân quyền truy cập người phỏng vấn (AC 1 - TKNHTTDNB1-464 & TKNHTTDNB1-465)
   interviewerIds?: string[];
   interviewerEmails?: string[];
   interviewers?: Array<{ id: string; email?: string; name?: string }>;
   currentUserId?: string;
   currentUserEmail?: string;
+  currentUserRoles?: string[];
   isAuthorized?: boolean;
+  isRecruiter?: boolean;
 
   // Thông tin khung năng lực (AC 1)
   frameworkName?: string;
@@ -79,13 +90,18 @@ export interface InterviewEvaluationFormProps {
   // Kết luận phỏng vấn & Trạng thái khóa phiếu (AC 2 & AC 3 - TKNHTTDNB1-464)
   initialConclusion?: InterviewConclusion | null;
   isLocked?: boolean;
+  submittedAt?: string | null;
+
+  // Đánh giá chéo từ Hội đồng phỏng vấn (AC 2 - TKNHTTDNB1-465)
+  peerEvaluations?: PeerInterviewerEvaluation[];
+  hasSubmittedOwnEvaluation?: boolean;
 
   // 3. Trạng thái hiển thị (AC 3)
   isLoading?: boolean;
   errorMessage?: string | null;
   onRetry?: () => void;
 
-  // Xử lý sự kiện lưu & hoàn tất (AC 2 & AC 3 - TKNHTTDNB1-464)
+  // Xử lý sự kiện lưu, hoàn tất & mở lại phiếu (AC 1 & AC 2 - TKNHTTDNB1-465)
   onSubmit?: (evaluationData: {
     criteriaEvaluations: Record<string, CriterionEvaluationRecord>;
     calculatedTotalScore: number | null;
@@ -100,6 +116,7 @@ export interface InterviewEvaluationFormProps {
     generalNotes: string;
     conclusion?: InterviewConclusion | null;
   }) => void;
+  onReopen?: (reason?: string) => Promise<void> | void;
   onCancel?: () => void;
   readOnly?: boolean;
   className?: string;
@@ -397,9 +414,145 @@ export const InterviewEvaluationConfirmModal: React.FC<{
 };
 
 /**
- * Component chính: Phiếu đánh giá năng lực phỏng vấn (TKNHTTDNB1-457, TKNHTTDNB1-458, TKNHTTDNB1-464)
+ * Hộp thoại xác nhận mở lại phiếu đánh giá dành cho Recruiter trong thời hạn 24 giờ (AC 1 - TKNHTTDNB1-465)
+ */
+export const InterviewEvaluationReopenModal: React.FC<{
+  isOpen: boolean;
+  candidateName: string;
+  jobTitle: string;
+  timeRemainingFormatted: string;
+  isReopening?: boolean;
+  errorMessage?: string | null;
+  onConfirm: (reason: string) => void;
+  onCancel: () => void;
+}> = ({
+  isOpen,
+  candidateName,
+  jobTitle,
+  timeRemainingFormatted,
+  isReopening = false,
+  errorMessage = null,
+  onConfirm,
+  onCancel,
+}) => {
+  const [reopenReasonText, setReopenReasonText] = useState<string>('');
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="reopen-modal-title"
+      data-testid="evaluation-reopen-modal"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
+    >
+      <div
+        className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
+        onClick={!isReopening ? onCancel : undefined}
+        aria-hidden="true"
+      />
+
+      <div className="relative w-full max-w-lg rounded-3xl bg-white p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+        <div className="flex items-start gap-3.5">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 border border-amber-200 shrink-0">
+            <Unlock className="h-6 w-6" />
+          </div>
+          <div className="space-y-1">
+            <h3 id="reopen-modal-title" className="text-lg font-bold text-slate-900">
+              Mở lại phiếu đánh giá phỏng vấn
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-600">
+              Chức năng dành cho Recruiter để mở khóa phiếu đã nộp trong thời hạn 24 giờ.
+            </p>
+          </div>
+        </div>
+
+        {/* Thông tin tóm tắt & thời gian còn lại */}
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-slate-500 font-medium">Ứng viên:</span>
+            <span className="font-bold text-slate-800">
+              {candidateName} ({jobTitle})
+            </span>
+          </div>
+          <div className="flex items-center justify-between border-t border-slate-200 pt-2">
+            <span className="text-slate-500 font-medium">Thời hạn mở lại còn:</span>
+            <span
+              data-testid="reopen-modal-countdown"
+              className="inline-flex items-center gap-1 font-bold text-amber-800 bg-amber-100/90 px-2.5 py-0.5 rounded-full"
+            >
+              <Clock className="h-3.5 w-3.5" />
+              {timeRemainingFormatted}
+            </span>
+          </div>
+        </div>
+
+        {/* Nhập lý do mở lại */}
+        <div className="space-y-1.5">
+          <label
+            htmlFor="reopen-reason-input"
+            className="text-xs font-bold uppercase tracking-wider text-slate-700 block"
+          >
+            Lý do mở lại phiếu
+          </label>
+          <textarea
+            id="reopen-reason-input"
+            data-testid="reopen-reason-input"
+            rows={3}
+            value={reopenReasonText}
+            onChange={(changeEvent) => setReopenReasonText(changeEvent.target.value)}
+            placeholder="Nhập lý do cần mở lại phiếu (ví dụ: cần cập nhật thêm nhận xét chuyên môn, thảo luận lại kết luận...)..."
+            className="w-full rounded-xl border border-slate-300 bg-white p-3 text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition resize-y"
+          />
+        </div>
+
+        {/* Báo lỗi nếu có */}
+        {errorMessage && (
+          <div
+            role="alert"
+            data-testid="reopen-error-alert"
+            className="flex items-center gap-2 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 p-3 rounded-xl"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
+        {/* Cụm nút hành động */}
+        <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+          <button
+            type="button"
+            disabled={isReopening}
+            onClick={onCancel}
+            data-testid="reopen-modal-cancel-button"
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition cursor-pointer"
+          >
+            Hủy bỏ
+          </button>
+
+          <button
+            type="button"
+            disabled={isReopening}
+            onClick={() => onConfirm(reopenReasonText)}
+            data-testid="reopen-modal-confirm-button"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-5 py-2.5 text-xs sm:text-sm font-semibold text-white hover:bg-amber-700 disabled:bg-amber-400 shadow-xs transition cursor-pointer"
+          >
+            <Unlock className="h-4 w-4" />
+            {isReopening ? 'Đang mở lại...' : 'Xác nhận mở lại'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Component chính: Phiếu đánh giá năng lực phỏng vấn
+ * (TKNHTTDNB1-457, TKNHTTDNB1-458, TKNHTTDNB1-464, TKNHTTDNB1-465)
  */
 export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = ({
+  candidateId,
   candidateName,
   candidateEmail,
   jobTitle,
@@ -414,7 +567,9 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
   interviewers,
   currentUserId,
   currentUserEmail,
+  currentUserRoles,
   isAuthorized,
+  isRecruiter,
   frameworkName = 'Khung năng lực tiêu chuẩn',
   frameworkCode = 'CF-STD-2026',
   frameworkVersion = DEFAULT_FRAMEWORK_VERSION,
@@ -423,11 +578,15 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
   initialGeneralNotes = '',
   initialConclusion = null,
   isLocked = false,
+  submittedAt = null,
+  peerEvaluations,
+  hasSubmittedOwnEvaluation,
   isLoading = false,
   errorMessage = null,
   onRetry,
   onSubmit,
   onSaveDraft,
+  onReopen,
   onCancel,
   readOnly = false,
   className = '',
@@ -477,20 +636,91 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
   );
   const [conclusionError, setConclusionError] = useState<string | null>(null);
 
-  // Quản lý trạng thái khóa phiếu đánh giá (AC 3 - TKNHTTDNB1-464)
-  const [isFormLocked, setIsFormLocked] = useState<boolean>(Boolean(isLocked));
-  // Đồng bộ nếu prop isLocked thay đổi từ bên ngoài
-  useEffect(() => {
-    if (isLocked) {
-      setIsFormLocked(true);
-    }
-  }, [isLocked]);
+  // Quản lý trạng thái khóa phiếu đánh giá (AC 3 - TKNHTTDNB1-464 & TKNHTTDNB1-465)
+  const [isFormLocked, setIsFormLocked] = useState<boolean>(() => Boolean(isLocked));
+  const [submittedAtState, setSubmittedAtState] = useState<string | null>(() => {
+    return submittedAt || (isLocked ? '2026-10-15T10:00:00.000Z' : null);
+  });
 
   const isFormLockedState = Boolean(isLocked || isFormLocked);
   const isEffectiveLocked = Boolean(isFormLockedState || readOnly);
 
   // Quản lý trạng thái mở Confirm Modal trước khi nộp (AC 2 - TKNHTTDNB1-464)
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState<boolean>(false);
+
+  // Quản lý tính năng Mở lại phiếu dành cho Recruiter trong thời hạn 24 giờ (AC 1 - TKNHTTDNB1-465)
+  const [isReopenModalOpen, setIsReopenModalOpen] = useState<boolean>(false);
+  const [isReopening, setIsReopening] = useState<boolean>(false);
+  const [reopenErrorMessage, setReopenErrorMessage] = useState<string | null>(null);
+
+  // Kiểm tra role Recruiter (AC 1 - TKNHTTDNB1-465)
+  const isRecruiterRole = useMemo(() => {
+    return checkIsRecruiterRole(currentUserRoles, isRecruiter);
+  }, [currentUserRoles, isRecruiter]);
+
+  // Tính toán thời hạn mở lại 24 giờ từ lúc nộp (AC 1 - TKNHTTDNB1-465)
+  const reopenStatus = useMemo(() => {
+    return calculateRemainingReopenTime(submittedAtState);
+  }, [submittedAtState]);
+
+  // Quản lý điều kiện xem đánh giá chéo từ người phỏng vấn khác (AC 2 - TKNHTTDNB1-465)
+  // Chỉ mở khóa khu vực này khi user hiện tại đã nộp phiếu của chính mình
+  const isPeerReviewAllowed = useMemo(() => {
+    const userSubmitted =
+      hasSubmittedOwnEvaluation !== undefined
+        ? hasSubmittedOwnEvaluation
+        : isFormLockedState;
+    return isPeerReviewVisible(userSubmitted);
+  }, [hasSubmittedOwnEvaluation, isFormLockedState]);
+
+  // Chuẩn bị danh sách đánh giá chéo từ hội đồng (AC 2)
+  const defaultPeerEvaluations = useMemo<PeerInterviewerEvaluation[]>(() => {
+    if (peerEvaluations && peerEvaluations.length > 0) {
+      return peerEvaluations;
+    }
+
+    if (interviewers && interviewers.length > 0) {
+      const activeUserId = currentUserId;
+      const activeUserEmail = (currentUserEmail || '').toLowerCase();
+
+      return interviewers
+        .filter((interviewerItem) => {
+          const isCurrentSelf =
+            (activeUserId && interviewerItem.id === activeUserId) ||
+            (activeUserEmail &&
+              interviewerItem.email &&
+              interviewerItem.email.toLowerCase() === activeUserEmail);
+          return !isCurrentSelf;
+        })
+        .map((interviewerItem, peerIndex) => ({
+          interviewerId: interviewerItem.id || `peer-${peerIndex}`,
+          interviewerName: interviewerItem.name || `Người phỏng vấn ${peerIndex + 1}`,
+          interviewerRole: 'Hội đồng phỏng vấn',
+          interviewerEmail: interviewerItem.email,
+          isSubmitted: true,
+          submittedAt: '2026-10-15T08:00:00.000Z',
+          calculatedTotalScore: 4.2,
+          conclusion: 'RECOMMENDED' as const,
+          generalNotes:
+            'Ứng viên nắm chắc chuyên môn kỹ thuật, giao tiếp rõ ràng và có tư duy logic tốt.',
+        }));
+    }
+
+    if (interviewerNames && interviewerNames.length > 1) {
+      return interviewerNames.slice(1).map((peerName, peerIndex) => ({
+        interviewerId: `peer-${peerIndex}`,
+        interviewerName: peerName,
+        interviewerRole: 'Người phỏng vấn',
+        isSubmitted: true,
+        submittedAt: '2026-10-15T07:30:00.000Z',
+        calculatedTotalScore: 4.0,
+        conclusion: 'RECOMMENDED' as const,
+        generalNotes: 'Ứng viên có tiềm năng phát triển và thích ứng văn hóa tốt.',
+      }));
+    }
+
+    return [];
+  }, [peerEvaluations, interviewers, interviewerNames, currentUserId, currentUserEmail]);
 
   // Quản lý thông báo lỗi validation theo thời gian thực (AC 2)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -573,8 +803,9 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
       return calculateWeightedScore(criteria, evaluationsState);
     } catch (errorObject: unknown) {
       // Bắt lỗi rõ ràng, kiểm tra kiểu lỗi và xử lý cụ thể
-      const errorMessage = errorObject instanceof Error ? errorObject.message : 'Lỗi tính điểm';
-      if (errorMessage) {
+      const errorMessageText =
+        errorObject instanceof Error ? errorObject.message : 'Lỗi tính điểm';
+      if (errorMessageText) {
         // Trả về null an toàn cho giao diện khi xảy ra lỗi dữ liệu
         return null;
       }
@@ -638,6 +869,8 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
     setIsConfirmModalOpen(false);
     // Chuyển toàn bộ phiếu sang trạng thái đã khóa chỉ xem (AC 3)
     setIsFormLocked(true);
+    const submissionTimestamp = new Date().toISOString();
+    setSubmittedAtState(submissionTimestamp);
 
     if (onSubmit && interviewConclusion) {
       onSubmit({
@@ -646,8 +879,39 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
         generalNotes: generalNotesState,
         conclusion: interviewConclusion,
         isLocked: true,
-        submittedAt: new Date().toISOString(),
+        submittedAt: submissionTimestamp,
       });
+    }
+  };
+
+  // Xử lý mở lại phiếu đánh giá (AC 1 - TKNHTTDNB1-465)
+  const handleConfirmReopen = async (reopenReason: string) => {
+    try {
+      setIsReopening(true);
+      setReopenErrorMessage(null);
+
+      // Nếu có prop onReopen tùy biến thì ưu tiên gọi
+      if (onReopen) {
+        await onReopen(reopenReason);
+      } else if (candidateId) {
+        // Gọi API mở lại phiếu
+        await interviewEvaluationService.reopenEvaluation(candidateId, {
+          reason: reopenReason,
+        });
+      }
+
+      // Mở khóa phiếu đánh giá thành công
+      setIsFormLocked(false);
+      setIsReopenModalOpen(false);
+    } catch (errorObject: unknown) {
+      // Bắt lỗi triệt để theo convention K3S4_N3, không nuốt lỗi
+      const errorMessageText =
+        errorObject instanceof Error
+          ? errorObject.message
+          : 'Không thể mở lại phiếu đánh giá, vui lòng thử lại sau.';
+      setReopenErrorMessage(errorMessageText);
+    } finally {
+      setIsReopening(false);
     }
   };
 
@@ -720,13 +984,38 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
 
                 {/* Huy hiệu nhãn Đã khóa (AC 3 - TKNHTTDNB1-464) */}
                 {isFormLockedState && (
-                  <span
-                    data-testid="form-locked-badge"
-                    className="inline-flex items-center gap-1.5 rounded-md bg-slate-800 text-white px-2.5 py-1 text-xs font-bold shadow-xs tracking-wide"
-                  >
-                    <Lock className="h-3.5 w-3.5 text-amber-400" />
-                    <span>Đã khóa</span>
-                  </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span
+                      data-testid="form-locked-badge"
+                      className="inline-flex items-center gap-1.5 rounded-md bg-slate-800 text-white px-2.5 py-1 text-xs font-bold shadow-xs tracking-wide"
+                    >
+                      <Lock className="h-3.5 w-3.5 text-amber-400" />
+                      <span>Đã khóa</span>
+                    </span>
+
+                    {/* Nút Mở lại phiếu nhanh trên Header dành cho Recruiter (AC 1 - TKNHTTDNB1-465) */}
+                    {isRecruiterRole && (
+                      reopenStatus.canReopen ? (
+                        <button
+                          type="button"
+                          onClick={() => setIsReopenModalOpen(true)}
+                          data-testid="header-reopen-button"
+                          className="inline-flex items-center gap-1 rounded-md bg-amber-500 hover:bg-amber-600 text-white px-2 py-0.5 text-[11px] font-bold shadow-xs transition cursor-pointer"
+                        >
+                          <Unlock className="h-3 w-3" />
+                          <span>Mở lại ({reopenStatus.timeRemainingFormatted})</span>
+                        </button>
+                      ) : (
+                        <span
+                          data-testid="header-reopen-expired-badge"
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200"
+                        >
+                          <Clock className="h-3 w-3" />
+                          Hết hạn mở lại
+                        </span>
+                      )
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -873,12 +1162,27 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
           <div
             role="status"
             data-testid="form-locked-banner"
-            className="flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50/90 p-4 text-xs font-medium text-amber-900 shadow-2xs"
+            className="flex items-center justify-between flex-wrap gap-3 rounded-xl border border-amber-300 bg-amber-50/90 p-4 text-xs font-medium text-amber-900 shadow-2xs"
           >
-            <Lock className="h-5 w-5 shrink-0 text-amber-600" />
-            <div>
-              <strong>Phiếu đánh giá đã được nộp và khóa an toàn.</strong> Toàn bộ điểm số, nhận xét và kết luận phỏng vấn hiện ở trạng thái <strong>Chỉ xem</strong> (không thể chỉnh sửa).
+            <div className="flex items-center gap-3">
+              <Lock className="h-5 w-5 shrink-0 text-amber-600" />
+              <div>
+                <strong>Phiếu đánh giá đã được nộp và khóa an toàn.</strong> Toàn bộ điểm số, nhận xét và kết luận phỏng vấn hiện ở trạng thái <strong>Chỉ xem</strong>.
+              </div>
             </div>
+
+            {/* Nút Mở lại phiếu dành cho Recruiter ngay trên banner (AC 1 - TKNHTTDNB1-465) */}
+            {isRecruiterRole && reopenStatus.canReopen && (
+              <button
+                type="button"
+                onClick={() => setIsReopenModalOpen(true)}
+                data-testid="banner-reopen-button"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 text-xs font-bold shadow-xs transition cursor-pointer"
+              >
+                <Unlock className="h-3.5 w-3.5" />
+                Mở lại phiếu ({reopenStatus.timeRemainingFormatted})
+              </button>
+            )}
           </div>
         )}
 
@@ -1363,13 +1667,57 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
 
             <div className="flex flex-wrap items-center gap-3">
               {isFormLockedState ? (
-                /* Trạng thái khóa phiếu (Read-only State - AC 3) */
-                <div
-                  data-testid="form-locked-action-notice"
-                  className="inline-flex items-center gap-2 text-xs font-bold text-slate-700 bg-slate-100 px-4 py-2.5 rounded-xl border border-slate-300"
-                >
-                  <Lock className="h-4 w-4 text-slate-500" />
-                  <span>Phiếu đánh giá đã khóa (Chỉ xem)</span>
+                /* Trạng thái khóa phiếu (Read-only State - AC 3 & TKNHTTDNB1-465) */
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div
+                    data-testid="form-locked-action-notice"
+                    className="inline-flex items-center gap-2 text-xs font-bold text-slate-700 bg-slate-100 px-4 py-2.5 rounded-xl border border-slate-300"
+                  >
+                    <Lock className="h-4 w-4 text-slate-500" />
+                    <span>Phiếu đánh giá đã khóa (Chỉ xem)</span>
+                  </div>
+
+                  {/* Nút Mở lại phiếu dành riêng cho Recruiter (AC 1 - TKNHTTDNB1-465) */}
+                  {isRecruiterRole && (
+                    reopenStatus.canReopen ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsReopenModalOpen(true)}
+                          data-testid="reopen-evaluation-button"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs sm:text-sm font-bold text-amber-800 hover:bg-amber-100 shadow-xs transition cursor-pointer"
+                        >
+                          <Unlock className="h-4 w-4 text-amber-600" />
+                          Mở lại phiếu
+                        </button>
+                        <span
+                          data-testid="reopen-countdown-badge"
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 bg-amber-100/80 px-2.5 py-1 rounded-lg border border-amber-200"
+                        >
+                          <Clock className="h-3.5 w-3.5 text-amber-600" />
+                          {reopenStatus.timeRemainingFormatted}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled
+                          data-testid="reopen-evaluation-disabled-button"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-xs sm:text-sm font-semibold text-slate-400 cursor-not-allowed"
+                        >
+                          <Lock className="h-4 w-4 text-slate-400" />
+                          Hết hạn mở lại
+                        </button>
+                        <span
+                          data-testid="reopen-expired-badge"
+                          className="text-xs font-medium text-slate-500 italic"
+                        >
+                          Đã quá 24 giờ cho phép mở lại phiếu
+                        </span>
+                      </div>
+                    )
+                  )}
                 </div>
               ) : (
                 <>
@@ -1402,6 +1750,171 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
             </div>
           </div>
         </section>
+
+        {/* =========================================================================
+            PHẦN 4: ĐÁNH GIÁ CHÉO TỪ HỘI ĐỒNG PHỎNG VẤN (AC 2 - TKNHTTDNB1-465)
+            Bị ẩn hoặc che mờ hoàn toàn cho đến khi user hiện tại nộp xong phiếu của chính mình
+        ========================================================================= */}
+        <section
+          id="peer-evaluations-section"
+          data-testid="peer-evaluations-container"
+          className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-7 shadow-xs space-y-5"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-200 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                  <Users className="h-4 w-4" />
+                </div>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900">
+                  Đánh giá từ các thành viên khác trong Hội đồng
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Xem điểm số, nhận xét và đề xuất tuyển dụng độc lập từ các người phỏng vấn khác
+              </p>
+            </div>
+
+            {isPeerReviewAllowed ? (
+              <span
+                data-testid="peer-review-unlocked-badge"
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 self-start sm:self-auto"
+              >
+                <Eye className="h-3.5 w-3.5 text-emerald-600" />
+                Đã mở khóa ({defaultPeerEvaluations.length} thành viên)
+              </span>
+            ) : (
+              <span
+                data-testid="peer-review-locked-badge"
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200 self-start sm:self-auto"
+              >
+                <EyeOff className="h-3.5 w-3.5 text-slate-400" />
+                Chưa mở khóa (Bảo mật độc lập)
+              </span>
+            )}
+          </div>
+
+          {!isPeerReviewAllowed ? (
+            /* Trạng thái bị khóa / che mờ khi chưa nộp phiếu chính mình (AC 2) */
+            <div
+              data-testid="peer-evaluations-locked-state"
+              className="relative rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-8 sm:p-10 text-center overflow-hidden"
+            >
+              <div className="relative z-10 max-w-md mx-auto space-y-3">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 border border-amber-200 shadow-xs">
+                  <EyeOff className="h-7 w-7" />
+                </div>
+
+                <h4 className="text-base font-bold text-slate-900">
+                  Khu vực đánh giá chéo đang bị ẩn
+                </h4>
+
+                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                  Để đảm bảo tính khách quan và độc lập khi đánh giá ứng viên, bạn cần{' '}
+                  <strong className="text-slate-900">hoàn tất và nộp phiếu đánh giá của chính mình</strong>{' '}
+                  trước khi có thể xem kết quả đánh giá từ các người phỏng vấn khác trong hội đồng.
+                </p>
+
+                <div className="inline-flex items-center gap-1.5 text-xs text-amber-800 bg-amber-100/80 px-3 py-1.5 rounded-xl border border-amber-200 font-semibold">
+                  <Lock className="h-3.5 w-3.5 text-amber-600" />
+                  Tự động mở khóa ngay sau khi nộp phiếu
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Trạng thái mở khóa khi đã nộp phiếu chính mình (AC 2) */
+            <div
+              data-testid="peer-evaluations-revealed-section"
+              className="space-y-4"
+            >
+              {defaultPeerEvaluations.length === 0 ? (
+                <div className="text-center py-8 text-xs text-slate-500 bg-slate-50 rounded-xl border border-slate-200">
+                  Chưa có đánh giá nào khác từ các thành viên trong hội đồng phỏng vấn này.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {defaultPeerEvaluations.map((peerItem) => {
+                    const peerConclusionConfig = peerItem.conclusion
+                      ? CONCLUSION_OPTIONS_CONFIG[peerItem.conclusion]
+                      : null;
+
+                    return (
+                      <div
+                        key={peerItem.interviewerId}
+                        data-testid={`peer-evaluation-card-${peerItem.interviewerId}`}
+                        className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5 space-y-3.5 shadow-2xs hover:border-slate-300 transition"
+                      >
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 font-bold text-sm">
+                              {peerItem.interviewerName.charAt(0)}
+                            </div>
+                            <div>
+                              <h5 className="text-sm font-bold text-slate-900">
+                                {peerItem.interviewerName}
+                              </h5>
+                              <span className="text-xs text-slate-500">
+                                {peerItem.interviewerRole || 'Người phỏng vấn'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {peerItem.isSubmitted ? (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
+                              <CheckCircle2 className="h-3 w-3" />
+                              Đã nộp
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600 border border-slate-200">
+                              <Clock className="h-3 w-3" />
+                              Đang chấm
+                            </span>
+                          )}
+                        </div>
+
+                        {peerItem.isSubmitted && (
+                          <div className="space-y-3 text-xs">
+                            <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200">
+                              <span className="text-slate-600 font-medium">Điểm tổng theo trọng số:</span>
+                              <span className="font-black text-indigo-700 text-sm">
+                                {peerItem.calculatedTotalScore !== null &&
+                                peerItem.calculatedTotalScore !== undefined
+                                  ? `${peerItem.calculatedTotalScore.toFixed(2)} / 5.0`
+                                  : '--'}
+                              </span>
+                            </div>
+
+                            {peerConclusionConfig && (
+                              <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200">
+                                <span className="text-slate-600 font-medium">Kết luận đề xuất:</span>
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold border ${peerConclusionConfig.activeBadgeClass}`}
+                                >
+                                  {peerConclusionConfig.label}
+                                </span>
+                              </div>
+                            )}
+
+                            {peerItem.generalNotes && (
+                              <div className="space-y-1">
+                                <span className="text-slate-500 font-semibold block text-[11px] uppercase tracking-wider">
+                                  Nhận xét tổng quát:
+                                </span>
+                                <p className="bg-white p-3 rounded-xl border border-slate-200 text-slate-700 italic">
+                                  &quot;{peerItem.generalNotes}&quot;
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
       </form>
 
       {/* Hộp thoại xác nhận nộp phiếu đánh giá (Confirm Modal - AC 2) */}
@@ -1413,6 +1926,21 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
         conclusion={interviewConclusion}
         onCancel={() => setIsConfirmModalOpen(false)}
         onConfirm={handleConfirmSubmit}
+      />
+
+      {/* Hộp thoại xác nhận mở lại phiếu phỏng vấn dành cho Recruiter (AC 1 - TKNHTTDNB1-465) */}
+      <InterviewEvaluationReopenModal
+        isOpen={isReopenModalOpen}
+        candidateName={candidateName}
+        jobTitle={jobTitle}
+        timeRemainingFormatted={reopenStatus.timeRemainingFormatted}
+        isReopening={isReopening}
+        errorMessage={reopenErrorMessage}
+        onCancel={() => {
+          setIsReopenModalOpen(false);
+          setReopenErrorMessage(null);
+        }}
+        onConfirm={handleConfirmReopen}
       />
     </>
   );
