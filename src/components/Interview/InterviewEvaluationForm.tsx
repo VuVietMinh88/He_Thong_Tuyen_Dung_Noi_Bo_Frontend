@@ -14,7 +14,6 @@ import {
   Save,
   CheckCircle2,
   FileQuestion,
-  HelpCircle,
   Sparkles,
 } from 'lucide-react';
 import type {
@@ -28,6 +27,12 @@ import {
   AVAILABLE_SCORE_OPTIONS,
   DEFAULT_FRAMEWORK_VERSION,
 } from '../../types/interviewEvaluation';
+import {
+  calculateWeightedScore,
+  calculateCriterionWeightedContribution,
+  validateCriterionScore,
+  validateAllCriteriaEvaluations,
+} from '../../utils/interviewEvaluationHelper';
 
 export interface InterviewEvaluationFormProps {
   // 1. Thông tin ứng viên & buổi phỏng vấn (AC 1)
@@ -255,15 +260,41 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
 
   const [generalNotesState, setGeneralNotesState] = useState<string>(initialGeneralNotes);
 
-  // Cập nhật điểm số khi người dùng nhấp chọn mức 1-5
+  // Quản lý thông báo lỗi validation theo thời gian thực (AC 2)
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  // Đánh dấu các tiêu chí mà người dùng đã tương tác để hiển thị lỗi phù hợp
+  const [touchedCriteria, setTouchedCriteria] = useState<Record<string, boolean>>({});
+  // Đánh dấu khi người dùng bấm nút submit để hiển thị toàn bộ lỗi của các tiêu chí còn thiếu
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState<boolean>(false);
+
+  // Cập nhật điểm số khi người dùng nhấp chọn mức 1-5 hoặc thay đổi điểm (AC 1 & AC 2)
   const handleScoreChange = useCallback(
-    (criterionId: string, selectedScore: CriterionScoreValue) => {
+    (criterionId: string, selectedScore: number | null) => {
       if (readOnly) return;
 
-      // Cho phép bấm lại cùng 1 điểm để bỏ chọn (toggle) nếu muốn đặt lại
+      // Đánh dấu tiêu chí này đã được người dùng tương tác để kích hoạt hiển thị validation
+      setTouchedCriteria((previousTouched) => ({
+        ...previousTouched,
+        [criterionId]: true,
+      }));
+
+      // Cập nhật điểm số và kiểm tra lỗi validation ngay lập tức theo thời gian thực (Real-time Validation)
       setEvaluationsState((previousState) => {
         const currentRecord = previousState[criterionId];
+        // Cho phép bấm lại cùng 1 điểm để bỏ chọn (toggle) nếu muốn đặt lại
         const nextScore = currentRecord?.score === selectedScore ? null : selectedScore;
+
+        // Báo lỗi real-time nếu bỏ trống hoặc ngoài khoảng 1-5
+        const validationError = validateCriterionScore(nextScore);
+        setValidationErrors((previousErrors) => {
+          if (validationError) {
+            return { ...previousErrors, [criterionId]: validationError };
+          }
+          // Xóa thông báo lỗi ngay khi điểm số hợp lệ
+          const updatedErrors = { ...previousErrors };
+          delete updatedErrors[criterionId];
+          return updatedErrors;
+        });
 
         return {
           ...previousState,
@@ -293,30 +324,22 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
     [readOnly],
   );
 
-  // Tính toán trước điểm tổng theo trọng số (preview calculation phục vụ subtask tiếp theo)
+  // 1. Tự động tính lại điểm tổng theo trọng số ngay mỗi khi có thay đổi điểm ở bất kỳ tiêu chí nào (AC 1)
+  // Công thức: Tổng các (Điểm * Trọng số)
+  // Phải sử dụng đúng dữ liệu khung năng lực đính kèm với buổi phỏng vấn (bản ghi criteria snapshot truyền từ props)
+  // Tuyệt đối không gọi API để lấy khung mới nhất nhằm bảo toàn lịch sử đánh giá buổi phỏng vấn
   const calculatedTotalScore = useMemo<number | null>(() => {
-    if (criteria.length === 0) return null;
-
-    let totalWeightedScore = 0;
-    let totalWeightCounted = 0;
-    let hasAnyScore = false;
-
-    criteria.forEach((criterionItem) => {
-      const evaluation = evaluationsState[criterionItem.id];
-      if (evaluation && evaluation.score !== null) {
-        hasAnyScore = true;
-        totalWeightedScore += evaluation.score * (criterionItem.weight / 100);
-        totalWeightCounted += criterionItem.weight;
+    try {
+      return calculateWeightedScore(criteria, evaluationsState);
+    } catch (errorObject: unknown) {
+      // Bắt lỗi rõ ràng, kiểm tra kiểu lỗi và xử lý cụ thể
+      const errorMessage = errorObject instanceof Error ? errorObject.message : 'Lỗi tính điểm';
+      if (errorMessage) {
+        // Trả về null an toàn cho giao diện khi xảy ra lỗi dữ liệu
+        return null;
       }
-    });
-
-    if (!hasAnyScore) return null;
-
-    // Chuẩn hóa điểm tổng về thang điểm 5.0 làm tròn 2 chữ số thập phân
-    const normalizedScore =
-      totalWeightCounted > 0 ? (totalWeightedScore / (totalWeightCounted / 100)) : 0;
-
-    return Math.round(normalizedScore * 100) / 100;
+      return null;
+    }
   }, [criteria, evaluationsState]);
 
   // Đếm số lượng tiêu chí đã chấm điểm
@@ -326,9 +349,31 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
     ).length;
   }, [evaluationsState]);
 
-  // Xử lý gửi biểu mẫu hoàn tất đánh giá
-  const handleFormSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
+  // Xử lý gửi biểu mẫu hoàn tất đánh giá (Kiểm tra validation toàn diện trước khi submit - AC 2)
+  const handleFormSubmit = (formEvent: React.FormEvent) => {
+    formEvent.preventDefault();
+    if (readOnly) return;
+
+    setHasAttemptedSubmit(true);
+
+    // Kiểm tra tất cả các tiêu chí trong khung năng lực đính kèm buổi phỏng vấn
+    const validationResult = validateAllCriteriaEvaluations(criteria, evaluationsState);
+
+    if (!validationResult.isValid) {
+      setValidationErrors(validationResult.errors);
+
+      // Cuộn đến tiêu chí đầu tiên có lỗi để người dùng dễ nhận biết và sửa lỗi
+      if (validationResult.firstInvalidCriterionId) {
+        const targetElement = document.getElementById(
+          `criterion-row-${validationResult.firstInvalidCriterionId}`,
+        );
+        if (targetElement) {
+          targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+      return;
+    }
+
     if (onSubmit) {
       onSubmit({
         criteriaEvaluations: evaluationsState,
@@ -558,22 +603,40 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
         <div className="space-y-4">
           {criteria.map((criterionItem, criterionIndex) => {
             const currentEvaluation = evaluationsState[criterionItem.id];
-            const currentScore = currentEvaluation?.score || null;
+            const currentScore = currentEvaluation?.score ?? null;
             const currentComment = currentEvaluation?.comment || '';
             const activeLevelDefinition: RatingLevelDefinition | undefined =
-              currentScore ? RATING_LEVEL_DEFINITIONS[currentScore] : undefined;
+              currentScore !== null && currentScore >= 1 && currentScore <= 5
+                ? RATING_LEVEL_DEFINITIONS[currentScore as CriterionScoreValue]
+                : undefined;
+
+            // Kiểm tra lỗi validation theo thời gian thực (AC 2)
+            const validationError =
+              validationErrors[criterionItem.id] ||
+              ((touchedCriteria[criterionItem.id] || hasAttemptedSubmit)
+                ? validateCriterionScore(currentScore)
+                : null);
+
+            // Tính phần đóng góp điểm số theo trọng số cho tiêu chí này: (Điểm * Trọng số) (AC 1)
+            const criterionWeightedContribution = calculateCriterionWeightedContribution(
+              currentScore,
+              criterionItem.weight,
+            );
 
             return (
               <div
                 key={criterionItem.id}
+                id={`criterion-row-${criterionItem.id}`}
                 data-testid={`criterion-row-${criterionItem.id}`}
                 className={`rounded-2xl border transition-all p-4 sm:p-5 space-y-4 ${
-                  currentScore !== null
+                  validationError
+                    ? 'border-rose-400 bg-rose-50/20 ring-1 ring-rose-200 shadow-2xs'
+                    : currentScore !== null
                     ? 'border-indigo-200 bg-white shadow-xs'
                     : 'border-slate-200 bg-slate-50/40 hover:border-slate-300'
                 }`}
               >
-                {/* Hàng 1: Tên tiêu chí & Trọng số (%) */}
+                {/* Hàng 1: Tên tiêu chí, Trọng số (%) & Điểm trọng số đóng góp */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-100 pb-3">
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -594,8 +657,8 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
                     )}
                   </div>
 
-                  {/* Trọng số (%) của tiêu chí (AC 2) */}
-                  <div className="self-start sm:self-center shrink-0">
+                  {/* Trọng số (%) và Điểm đóng góp của tiêu chí (AC 1 & AC 2) */}
+                  <div className="flex flex-wrap items-center gap-2 self-start sm:self-center shrink-0">
                     <span
                       data-testid={`criterion-weight-${criterionItem.id}`}
                       className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 shadow-2xs"
@@ -603,6 +666,15 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
                       <Sparkles className="h-3 w-3" />
                       Trọng số: {criterionItem.weight}%
                     </span>
+
+                    {criterionWeightedContribution !== null && (
+                      <span
+                        data-testid={`criterion-contribution-${criterionItem.id}`}
+                        className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 shadow-2xs"
+                      >
+                        +{criterionWeightedContribution.toFixed(2)} điểm ({currentScore} × {criterionItem.weight}%)
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -697,6 +769,18 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
                     />
                   </div>
                 </div>
+
+                {/* Câu thông báo lỗi màu đỏ xuất hiện ngay dưới tiêu chí khi bị bỏ trống hoặc ngoài khoảng 1-5 (AC 2) */}
+                {validationError && (
+                  <div
+                    role="alert"
+                    data-testid={`criterion-error-${criterionItem.id}`}
+                    className="flex items-center gap-2 text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 px-3.5 py-2.5 rounded-xl animate-in fade-in duration-150"
+                  >
+                    <AlertCircle className="h-4 w-4 shrink-0 text-rose-500" />
+                    <span>{validationError}</span>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -704,8 +788,8 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
       </section>
 
       {/* =========================================================================
-          PHẦN 3: PHẦN CUỐI PHIẾU & Ô HIỂN THỊ ĐIỂM TỔNG (AC 2)
-          Ô hiển thị Điểm tổng thiết kế trang trọng (logic tính điểm làm ở subtask sau)
+          PHẦN 3: PHẦN CUỐI PHIẾU & Ô HIỂN THỊ ĐIỂM TỔNG THEO TRỌNG SỐ (AC 1 & AC 2)
+          Điểm tổng tự động tính lại ngay khi người dùng thay đổi điểm ở bất kỳ tiêu chí nào
       ========================================================================= */}
       <section
         data-testid="evaluation-summary-section"
@@ -715,23 +799,23 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
           <div>
             <h3 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
               <Award className="h-5 w-5 text-indigo-600" />
-              Tổng kết đánh giá năng lực
+              Tổng kết đánh giá năng lực phỏng vấn
             </h3>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Điểm tổng hợp phản ánh mức độ phù hợp năng lực chuyên môn của ứng viên
+              Điểm tổng hợp tự động tính theo trọng số: ∑ (Điểm × Trọng số)
             </p>
           </div>
 
-          {/* Ô hiển thị Điểm tổng (AC 2) */}
+          {/* Ô hiển thị Điểm tổng tính theo trọng số (AC 1) */}
           <div
             data-testid="total-score-card"
             className="flex items-center gap-3 rounded-2xl border border-indigo-200 bg-white p-3.5 sm:p-4 shadow-xs shrink-0 self-start sm:self-auto"
           >
             <div className="text-right">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
-                Điểm tổng kết
+                Điểm tổng trọng số
               </span>
-              <span className="text-xs text-slate-400 font-medium">Thang điểm 5.0</span>
+              <span className="text-xs text-indigo-600 font-semibold">∑ (Điểm × Trọng số)</span>
             </div>
 
             <div className="flex items-baseline gap-1 border-l border-slate-200 pl-3">
@@ -748,16 +832,46 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
           </div>
         </div>
 
-        {/* Chú thích về cách tổng hợp điểm năng lực */}
-        <div className="rounded-xl bg-white/80 border border-slate-200/80 p-3 text-xs text-slate-600 flex items-start gap-2.5">
-          <HelpCircle className="h-4 w-4 text-indigo-500 shrink-0 mt-0.5" />
-          <span>
-            <strong>Ghi chú:</strong> Điểm tổng năng lực được ước tính tạm thời dựa trên điểm số
-            các tiêu chí và trọng số tương ứng ({scoredCriteriaCount}/{criteria.length} tiêu chí đã
-            nhập). Thuật toán tính toán chính thức và đối chiếu chuẩn đầu vào sẽ được kích hoạt tại
-            subtask tính điểm tiếp theo.
-          </span>
-        </div>
+        {/* Bảng chi tiết điểm đóng góp từng tiêu chí theo trọng số (AC 1) */}
+        {criteria.length > 0 && (
+          <div className="rounded-xl bg-white/90 border border-slate-200 p-3 sm:p-4 space-y-2.5 text-xs">
+            <div className="flex items-center justify-between font-bold text-slate-700 border-b border-slate-100 pb-2">
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-indigo-600" />
+                Chi tiết tính điểm theo trọng số:
+              </span>
+              <span className="text-indigo-600 font-semibold">
+                {scoredCriteriaCount}/{criteria.length} tiêu chí đã chấm
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {criteria.map((criterionItem) => {
+                const itemScore = evaluationsState[criterionItem.id]?.score;
+                const itemContribution = calculateCriterionWeightedContribution(
+                  itemScore,
+                  criterionItem.weight,
+                );
+
+                return (
+                  <div
+                    key={`contribution-summary-${criterionItem.id}`}
+                    className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100"
+                  >
+                    <span className="truncate font-medium text-slate-700 pr-2" title={criterionItem.name}>
+                      {criterionItem.name}
+                    </span>
+                    <span className="shrink-0 font-mono font-bold text-slate-800">
+                      {itemContribution !== null
+                        ? `+${itemContribution.toFixed(2)} (${itemScore} × ${criterionItem.weight}%)`
+                        : <span className="text-slate-400 font-normal">Chưa chấm</span>}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Nhận xét chung toàn diện buổi phỏng vấn */}
         <div className="space-y-1.5">
@@ -778,6 +892,20 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
             className="w-full rounded-xl border border-slate-300 bg-white p-3 text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-100 transition resize-y"
           />
         </div>
+
+        {/* Banner cảnh báo khi có lỗi validation lúc bấm gửi đánh giá (AC 2) */}
+        {hasAttemptedSubmit && Object.keys(validationErrors).length > 0 && (
+          <div
+            role="alert"
+            data-testid="form-validation-summary-error"
+            className="flex items-center gap-2 text-xs font-bold text-rose-700 bg-rose-100/90 border border-rose-300 px-4 py-3 rounded-xl animate-in fade-in duration-150"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+            <span>
+              Vui lòng chọn điểm đánh giá hợp lệ (từ 1 đến 5) cho tất cả {Object.keys(validationErrors).length} tiêu chí còn thiếu trước khi gửi đánh giá.
+            </span>
+          </div>
+        )}
 
         {/* Cụm nút hành động */}
         {!readOnly && (
