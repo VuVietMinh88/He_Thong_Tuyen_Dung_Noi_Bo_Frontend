@@ -19,6 +19,7 @@ import {
   Plus,
   FileSpreadsheet,
   CalendarDays,
+  Trophy,
 } from 'lucide-react';
 import type {
   CandidateProfile,
@@ -56,6 +57,7 @@ import { SmartTalentMatchingPanel } from '../../components/Candidate/SmartTalent
 import { ManualCandidateCreateModal } from '../../components/Candidate/ManualCandidateCreateModal';
 import { CandidateExportExcelButton } from '../../components/Candidate/CandidateExportExcelButton';
 import { BatchInterviewScheduleModal } from '../../components/Candidate/BatchInterviewScheduleModal';
+import { CandidateComparisonModal } from '../../components/Candidate/CandidateComparisonModal';
 import { toast, ToastContext } from '../../components/notifications';
 
 type PendingStageAction = {
@@ -106,6 +108,10 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
 
   // Modal xếp lịch phỏng vấn đồng loạt (Task Jira TKNHTTDNB1-433 / User Story S6-01)
   const [isBatchScheduleModalOpen, setIsBatchScheduleModalOpen] = useState<boolean>(false);
+
+  // Modal so sánh ứng viên ở vòng cuối (Task Jira TKNHTTDNB1-470 / User Story S7-01)
+  const [isComparisonModalOpen, setIsComparisonModalOpen] = useState<boolean>(false);
+  const [comparisonCandidateIds, setComparisonCandidateIds] = useState<string[]>([]);
 
   const fetchCandidates = useCallback(async () => {
     setIsLoading(true);
@@ -412,6 +418,21 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
             }}
           />
 
+          {/* Nút Bảng so sánh ứng viên vòng cuối (Task Jira TKNHTTDNB1-470 / User Story S7-01) */}
+          <button
+            type="button"
+            data-testid="btn-open-final-round-comparison"
+            onClick={() => {
+              setComparisonCandidateIds([]);
+              setIsComparisonModalOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50/70 px-3.5 py-2 text-xs font-semibold text-amber-800 shadow-2xs hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-900/50"
+            title="Mở bảng so sánh đa chiều các ứng viên vòng phỏng vấn cuối"
+          >
+            <Trophy className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+            <span>So sánh vòng cuối</span>
+          </button>
+
           {/* Nút Thêm ứng viên thủ công (Task Jira TKNHTTDNB1-406 / User Story S5-06) */}
           <button
             type="button"
@@ -598,6 +619,20 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
             >
               <CalendarDays className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
               <span>Xếp lịch phỏng vấn ({selectedCandidateIds.length})</span>
+            </button>
+            {/* Nút So sánh đa chiều các ứng viên đang chọn (Task Jira TKNHTTDNB1-470 / User Story S7-01) */}
+            <button
+              type="button"
+              data-testid="bulk-compare-candidates-btn"
+              onClick={() => {
+                setComparisonCandidateIds(selectedCandidateIds);
+                setIsComparisonModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-700 shadow-2xs hover:bg-amber-50 transition-colors dark:border-amber-700 dark:bg-gray-800 dark:text-amber-300 dark:hover:bg-amber-950/40"
+              title="So sánh đối chiếu năng lực các ứng viên đang chọn (2 - 5 ứng viên)"
+            >
+              <Trophy className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+              <span>So sánh ứng viên ({selectedCandidateIds.length})</span>
             </button>
             <button
               type="button"
@@ -974,6 +1009,22 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
             toast.success(successMessage);
           }
           fetchCandidates();
+        }}
+      />
+
+      {/* Modal so sánh ứng viên ở vòng cuối (Task Jira TKNHTTDNB1-470 / User Story S7-01) */}
+      <CandidateComparisonModal
+        isOpen={isComparisonModalOpen}
+        onClose={() => setIsComparisonModalOpen(false)}
+        candidateIds={comparisonCandidateIds}
+        jobId={combinedFilters.jobId === 'ALL' ? undefined : combinedFilters.jobId}
+        onDecisionSaved={(_candId, status) => {
+          const msg = `Đã cập nhật quyết định tuyển dụng: ${status === 'OFFER' ? 'Đề xuất Offer' : status === 'BACKUP' ? 'Dự phòng Talent Pool' : 'Từ chối'}`;
+          if (toastContext?.notify) {
+            toastContext.notify(msg, 'success');
+          } else {
+            toast.success(msg);
+          }
         }}
       />
     </div>
