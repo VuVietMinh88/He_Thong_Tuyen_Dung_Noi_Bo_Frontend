@@ -23,6 +23,12 @@ const menuItems: SidebarMenuItem[] = [
     roles: Object.values(ROLES),
   },
   {
+    label: 'Chất lượng nguồn ứng viên',
+    to: '/reports/sources',
+    icon: '🎯',
+    roles: Object.values(ROLES),
+  },
+  {
     label: 'Giới thiệu ứng viên',
     to: '/referrals',
     icon: '🤝',

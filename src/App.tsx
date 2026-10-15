@@ -44,6 +44,7 @@ import PersonalInterviewSchedulePage from "./pages/Interview/PersonalInterviewSc
 import OnboardingChecklistPage from "./pages/Onboarding/OnboardingChecklistPage";
 import OnboardingTrackingPage from "./pages/Onboarding/OnboardingTrackingPage";
 import RecruitmentFunnelPage from "./pages/RecruitmentFunnel/RecruitmentFunnelPage";
+import CandidateSourceReportPage from "./pages/CandidateSourceReport/CandidateSourceReportPage";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -153,6 +154,22 @@ function App() {
                 element={
                   <MainLayout>
                     <RecruitmentFunnelPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/reports/sources"
+                element={
+                  <MainLayout>
+                    <CandidateSourceReportPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/dashboard/sources"
+                element={
+                  <MainLayout>
+                    <CandidateSourceReportPage />
                   </MainLayout>
                 }
               />
