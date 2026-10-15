@@ -17,6 +17,12 @@ const menuItems: SidebarMenuItem[] = [
     roles: Object.values(ROLES),
   },
   {
+    label: 'Báo cáo phễu tuyển dụng',
+    to: '/reports/funnel',
+    icon: '📉',
+    roles: Object.values(ROLES),
+  },
+  {
     label: 'Giới thiệu ứng viên',
     to: '/referrals',
     icon: '🤝',

@@ -43,6 +43,7 @@ import SlaSettingsPage from "./pages/SLA/SlaSettingsPage";
 import PersonalInterviewSchedulePage from "./pages/Interview/PersonalInterviewSchedulePage";
 import OnboardingChecklistPage from "./pages/Onboarding/OnboardingChecklistPage";
 import OnboardingTrackingPage from "./pages/Onboarding/OnboardingTrackingPage";
+import RecruitmentFunnelPage from "./pages/RecruitmentFunnel/RecruitmentFunnelPage";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -135,7 +136,23 @@ function App() {
                 path="/dashboard"
                 element={
                   <MainLayout>
-                    <PlaceholderPage title="Bảng điều khiển chung" />
+                    <RecruitmentFunnelPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/reports/funnel"
+                element={
+                  <MainLayout>
+                    <RecruitmentFunnelPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/dashboard/funnel"
+                element={
+                  <MainLayout>
+                    <RecruitmentFunnelPage />
                   </MainLayout>
                 }
               />
