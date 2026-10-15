@@ -17,8 +17,22 @@ export interface CriterionEvaluationRecord {
   criterionId: string;
   criterionName: string;
   weight: number;
-  score: CriterionScoreValue | null;
+  score: number | null; // Cho phép số để validate khoảng 1-5
   comment: string;
+}
+
+export interface EvaluationValidationResult {
+  isValid: boolean;
+  errors: Record<string, string>;
+  firstInvalidCriterionId?: string;
+}
+
+export interface CriterionContributionDetail {
+  criterionId: string;
+  criterionName: string;
+  score: number | null;
+  criteriaWeight: number;
+  weightedScore: number | null;
 }
 
 export interface InterviewEvaluationHeaderData {

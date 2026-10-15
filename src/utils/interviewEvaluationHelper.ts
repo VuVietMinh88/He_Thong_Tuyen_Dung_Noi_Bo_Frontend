@@ -125,8 +125,119 @@ export const resolveEvaluationCriteriaForJob = (
 };
 
 /**
- * Tính toán điểm tổng trọng số từ các tiêu chí đã chấm
- * Trả về null nếu chưa có tiêu chí nào được cho điểm
+ * Tính điểm tổng theo trọng số theo đúng công thức: Tổng các (Điểm * Trọng số)
+ * (Subtask TKNHTTDNB1-458 / AC 1)
+ *
+ * Vì trọng số của tiêu chí trong hệ thống thường lưu dạng phần trăm (1 - 100%),
+ * hàm sẽ quy đổi về tỷ lệ thập phân (criteriaWeight / 100) để điểm tổng luôn phản ánh đúng
+ * trên thang điểm đánh giá 5.0. Nếu trọng số đã ở dạng thập phân (<= 1), giữ nguyên.
+ */
+export const calculateWeightedScore = (
+  criteriaList: EvaluationCriterionItem[],
+  evaluations: Record<string, { score: number | null }>,
+): number | null => {
+  if (!criteriaList || criteriaList.length === 0) return null;
+
+  // Tính tổng trọng số khai báo để xác định dạng phần trăm (> 1.5) hay dạng thập phân (<= 1)
+  const totalRawWeight = criteriaList.reduce((accumulatedSum, criterionItem) => {
+    return accumulatedSum + (criterionItem.weight || 0);
+  }, 0);
+  const isPercentageWeight = totalRawWeight > 1.5;
+
+  let totalWeightedScore = 0;
+  let scoredCriteriaCount = 0;
+
+  for (const criterionItem of criteriaList) {
+    const evaluationRecord = evaluations[criterionItem.id];
+    const scoreValue = evaluationRecord?.score;
+
+    if (scoreValue !== null && scoreValue !== undefined && !isNaN(scoreValue)) {
+      scoredCriteriaCount += 1;
+      const criteriaWeight = criterionItem.weight || 0;
+      const normalizedWeight = isPercentageWeight ? criteriaWeight / 100 : criteriaWeight;
+
+      // Công thức: Điểm * Trọng số
+      totalWeightedScore += scoreValue * normalizedWeight;
+    }
+  }
+
+  // Nếu người phỏng vấn chưa nhập bất kỳ điểm số nào, trả về null để UI hiển thị dạng placeholder '--'
+  if (scoredCriteriaCount === 0) return null;
+
+  // Làm tròn chuẩn xác 2 chữ số thập phân
+  return Math.round(totalWeightedScore * 100) / 100;
+};
+
+/**
+ * Tính phần đóng góp điểm số của 1 tiêu chí đơn lẻ: (Điểm * Trọng số)
+ */
+export const calculateCriterionWeightedContribution = (
+  scoreValue: number | null | undefined,
+  criteriaWeight: number,
+): number | null => {
+  if (scoreValue === null || scoreValue === undefined || isNaN(scoreValue)) {
+    return null;
+  }
+  const isPercentage = criteriaWeight > 1.5;
+  const normalizedWeight = isPercentage ? criteriaWeight / 100 : criteriaWeight;
+  return Math.round(scoreValue * normalizedWeight * 100) / 100;
+};
+
+/**
+ * Kiểm tra tính hợp lệ của điểm số cho từng tiêu chí đánh giá (AC 2)
+ * Báo lỗi màu đỏ nếu điểm bị bỏ trống hoặc nằm ngoài khoảng 1–5
+ */
+export const validateCriterionScore = (
+  scoreValue: number | null | undefined,
+): string | null => {
+  // Điểm bị bỏ trống
+  if (scoreValue === null || scoreValue === undefined) {
+    return 'Vui lòng chọn điểm đánh giá cho tiêu chí này (từ 1 đến 5).';
+  }
+
+  // Điểm không phải số hoặc nằm ngoài khoảng 1 - 5
+  if (typeof scoreValue !== 'number' || isNaN(scoreValue) || scoreValue < 1 || scoreValue > 5) {
+    return 'Điểm đánh giá không hợp lệ. Vui lòng chọn điểm trong khoảng từ 1 đến 5.';
+  }
+
+  return null;
+};
+
+/**
+ * Kiểm tra toàn diện danh sách tiêu chí khi thực hiện lưu hoặc gửi đánh giá (AC 2)
+ */
+export const validateAllCriteriaEvaluations = (
+  criteriaList: EvaluationCriterionItem[],
+  evaluations: Record<string, { score: number | null }>,
+): {
+  isValid: boolean;
+  errors: Record<string, string>;
+  firstInvalidCriterionId?: string;
+} => {
+  const errors: Record<string, string> = {};
+  let firstInvalidCriterionId: string | undefined;
+
+  for (const criterionItem of criteriaList) {
+    const evaluationRecord = evaluations[criterionItem.id];
+    const validationError = validateCriterionScore(evaluationRecord?.score);
+
+    if (validationError) {
+      errors[criterionItem.id] = validationError;
+      if (!firstInvalidCriterionId) {
+        firstInvalidCriterionId = criterionItem.id;
+      }
+    }
+  }
+
+  return {
+    isValid: Object.keys(errors).length === 0,
+    errors,
+    firstInvalidCriterionId,
+  };
+};
+
+/**
+ * Tính toán điểm tổng trọng số từ các tiêu chí đã chấm (tương thích ngược phiên bản cũ)
  */
 export const calculateEvaluationWeightedTotal = (
   evaluations: Record<string, Pick<CriterionEvaluationRecord, 'score' | 'weight'>>,
