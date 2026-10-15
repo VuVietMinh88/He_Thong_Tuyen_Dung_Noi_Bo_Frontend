@@ -58,6 +58,15 @@ export interface HiringDecisionRecord {
   offeredSalary?: number;
 }
 
+export type CandidateEvaluationFilterStatus = 'ALL' | 'COMPLETED' | 'PENDING';
+
+export interface EvaluationProgress {
+  completedCount: number;
+  requiredCount: number;
+  isFullyEvaluated: boolean;
+  pendingInterviewerNames?: string[];
+}
+
 export interface ComparisonCandidate {
   id: string;
   candidateCode: string;
@@ -80,6 +89,7 @@ export interface ComparisonCandidate {
   summaryConcerns: string[];
   compensation: CandidateCompensationInfo;
   hiringDecision?: HiringDecisionRecord;
+  evaluationProgress?: EvaluationProgress;
 }
 
 export type ComparisonCategoryKey =

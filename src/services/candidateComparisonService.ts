@@ -1,12 +1,13 @@
 /**
  * Service quản lý dữ liệu So sánh ứng viên vòng cuối
- * Jira Task: TKNHTTDNB1-470 / User Story S7-01
+ * Jira Task: TKNHTTDNB1-470 & TKNHTTDNB1-471 / User Story S7-01
  */
 
 import axiosClient from '../utils/axiosClient';
 import type {
   ComparisonCandidate,
   HiringDecisionStatus,
+  CandidateEvaluationFilterStatus,
 } from '../types/candidateComparison';
 
 const STORAGE_KEY_COMPARISON_CANDIDATES = 'smart_recruit_final_round_comparison_candidates';
@@ -59,6 +60,17 @@ export const DEFAULT_FINAL_ROUND_CANDIDATES: ComparisonCandidate[] = [
         strengths: ['Kỹ năng giao tiếp và thuyết trình', 'Tiếng Anh chuyên nghiệp (IELTS 7.5)', 'Tư duy làm chủ công việc'],
         concerns: ['Mức lương kỳ vọng khá sát trần ngân sách'],
       },
+      {
+        interviewerId: 'inv-03',
+        interviewerName: 'Hoàng Hải Đăng',
+        interviewerRole: 'Chief Technology Officer (CTO)',
+        conclusion: 'RECOMMENDED',
+        score: 4.6,
+        comment:
+          'Tư duy làm chủ công việc tốt, hiểu chiến lược phát triển sản phẩm công nghệ dài hạn.',
+        strengths: ['Tư duy chiến lược công nghệ', 'Tinh thần cầu tiến'],
+        concerns: [],
+      },
     ],
     summaryStrengths: [
       'Chuyên môn React/TS đỉnh cao (4.8/5)',
@@ -79,6 +91,12 @@ export const DEFAULT_FINAL_ROUND_CANDIDATES: ComparisonCandidate[] = [
     },
     hiringDecision: {
       status: 'PENDING',
+    },
+    evaluationProgress: {
+      completedCount: 3,
+      requiredCount: 3,
+      isFullyEvaluated: true,
+      pendingInterviewerNames: [],
     },
   },
   {
@@ -118,6 +136,17 @@ export const DEFAULT_FINAL_ROUND_CANDIDATES: ComparisonCandidate[] = [
         concerns: ['Chưa tiếp xúc nhiều với SSR Next.js App Router'],
       },
       {
+        interviewerId: 'inv-02',
+        interviewerName: 'Lê Thu Hương',
+        interviewerRole: 'Head of HR & Talent Acquisition',
+        conclusion: 'RECOMMENDED',
+        score: 4.7,
+        comment:
+          'Khả năng gắn kết nhân sự và truyền cảm hứng tốt, lắng nghe phản hồi tích cực.',
+        strengths: ['Thấu hiểu văn hóa', 'Truyền năng lượng tích cực'],
+        concerns: [],
+      },
+      {
         interviewerId: 'inv-03',
         interviewerName: 'Hoàng Hải Đăng',
         interviewerRole: 'Chief Technology Officer (CTO)',
@@ -148,6 +177,12 @@ export const DEFAULT_FINAL_ROUND_CANDIDATES: ComparisonCandidate[] = [
     },
     hiringDecision: {
       status: 'PENDING',
+    },
+    evaluationProgress: {
+      completedCount: 3,
+      requiredCount: 3,
+      isFullyEvaluated: true,
+      pendingInterviewerNames: [],
     },
   },
   {
@@ -218,6 +253,12 @@ export const DEFAULT_FINAL_ROUND_CANDIDATES: ComparisonCandidate[] = [
     hiringDecision: {
       status: 'PENDING',
     },
+    evaluationProgress: {
+      completedCount: 2,
+      requiredCount: 3,
+      isFullyEvaluated: false,
+      pendingInterviewerNames: ['Hoàng Hải Đăng (CTO)'],
+    },
   },
   {
     id: 'cand-final-004',
@@ -255,17 +296,6 @@ export const DEFAULT_FINAL_ROUND_CANDIDATES: ComparisonCandidate[] = [
         strengths: ['Tư duy thuật toán tốt', 'Thái độ tích cực'],
         concerns: ['Số năm kinh nghiệm (4 năm) còn hơi trẻ so với tiêu chuẩn Senior Lead'],
       },
-      {
-        interviewerId: 'inv-03',
-        interviewerName: 'Hoàng Hải Đăng',
-        interviewerRole: 'Chief Technology Officer (CTO)',
-        conclusion: 'RECOMMENDED',
-        score: 4.5,
-        comment:
-          'Ứng viên trẻ đầy năng lượng, phù hợp làm phương án dự phòng chất lượng cao hoặc đề xuất mức Middle-Senior.',
-        strengths: ['Tiềm năng phát triển nhanh', 'Mức lương kỳ vọng cạnh tranh (30 triệu)'],
-        concerns: ['Kinh nghiệm dẫn dắt đội nhóm chưa nhiều'],
-      },
     ],
     summaryStrengths: [
       'Mức lương kỳ vọng tiết kiệm nhất (30.000.000 ₫)',
@@ -286,6 +316,95 @@ export const DEFAULT_FINAL_ROUND_CANDIDATES: ComparisonCandidate[] = [
     },
     hiringDecision: {
       status: 'PENDING',
+    },
+    evaluationProgress: {
+      completedCount: 1,
+      requiredCount: 3,
+      isFullyEvaluated: false,
+      pendingInterviewerNames: ['Lê Thu Hương (Head of HR)', 'Hoàng Hải Đăng (CTO)'],
+    },
+  },
+  {
+    id: 'cand-final-005',
+    candidateCode: 'CAN-2026-0518',
+    fullName: 'Vũ Hoàng Yến',
+    email: 'yen.vu@shopee.vn',
+    phone: '0909334455',
+    avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
+    currentTitle: 'Senior UI/UX & Frontend Engineer',
+    currentCompany: 'Shopee Vietnam',
+    experienceYears: 5,
+    educationLevel: 'Kỹ sư CNTT - ĐH Quốc Tế ĐHQG TP.HCM',
+    appliedJobId: 'jp-demo-306',
+    appliedJobTitle: 'Senior Frontend Developer (React, TypeScript & Tailwind CSS)',
+    matchingScore: 91,
+    rating: 5,
+    interviewRound: 'Vòng 3 - Phỏng vấn Hội đồng & Ban Lãnh Đạo',
+    competencyScores: {
+      technical: 4.6,
+      attitude: 4.8,
+      language: 4.6,
+      cultureFit: 4.7,
+      softSkills: 4.6,
+      overall: 4.66,
+    },
+    interviewerFeedbacks: [
+      {
+        interviewerId: 'inv-01',
+        interviewerName: 'Trần Minh Quang',
+        interviewerRole: 'Lead Technical Architect',
+        conclusion: 'RECOMMENDED',
+        score: 4.6,
+        comment: 'Thế mạnh lớn về UI/UX animation, CSS hiện đại và khả năng tối ưu trải nghiệm người dùng.',
+        strengths: ['UI/UX chuẩn mực', 'CSS animations mượt mà'],
+        concerns: [],
+      },
+      {
+        interviewerId: 'inv-02',
+        interviewerName: 'Lê Thu Hương',
+        interviewerRole: 'Head of HR & Talent Acquisition',
+        conclusion: 'RECOMMENDED',
+        score: 4.7,
+        comment: 'Tính cách cởi mở, kỹ năng thuyết trình xuất sắc và giao tiếp tự tin.',
+        strengths: ['Kỹ năng mềm', 'Tiếng Anh tốt'],
+        concerns: [],
+      },
+      {
+        interviewerId: 'inv-03',
+        interviewerName: 'Hoàng Hải Đăng',
+        interviewerRole: 'Chief Technology Officer (CTO)',
+        conclusion: 'RECOMMENDED',
+        score: 4.7,
+        comment: 'Đã hoàn thành xuất sắc bài phỏng vấn tình huống kiến trúc và giải quyết xung đột.',
+        strengths: ['Xử lý tình huống tốt'],
+        concerns: [],
+      },
+    ],
+    summaryStrengths: [
+      'Đã hoàn thành đầy đủ 3/3 phiếu đánh giá',
+      'Chuyên môn UI/UX & Tailwind CSS xuất sắc',
+      'Ngoại ngữ tiếng Anh tốt',
+    ],
+    summaryConcerns: [],
+    compensation: {
+      expectedSalary: 36000000,
+      expectedSalaryFormatted: '36.000.000 ₫',
+      currentSalary: 31000000,
+      currentSalaryFormatted: '31.000.000 ₫',
+      salaryNegotiable: true,
+      noticePeriodDays: 30,
+      availabilityText: 'Sau 30 ngày',
+      workModePreference: 'HYBRID',
+      benefitsRequested: ['Chế độ chăm sóc sức khỏe gia đình'],
+    },
+    hiringDecision: {
+      status: 'PENDING',
+    },
+    evaluationProgress: {
+      completedCount: 3,
+      requiredCount: 3,
+      isFullyEvaluated: true,
+      pendingInterviewerNames: [],
     },
   },
 ];
@@ -314,11 +433,17 @@ export const candidateComparisonService = {
     }
   },
 
-  async getFinalRoundCandidates(jobId?: string): Promise<ComparisonCandidate[]> {
+  /**
+   * Gọi API lấy danh sách ứng viên vòng cuối kèm dữ liệu trạng thái phiếu phỏng vấn (AC 3)
+   */
+  async getFinalCandidatesWithEvaluations(
+    jobId?: string,
+    status: CandidateEvaluationFilterStatus = 'ALL'
+  ): Promise<ComparisonCandidate[]> {
     try {
       const response = await axiosClient.get<ComparisonCandidate[]>(
         '/recruitment/candidates/final-round-comparison',
-        { params: jobId ? { jobId } : undefined }
+        { params: { jobId: jobId || undefined, evaluationStatus: status } }
       );
       if (Array.isArray(response.data) && response.data.length > 0) {
         return response.data;
@@ -326,11 +451,24 @@ export const candidateComparisonService = {
     } catch {
       // Fallback về dữ liệu mock/localStorage
     }
-    const candidates = this.getStoredCandidates();
+
+    let candidates = this.getStoredCandidates();
+
     if (jobId) {
-      return candidates.filter((c) => c.appliedJobId === jobId);
+      candidates = candidates.filter((c) => c.appliedJobId === jobId);
     }
+
+    if (status === 'COMPLETED') {
+      candidates = candidates.filter((c) => c.evaluationProgress?.isFullyEvaluated === true);
+    } else if (status === 'PENDING') {
+      candidates = candidates.filter((c) => c.evaluationProgress?.isFullyEvaluated === false);
+    }
+
     return candidates;
+  },
+
+  async getFinalRoundCandidates(jobId?: string): Promise<ComparisonCandidate[]> {
+    return this.getFinalCandidatesWithEvaluations(jobId, 'ALL');
   },
 
   async updateHiringDecision(

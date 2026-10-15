@@ -23,6 +23,7 @@ import {
   XCircle,
   Star,
   Check,
+  Filter,
 } from 'lucide-react';
 import type {
   ComparisonCandidate,
@@ -37,6 +38,8 @@ import {
   getDecisionBadgeConfig,
   getScoreColorClass,
   getScorePercentage,
+  isCandidateFullyEvaluated,
+  getEvaluationProgressBadgeConfig,
 } from '../../utils/candidateComparisonHelper';
 
 export interface CandidateComparisonMatrixProps {
@@ -45,6 +48,7 @@ export interface CandidateComparisonMatrixProps {
   onAddCandidate?: (candidate: ComparisonCandidate) => void;
   onRemoveCandidate?: (candidateId: string) => void;
   onDecisionChange?: (candidateId: string, status: HiringDecisionStatus, note?: string) => void;
+  onBackToFilter?: () => void;
   onClose?: () => void;
   isModal?: boolean;
 }
@@ -55,6 +59,7 @@ export const CandidateComparisonMatrix: React.FC<CandidateComparisonMatrixProps>
   onAddCandidate,
   onRemoveCandidate,
   onDecisionChange,
+  onBackToFilter,
   onClose,
   isModal = false,
 }) => {
@@ -112,6 +117,10 @@ export const CandidateComparisonMatrix: React.FC<CandidateComparisonMatrixProps>
 
   // Thêm ứng viên vào bảng so sánh
   const handleAdd = (candidate: ComparisonCandidate) => {
+    if (!isCandidateFullyEvaluated(candidate)) {
+      alert('Ứng viên chưa hoàn thành đủ các phiếu đánh giá.');
+      return;
+    }
     if (selectedCandidates.length >= COMPARISON_CONSTRAINTS.MAX_CANDIDATES) {
       alert(
         `Bảng so sánh hỗ trợ tối đa ${COMPARISON_CONSTRAINTS.MAX_CANDIDATES} ứng viên song song để đảm bảo trải nghiệm tốt nhất.`
@@ -194,6 +203,20 @@ export const CandidateComparisonMatrix: React.FC<CandidateComparisonMatrixProps>
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Nút Quay lại Bộ lọc */}
+          {onBackToFilter && (
+            <button
+              type="button"
+              data-testid="btn-back-to-filter"
+              onClick={onBackToFilter}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-2xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-750 cursor-pointer"
+              title="Quay lại danh sách sàng lọc ứng viên vòng cuối"
+            >
+              <Filter className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>Sàng lọc ứng viên</span>
+            </button>
+          )}
+
           {/* Nút Thêm ứng viên */}
           {selectedCandidates.length < COMPARISON_CONSTRAINTS.MAX_CANDIDATES && (
             <button
@@ -1267,31 +1290,64 @@ export const CandidateComparisonMatrix: React.FC<CandidateComparisonMatrixProps>
                   Không còn ứng viên nào khác khả dụng để thêm.
                 </div>
               ) : (
-                availableToAdd.map((candidate) => (
-                  <div
-                    key={candidate.id}
-                    data-testid={`available-candidate-item-${candidate.id}`}
-                    className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50/50 p-3 hover:bg-indigo-50/50 dark:border-gray-800 dark:bg-gray-800/40"
-                  >
-                    <div>
-                      <div className="text-sm font-semibold text-gray-900 dark:text-white">
-                        {candidate.fullName}
-                      </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {candidate.currentTitle} • {candidate.experienceYears} năm kinh nghiệm
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      data-testid={`btn-select-candidate-${candidate.id}`}
-                      onClick={() => handleAdd(candidate)}
-                      className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-indigo-700"
+                availableToAdd.map((candidate) => {
+                  const isReady = isCandidateFullyEvaluated(candidate);
+                  const badgeCfg = getEvaluationProgressBadgeConfig(candidate.evaluationProgress);
+                  return (
+                    <div
+                      key={candidate.id}
+                      data-testid={`available-candidate-item-${candidate.id}`}
+                      className={`flex items-center justify-between rounded-xl border p-3 ${
+                        !isReady
+                          ? 'border-gray-200 bg-gray-50/40 opacity-75 dark:border-gray-800 dark:bg-gray-850/40'
+                          : 'border-gray-200 bg-gray-50/50 hover:bg-indigo-50/50 dark:border-gray-800 dark:bg-gray-850/60'
+                      }`}
                     >
-                      <Plus className="h-3.5 w-3.5" />
-                      <span>Thêm</span>
-                    </button>
-                  </div>
-                ))
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                            {candidate.fullName}
+                          </span>
+                          <span
+                            data-testid={`badge-evaluation-progress-${candidate.id}`}
+                            title={badgeCfg.tooltip}
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.2 text-[10px] font-bold border ${badgeCfg.containerClass}`}
+                          >
+                            <span className={`h-1.5 w-1.5 rounded-full ${badgeCfg.dotClass}`} />
+                            <span>{badgeCfg.label}</span>
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {candidate.currentTitle} • {candidate.experienceYears} năm kinh nghiệm
+                        </div>
+                        {!isReady && candidate.evaluationProgress?.pendingInterviewerNames && (
+                          <div className="text-[10px] text-amber-700 dark:text-amber-400 italic">
+                            Thiếu: {candidate.evaluationProgress.pendingInterviewerNames.join(', ')}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        data-testid={`btn-select-candidate-${candidate.id}`}
+                        disabled={!isReady}
+                        title={
+                          !isReady
+                            ? 'Ứng viên chưa hoàn thành đủ các phiếu đánh giá'
+                            : 'Thêm vào so sánh'
+                        }
+                        onClick={() => handleAdd(candidate)}
+                        className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold shadow-2xs ${
+                          isReady
+                            ? 'bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer'
+                            : 'bg-gray-200 text-gray-400 cursor-not-allowed dark:bg-gray-700 dark:text-gray-500'
+                        }`}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>Thêm</span>
+                      </button>
+                    </div>
+                  );
+                })
               )}
             </div>
 

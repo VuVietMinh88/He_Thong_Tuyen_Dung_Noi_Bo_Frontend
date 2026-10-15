@@ -9,6 +9,7 @@ import type {
   CompetencyCriterionKey,
   InterviewerRecommendation,
   HiringDecisionStatus,
+  EvaluationProgress,
 } from '../types/candidateComparison';
 
 /**
@@ -239,4 +240,59 @@ export const getScoreColorClass = (score: number) => {
  */
 export const getScorePercentage = (score: number): number => {
   return Math.min(Math.max((score / 5) * 100, 0), 100);
+};
+
+/**
+ * Kiểm tra xem ứng viên đã được tất cả thành viên Hội đồng nộp đủ phiếu đánh giá hay chưa (AC 2)
+ */
+export const isCandidateFullyEvaluated = (candidate: ComparisonCandidate): boolean => {
+  if (candidate.evaluationProgress) {
+    return candidate.evaluationProgress.isFullyEvaluated;
+  }
+  // Fallback: nếu có tối thiểu 2 đánh giá của hội đồng phỏng vấn
+  return (candidate.interviewerFeedbacks?.length ?? 0) >= 2;
+};
+
+/**
+ * Cấu hình huy hiệu hiển thị tiến độ nộp đánh giá của từng ứng viên (AC 1)
+ * Ví dụ: "3/3 Đã đánh giá" - Xanh lá, "1/3 Đang chờ" - Vàng cam
+ */
+export const getEvaluationProgressBadgeConfig = (progress?: EvaluationProgress) => {
+  if (!progress) {
+    return {
+      label: 'Chưa có thông tin',
+      containerClass:
+        'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-750',
+      dotClass: 'bg-slate-400',
+      isReady: false,
+      tooltip: 'Chưa có dữ liệu tiến độ đánh giá',
+    };
+  }
+
+  const { completedCount, requiredCount, isFullyEvaluated, pendingInterviewerNames } = progress;
+
+  if (isFullyEvaluated) {
+    return {
+      label: `${completedCount}/${requiredCount} Đã đánh giá`,
+      containerClass:
+        'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800',
+      dotClass: 'bg-emerald-500',
+      isReady: true,
+      tooltip: 'Toàn bộ thành viên Hội đồng đã hoàn tất nộp phiếu đánh giá.',
+    };
+  }
+
+  const pendingText =
+    pendingInterviewerNames && pendingInterviewerNames.length > 0
+      ? `Đang chờ: ${pendingInterviewerNames.join(', ')}`
+      : 'Ứng viên chưa hoàn thành đủ các phiếu đánh giá';
+
+  return {
+    label: `${completedCount}/${requiredCount} Đang chờ`,
+    containerClass:
+      'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800',
+    dotClass: 'bg-amber-500',
+    isReady: false,
+    tooltip: pendingText,
+  };
 };

@@ -1,14 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { CandidateComparisonMatrix } from './CandidateComparisonMatrix';
+import { FinalRoundCandidateFilterPanel } from './FinalRoundCandidateFilterPanel';
 import { candidateComparisonService } from '../../services/candidateComparisonService';
-import type { ComparisonCandidate, HiringDecisionStatus } from '../../types/candidateComparison';
+import { isCandidateFullyEvaluated } from '../../utils/candidateComparisonHelper';
+import type {
+  ComparisonCandidate,
+  HiringDecisionStatus,
+  CandidateEvaluationFilterStatus,
+} from '../../types/candidateComparison';
 
 export interface CandidateComparisonModalProps {
   isOpen: boolean;
   onClose: () => void;
   candidateIds?: string[];
   jobId?: string;
+  initialFilterStatus?: CandidateEvaluationFilterStatus;
+  initialViewMode?: 'FILTER' | 'MATRIX';
   onDecisionSaved?: (candidateId: string, status: HiringDecisionStatus) => void;
 }
 
@@ -17,8 +25,11 @@ export const CandidateComparisonModal: React.FC<CandidateComparisonModalProps> =
   onClose,
   candidateIds,
   jobId,
+  initialFilterStatus = 'ALL',
+  initialViewMode,
   onDecisionSaved,
 }) => {
+  const [viewMode, setViewMode] = useState<'FILTER' | 'MATRIX'>('FILTER');
   const [candidates, setCandidates] = useState<ComparisonCandidate[]>([]);
   const [allCandidates, setAllCandidates] = useState<ComparisonCandidate[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -30,29 +41,45 @@ export const CandidateComparisonModal: React.FC<CandidateComparisonModalProps> =
     const loadData = async () => {
       setIsLoading(true);
       try {
-        const fullList = await candidateComparisonService.getFinalRoundCandidates(jobId);
+        const fullList = await candidateComparisonService.getFinalCandidatesWithEvaluations(
+          jobId,
+          'ALL'
+        );
         if (!isMounted) return;
 
         setAllCandidates(fullList);
 
-        // Nếu có candidateIds truyền vào, lọc theo danh sách ID
+        // Xác định chế độ xem ban đầu:
+        // Nếu có truyền initialViewMode thì ưu tiên.
+        // Nếu có candidateIds >= 2 thì mở thẳng MATRIX, ngược lại mở bộ lọc FILTER
+        if (initialViewMode) {
+          setViewMode(initialViewMode);
+        } else if (candidateIds && candidateIds.length >= 2) {
+          setViewMode('MATRIX');
+        } else {
+          setViewMode('FILTER');
+        }
+
+        // Lọc danh sách ứng viên được chọn
         if (candidateIds && candidateIds.length > 0) {
           const selected = fullList.filter((c) => candidateIds.includes(c.id));
           if (selected.length > 0) {
             setCandidates(selected);
           } else {
-            // Nếu không tìm thấy theo ID (ví dụ ID ứng viên chung chưa map), lấy 3 ứng viên đầu
-            setCandidates(fullList.slice(0, 3));
+            const valid = fullList.filter(isCandidateFullyEvaluated);
+            setCandidates(valid.slice(0, 3));
           }
         } else {
-          // Mặc định chọn 3 ứng viên đầu tiên để so sánh
-          setCandidates(fullList.slice(0, 3));
+          const valid = fullList.filter(isCandidateFullyEvaluated);
+          setCandidates(valid.slice(0, 3));
         }
       } catch {
         if (isMounted) {
           const fallback = candidateComparisonService.getStoredCandidates();
           setAllCandidates(fallback);
-          setCandidates(fallback.slice(0, 3));
+          const valid = fallback.filter(isCandidateFullyEvaluated);
+          setCandidates(valid.slice(0, 3));
+          setViewMode(candidateIds && candidateIds.length >= 2 ? 'MATRIX' : 'FILTER');
         }
       } finally {
         if (isMounted) {
@@ -66,7 +93,7 @@ export const CandidateComparisonModal: React.FC<CandidateComparisonModalProps> =
     return () => {
       isMounted = false;
     };
-  }, [isOpen, candidateIds, jobId]);
+  }, [isOpen, candidateIds, jobId, initialViewMode]);
 
   if (!isOpen) return null;
 
@@ -85,6 +112,11 @@ export const CandidateComparisonModal: React.FC<CandidateComparisonModalProps> =
     }
   };
 
+  const handleOpenComparisonFromFilter = (selected: ComparisonCandidate[]) => {
+    setCandidates(selected);
+    setViewMode('MATRIX');
+  };
+
   return (
     <div
       id="candidate-comparison-modal-backdrop"
@@ -96,14 +128,24 @@ export const CandidateComparisonModal: React.FC<CandidateComparisonModalProps> =
           <div className="flex flex-col items-center justify-center p-16 text-center">
             <Loader2 className="h-10 w-10 animate-spin text-indigo-600 dark:text-indigo-400" />
             <p className="mt-4 text-sm font-medium text-gray-600 dark:text-gray-300">
-              Đang tải dữ liệu ma trận so sánh ứng viên vòng cuối...
+              Đang tải dữ liệu và trạng thái đánh giá ứng viên vòng cuối...
             </p>
           </div>
+        ) : viewMode === 'FILTER' ? (
+          <FinalRoundCandidateFilterPanel
+            jobId={jobId}
+            initialFilterStatus={initialFilterStatus}
+            selectedCandidateIds={candidates.map((c) => c.id)}
+            onOpenComparison={handleOpenComparisonFromFilter}
+            onClose={onClose}
+            isModal={true}
+          />
         ) : (
           <CandidateComparisonMatrix
             candidates={candidates}
             allAvailableCandidates={allCandidates}
             onDecisionChange={handleDecisionChange}
+            onBackToFilter={() => setViewMode('FILTER')}
             onClose={onClose}
             isModal={true}
           />
