@@ -2,4 +2,8 @@ export * from './FunnelFilterBar';
 export * from './FunnelKpiCards';
 export * from './FunnelStageChart';
 export * from './FunnelDetailTable';
+export * from './VisualFunnelSvgChart';
+export * from './DropOffAlertBanner';
+export * from './FunnelEmptyState';
+export * from './FunnelSkeletonLoader';
 export * from './RecruitmentFunnelDashboard';

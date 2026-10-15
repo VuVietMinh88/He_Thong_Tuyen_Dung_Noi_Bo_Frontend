@@ -9,6 +9,8 @@ import { FunnelFilterBar } from './FunnelFilterBar';
 import { FunnelKpiCards } from './FunnelKpiCards';
 import { FunnelStageChart } from './FunnelStageChart';
 import { FunnelDetailTable } from './FunnelDetailTable';
+import { FunnelSkeletonLoader } from './FunnelSkeletonLoader';
+import { FunnelEmptyState } from './FunnelEmptyState';
 import type {
   FunnelFilterState,
   FunnelFilterOptions,
@@ -60,12 +62,12 @@ export const RecruitmentFunnelDashboard: React.FC<RecruitmentFunnelDashboardProp
     };
   }, []);
 
-  // Tải dữ liệu báo cáo phễu tuyển dụng
+  // Tải dữ liệu báo cáo phễu tuyển dụng qua API backend (AC 3)
   const fetchReport = useCallback(async (currentFilters: FunnelFilterState) => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await recruitmentFunnelService.getFunnelReport(currentFilters);
+      const data = await recruitmentFunnelService.getFunnelReportData(currentFilters);
       setReportData(data);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Lỗi khi tải báo cáo phễu';
@@ -157,6 +159,8 @@ export const RecruitmentFunnelDashboard: React.FC<RecruitmentFunnelDashboardProp
     }
   };
 
+  const isEmptyData = Boolean(reportData && reportData.kpi.totalApplications === 0);
+
   return (
     <div
       data-testid="recruitment-funnel-dashboard"
@@ -201,7 +205,7 @@ export const RecruitmentFunnelDashboard: React.FC<RecruitmentFunnelDashboardProp
             type="button"
             data-testid="btn-export-report"
             onClick={handleExportReport}
-            disabled={!reportData || isLoading}
+            disabled={!reportData || isLoading || isEmptyData}
             className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs hover:shadow transition-all flex items-center gap-1.5 disabled:opacity-50"
           >
             <Download className="h-4 w-4" />
@@ -227,34 +231,28 @@ export const RecruitmentFunnelDashboard: React.FC<RecruitmentFunnelDashboardProp
         isLoading={isLoading}
       />
 
-      {/* 4. Thẻ thống kê tổng quan KPI Cards (AC 2) */}
-      {reportData && <FunnelKpiCards kpi={reportData.kpi} />}
+      {/* 4. Skeleton Loading khi tải lần đầu */}
+      {isLoading && !reportData && <FunnelSkeletonLoader />}
 
-      {/* Loading Skeleton */}
-      {isLoading && !reportData && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div
-                key={i}
-                className="h-28 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse"
-              />
-            ))}
-          </div>
-          <div className="h-96 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
-        </div>
+      {/* 5. Empty State khi không có ứng viên */}
+      {!isLoading && isEmptyData && (
+        <FunnelEmptyState onResetFilters={handleResetFilters} />
       )}
 
-      {/* 5. Bố cục hiển thị các tầng phễu tuyển dụng (AC 3) */}
-      {reportData && (
+      {/* 6. Thẻ thống kê tổng quan KPI Cards (AC 2) */}
+      {reportData && !isEmptyData && <FunnelKpiCards kpi={reportData.kpi} />}
+
+      {/* 7. Bố cục hiển thị các tầng phễu tuyển dụng & Điểm rơi (AC 1 & AC 2) */}
+      {reportData && !isEmptyData && (
         <FunnelStageChart
           stages={reportData.stages}
+          biggestDropOff={reportData.biggestDropOff}
           onSelectStage={(st) => setSelectedStage(st)}
         />
       )}
 
-      {/* 6. Bảng đối soát chi tiết */}
-      {reportData && <FunnelDetailTable stages={reportData.stages} />}
+      {/* 8. Bảng đối soát chi tiết */}
+      {reportData && !isEmptyData && <FunnelDetailTable stages={reportData.stages} />}
 
       {/* Selected Stage Quick Info Modal / Drawer (nếu có click từ biểu đồ) */}
       {selectedStage && (

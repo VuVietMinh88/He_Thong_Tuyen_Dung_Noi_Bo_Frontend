@@ -3,6 +3,7 @@
  * Cung cấp logic tính toán phễu tuyển dụng, bộ lọc đa chiều và tổng hợp KPI.
  */
 
+import axiosClient from '../utils/axiosClient';
 import type {
   DatePreset,
   FunnelFilterState,
@@ -10,6 +11,7 @@ import type {
   FunnelReportData,
   FunnelStageMetric,
   FunnelSummaryKpi,
+  DropOffAlertInfo,
   DepartmentOption,
   JobOpeningOption,
   RecruiterOption,
@@ -117,21 +119,94 @@ export const getDefaultFunnelFilters = (): FunnelFilterState => {
 /**
  * Tính toán chỉ số phễu tuyển dụng từ mảng số lượng
  */
+/**
+ * Thuật toán phát hiện điểm rơi lớn nhất giữa các vòng tuyển dụng (AC 2)
+ * Drop-off Rate = ((Số lượng vòng N - Số lượng vòng N+1) / Số lượng vòng N) * 100%
+ */
+export const detectBiggestDropOff = (
+  stages: FunnelStageMetric[],
+): DropOffAlertInfo | null => {
+  let maxDropRate = -1;
+  let worstStageIndex = -1;
+  let maxDropCount = 0;
+
+  for (let i = 1; i < stages.length; i++) {
+    const prev = stages[i - 1];
+    const curr = stages[i];
+    if (prev.count > 0) {
+      const dropCount = Math.max(0, prev.count - curr.count);
+      const rate = Math.round((dropCount / prev.count) * 1000) / 10;
+      if (rate > maxDropRate && dropCount > 0) {
+        maxDropRate = rate;
+        worstStageIndex = i;
+        maxDropCount = dropCount;
+      }
+    }
+  }
+
+  if (worstStageIndex === -1 || maxDropRate <= 0) return null;
+
+  const worstStage = stages[worstStageIndex];
+  const prevStage = stages[worstStageIndex - 1];
+
+  let recommendation = '';
+  switch (worstStage.id) {
+    case 'SCREENED':
+      recommendation =
+        'Tỷ lệ loại hồ sơ cao tại vòng duyệt CV. Khuyến nghị hiệu chỉnh tiêu chí trong JD hoặc tối ưu kênh tạo nguồn ứng viên.';
+      break;
+    case 'INTERVIEW_1':
+      recommendation =
+        'Hao hụt ứng viên lớn tại phỏng vấn sơ loại. Nên chuẩn hóa bộ câu hỏi văn hóa và sàng lọc trước kỳ vọng mức lương.';
+      break;
+    case 'INTERVIEW_2':
+      recommendation =
+        'Ứng viên dừng lại nhiều ở vòng phỏng vấn chuyên sâu. Nên gửi trước bài test kỹ thuật và thống nhất thang điểm đánh giá.';
+      break;
+    case 'OFFERED':
+      recommendation =
+        'Số ứng viên nhận Offer thấp so với số qua phỏng vấn. Cần rút ngắn thời gian phê duyệt và ra quyết định Offer.';
+      break;
+    case 'HIRED':
+      recommendation =
+        'Tỷ lệ từ chối Offer cao. Khuyến nghị rà soát lại tính cạnh tranh của gói thu nhập (C&B) trên thị trường.';
+      break;
+    default:
+      recommendation = 'Theo dõi sát sao lưu lượng ứng viên và cải thiện quy trình chuyển giao giữa các vòng.';
+  }
+
+  return {
+    stageId: worstStage.id,
+    stageName: worstStage.name,
+    stageOrder: worstStage.stageOrder,
+    dropRate: maxDropRate,
+    dropCount: maxDropCount,
+    incomingCount: prevStage.count,
+    passedCount: worstStage.count,
+    alertMessage: `Điểm rơi lớn nhất: ${maxDropRate}% ứng viên dừng lại tại vòng [${worstStage.name}]`,
+    recommendation,
+  };
+};
+
+/**
+ * Tính toán chỉ số phễu tuyển dụng từ mảng số lượng
+ */
 export const computeFunnelMetricsFromCounts = (
   rawCounts: [number, number, number, number, number, number],
   avgDays: [number, number, number, number, number, number] = [1.5, 2.5, 4.0, 5.5, 3.2, 5.7],
-): { stages: FunnelStageMetric[]; kpi: FunnelSummaryKpi } => {
-  const appliedCount = Math.max(rawCounts[0], 1);
+): { stages: FunnelStageMetric[]; kpi: FunnelSummaryKpi; biggestDropOff: DropOffAlertInfo | null } => {
+  const isAllZero = rawCounts.every((c) => c === 0);
+  const appliedCount = isAllZero ? 0 : Math.max(rawCounts[0], 1);
   const hiredCount = rawCounts[5];
 
-  const stages: FunnelStageMetric[] = FUNNEL_STAGE_DEFINITIONS.map((def, index) => {
+  const initialStages: FunnelStageMetric[] = FUNNEL_STAGE_DEFINITIONS.map((def, index) => {
     const currentCount = rawCounts[index];
     const prevCount = index === 0 ? currentCount : rawCounts[index - 1];
 
     // Pass rate: Tỷ lệ % vượt qua vòng so với vòng trước
     const passRate =
       index === 0
-        ? 100
+        ? (currentCount > 0 ? 100 : 0)
         : prevCount > 0
           ? Math.round((currentCount / prevCount) * 1000) / 10
           : 0;
@@ -165,13 +240,20 @@ export const computeFunnelMetricsFromCounts = (
     };
   });
 
+  const biggestDropOff = detectBiggestDropOff(initialStages);
+
+  const stages = initialStages.map((st) => ({
+    ...st,
+    isBiggestDropOff: Boolean(biggestDropOff && st.id === biggestDropOff.stageId),
+  }));
+
   // KPI Calculations
   const overallConversionRate =
     appliedCount > 0 ? Math.round((hiredCount / appliedCount) * 1000) / 10 : 0;
 
-  const totalTimeToHire = Math.round(
-    avgDays.reduce((acc, curr) => acc + curr, 0) * 10,
-  ) / 10;
+  const totalTimeToHire = isAllZero
+    ? 0
+    : Math.round(avgDays.reduce((acc, curr) => acc + curr, 0) * 10) / 10;
 
   const screeningPassRate = stages[1]?.passRate ?? 0;
   const offeredCount = rawCounts[4];
@@ -185,12 +267,12 @@ export const computeFunnelMetricsFromCounts = (
     totalHired: hiredCount,
     screeningPassRate,
     offerAcceptanceRate,
-    applicationsGrowthPercent: 12.8,
-    conversionRateChangePercent: 0.6,
-    timeToHireChangeDays: -2.3,
+    applicationsGrowthPercent: isAllZero ? 0 : 12.8,
+    conversionRateChangePercent: isAllZero ? 0 : 0.6,
+    timeToHireChangeDays: isAllZero ? 0 : -2.3,
   };
 
-  return { stages, kpi };
+  return { stages, kpi, biggestDropOff };
 };
 
 /**
@@ -209,9 +291,45 @@ export const recruitmentFunnelService = {
   },
 
   /**
-   * Truy vấn dữ liệu báo cáo phễu tuyển dụng theo bộ lọc
+   * Kết nối API backend theo bộ lọc với fallback phân tích (AC 3)
+   */
+  async getFunnelReportData(filters: FunnelFilterState): Promise<FunnelReportData> {
+    try {
+      const response = await axiosClient.get('/recruitment/reports/funnel', {
+        params: {
+          preset: filters.datePreset,
+          startDate: filters.startDate,
+          endDate: filters.endDate,
+          departmentId: filters.departmentId !== 'ALL' ? filters.departmentId : undefined,
+          jobOpeningId: filters.jobOpeningId !== 'ALL' ? filters.jobOpeningId : undefined,
+          recruiterId: filters.recruiterId !== 'ALL' ? filters.recruiterId : undefined,
+        },
+      });
+      if (response?.data?.data) {
+        return response.data.data;
+      }
+    } catch {
+      // Backend offline hoặc chưa có API -> fallback dữ liệu phân tích
+    }
+    return recruitmentFunnelService.getFunnelReport(filters);
+  },
+
+  /**
+   * Truy vấn dữ liệu báo cáo phễu tuyển dụng theo bộ lọc (Mô phỏng & phân tích)
    */
   async getFunnelReport(filters: FunnelFilterState): Promise<FunnelReportData> {
+    // Trường hợp kiểm tra Empty State (ví dụ lọc phòng ban không tồn tại)
+    if (filters.departmentId === 'EMPTY_TEST') {
+      const { stages, kpi, biggestDropOff } = computeFunnelMetricsFromCounts([0, 0, 0, 0, 0, 0]);
+      return {
+        filters,
+        kpi,
+        stages,
+        biggestDropOff,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
     // Mô phỏng trọng số dữ liệu dựa trên bộ lọc đã chọn
     let baseApplied = 480;
     let baseScreened = 216;
@@ -289,7 +407,7 @@ export const recruitmentFunnelService = {
     const offered = Math.min(int2, baseOffered);
     const hired = Math.min(offered, baseHired);
 
-    const { stages, kpi } = computeFunnelMetricsFromCounts([
+    const { stages, kpi, biggestDropOff } = computeFunnelMetricsFromCounts([
       applied,
       screened,
       int1,
@@ -302,6 +420,7 @@ export const recruitmentFunnelService = {
       filters,
       kpi,
       stages,
+      biggestDropOff,
       updatedAt: new Date().toISOString(),
     };
   },

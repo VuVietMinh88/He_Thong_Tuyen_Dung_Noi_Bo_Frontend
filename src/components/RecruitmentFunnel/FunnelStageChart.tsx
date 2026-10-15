@@ -7,15 +7,24 @@ import {
   Send,
   UserPlus,
   ArrowDown,
-  Info,
   Clock,
   UserMinus,
   TrendingUp,
+  AlertTriangle,
+  Layers,
+  PieChart,
 } from 'lucide-react';
-import type { FunnelStageMetric, FunnelStageId } from '../../types/recruitmentFunnel';
+import type {
+  FunnelStageMetric,
+  FunnelStageId,
+  DropOffAlertInfo,
+} from '../../types/recruitmentFunnel';
+import { VisualFunnelSvgChart } from './VisualFunnelSvgChart';
+import { DropOffAlertBanner } from './DropOffAlertBanner';
 
 export interface FunnelStageChartProps {
   stages: FunnelStageMetric[];
+  biggestDropOff?: DropOffAlertInfo | null;
   onSelectStage?: (stage: FunnelStageMetric) => void;
 }
 
@@ -30,9 +39,11 @@ const STAGE_ICONS: Record<FunnelStageId, React.ReactNode> = {
 
 export const FunnelStageChart: React.FC<FunnelStageChartProps> = ({
   stages,
+  biggestDropOff,
   onSelectStage,
 }) => {
   const [activeStageId, setActiveStageId] = useState<FunnelStageId | null>(null);
+  const [viewMode, setViewMode] = useState<'BOTH' | 'SVG_ONLY' | 'CARDS_ONLY'>('BOTH');
 
   const appliedCount = stages[0]?.count || 1;
 
@@ -46,73 +57,142 @@ export const FunnelStageChart: React.FC<FunnelStageChartProps> = ({
       data-testid="funnel-stage-chart"
       className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-xs space-y-6"
     >
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 dark:border-gray-800 pb-4">
+      {/* 1. Header & View Mode Switcher */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 dark:border-gray-800 pb-4">
         <div>
           <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <span>Bố cục các tầng phễu tuyển dụng (Recruitment Funnel)</span>
           </h3>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Lưu lượng ứng viên, tỷ lệ vượt qua vòng (%) và tỷ lệ chuyển đổi tích lũy
+            Lưu lượng ứng viên, tỷ lệ vượt qua vòng (%) và phát hiện điểm rơi lớn nhất
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-          <Info className="h-3.5 w-3.5 text-blue-500" />
-          <span>Click vào từng tầng để xem phân tích chi tiết</span>
+        {/* View Mode Toggle */}
+        <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl text-xs font-semibold">
+          <button
+            type="button"
+            data-testid="view-mode-both"
+            onClick={() => setViewMode('BOTH')}
+            className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 ${
+              viewMode === 'BOTH'
+                ? 'bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 shadow-2xs font-bold'
+                : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
+            }`}
+          >
+            <Layers className="h-3.5 w-3.5" />
+            <span>Đầy đủ</span>
+          </button>
+          <button
+            type="button"
+            data-testid="view-mode-svg"
+            onClick={() => setViewMode('SVG_ONLY')}
+            className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 ${
+              viewMode === 'SVG_ONLY'
+                ? 'bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 shadow-2xs font-bold'
+                : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
+            }`}
+          >
+            <PieChart className="h-3.5 w-3.5" />
+            <span>Biểu đồ dốc SVG</span>
+          </button>
+          <button
+            type="button"
+            data-testid="view-mode-cards"
+            onClick={() => setViewMode('CARDS_ONLY')}
+            className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 ${
+              viewMode === 'CARDS_ONLY'
+                ? 'bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 shadow-2xs font-bold'
+                : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
+            }`}
+          >
+            <span>Tầng chi tiết</span>
+          </button>
         </div>
       </div>
 
-      {/* Visual Funnel Stack (AC 3) */}
-      <div className="space-y-3">
-        {stages.map((stage, index) => {
-          const isSelected = activeStageId === stage.id;
-          const isFirstStage = index === 0;
-          const prevStage = !isFirstStage ? stages[index - 1] : null;
+      {/* 2. Cảnh báo điểm rơi lớn nhất (AC 2) */}
+      {biggestDropOff && <DropOffAlertBanner dropOff={biggestDropOff} />}
 
-          // Tính toán độ rộng thanh tiến trình phễu (width % dựa trên retention so với ban đầu, min 18% để đủ chứa text)
-          const widthPercentage = Math.max(18, Math.min(100, Math.round((stage.count / appliedCount) * 100)));
+      {/* 3. Visual SVG Funnel Chart (AC 1) */}
+      {(viewMode === 'BOTH' || viewMode === 'SVG_ONLY') && (
+        <VisualFunnelSvgChart stages={stages} onSelectStage={onSelectStage} />
+      )}
 
-          return (
-            <React.Fragment key={stage.id}>
-              {/* Connector giữa 2 vòng: Hiển thị Tỷ lệ qua vòng & Số lượng loại (AC 3) */}
-              {!isFirstStage && prevStage && (
-                <div
-                  data-testid={`funnel-connector-${stage.id.toLowerCase()}`}
-                  className="flex items-center justify-center my-1"
-                >
-                  <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700/80 px-3.5 py-1 rounded-full shadow-2xs">
-                    <div className="flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400">
-                      <TrendingUp className="h-3 w-3" />
-                      <span data-testid={`stage-passrate-${stage.id.toLowerCase()}`}>
-                        {`Vượt qua: ${stage.passRate}%`}
-                      </span>
+      {/* 4. Visual Funnel Stack (Cards & Connectors) */}
+      {(viewMode === 'BOTH' || viewMode === 'CARDS_ONLY') && (
+        <div className="space-y-3">
+          {stages.map((stage, index) => {
+            const isSelected = activeStageId === stage.id;
+            const isFirstStage = index === 0;
+            const prevStage = !isFirstStage ? stages[index - 1] : null;
+            const isBiggestDrop = Boolean(stage.isBiggestDropOff);
+
+            // Tính toán độ rộng thanh tiến trình phễu (width % dựa trên retention so với ban đầu, min 18% để đủ chứa text)
+            const widthPercentage = Math.max(18, Math.min(100, Math.round((stage.count / appliedCount) * 100)));
+
+            return (
+              <React.Fragment key={stage.id}>
+                {/* Connector giữa 2 vòng: Hiển thị Tỷ lệ qua vòng & Số lượng loại (AC 3) */}
+                {!isFirstStage && prevStage && (
+                  <div
+                    data-testid={`funnel-connector-${stage.id.toLowerCase()}`}
+                    className="flex items-center justify-center my-1"
+                  >
+                    <div
+                      className={`flex items-center gap-3 px-3.5 py-1 rounded-full shadow-2xs border ${
+                        isBiggestDrop
+                          ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 ring-2 ring-rose-500/20'
+                          : 'bg-gray-50 dark:bg-gray-800/80 border-gray-200 dark:border-gray-700/80'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400">
+                        <TrendingUp className="h-3 w-3" />
+                        <span data-testid={`stage-passrate-${stage.id.toLowerCase()}`}>
+                          {`Vượt qua: ${stage.passRate}%`}
+                        </span>
+                      </div>
+
+                      <span className="h-3 w-px bg-gray-300 dark:bg-gray-700" />
+
+                      <div
+                        className={`flex items-center gap-1 text-[11px] font-semibold ${
+                          isBiggestDrop
+                            ? 'text-rose-700 dark:text-rose-300 font-black'
+                            : 'text-rose-600 dark:text-rose-400'
+                        }`}
+                      >
+                        <UserMinus className="h-3 w-3" />
+                        <span data-testid={`stage-dropcount-${stage.id.toLowerCase()}`}>
+                          {`Loại: -${stage.dropCount} (${stage.dropRate}%)`}
+                        </span>
+                        {isBiggestDrop && (
+                          <span
+                            data-testid={`connector-dropoff-alert-${stage.id.toLowerCase()}`}
+                            className="ml-1 px-1.5 py-0.2 rounded text-[10px] bg-rose-600 text-white font-black uppercase"
+                          >
+                            Điểm rơi lớn nhất
+                          </span>
+                        )}
+                      </div>
+
+                      <ArrowDown className="h-3 w-3 text-gray-400 dark:text-gray-500" />
                     </div>
-
-                    <span className="h-3 w-px bg-gray-300 dark:bg-gray-700" />
-
-                    <div className="flex items-center gap-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400">
-                      <UserMinus className="h-3 w-3" />
-                      <span data-testid={`stage-dropcount-${stage.id.toLowerCase()}`}>
-                        {`Loại: -${stage.dropCount} (${stage.dropRate}%)`}
-                      </span>
-                    </div>
-
-                    <ArrowDown className="h-3 w-3 text-gray-400 dark:text-gray-500" />
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Khối hiển thị tầng phễu (Stage Card) */}
-              <div
-                data-testid={`stage-card-${stage.id.toLowerCase()}`}
-                onClick={() => handleStageClick(stage)}
-                className={`group cursor-pointer rounded-xl border transition-all duration-200 ${
-                  isSelected
-                    ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-500/20 bg-blue-50/20 dark:bg-blue-950/20'
-                    : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50/60 dark:hover:bg-gray-800/40'
-                }`}
-              >
+                {/* Khối hiển thị tầng phễu (Stage Card) */}
+                <div
+                  data-testid={`stage-card-${stage.id.toLowerCase()}`}
+                  onClick={() => handleStageClick(stage)}
+                  className={`group cursor-pointer rounded-xl border transition-all duration-200 ${
+                    isBiggestDrop
+                      ? 'border-rose-500 dark:border-rose-400 ring-2 ring-rose-500/20 bg-rose-50/15 dark:bg-rose-950/20 shadow-xs'
+                      : isSelected
+                        ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-500/20 bg-blue-50/20 dark:bg-blue-950/20'
+                        : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50/60 dark:hover:bg-gray-800/40'
+                  }`}
+                >
                 <div className="p-4">
                   {/* Row 1: Header information */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
@@ -177,6 +257,17 @@ export const FunnelStageChart: React.FC<FunnelStageChartProps> = ({
                       >
                         {`Giữ chân: ${stage.retentionRate}%`}
                       </div>
+
+                      {/* Cảnh báo điểm rơi lớn nhất (AC 2) */}
+                      {isBiggestDrop && (
+                        <div
+                          data-testid={`stage-dropoff-badge-${stage.id.toLowerCase()}`}
+                          className="px-2.5 py-1 rounded-lg border text-xs font-bold bg-rose-100 text-rose-700 border-rose-300 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800 flex items-center gap-1 shadow-2xs"
+                        >
+                          <AlertTriangle className="h-3.5 w-3.5 text-rose-600 animate-pulse" />
+                          <span>{`⚠️ Điểm rơi lớn nhất: ${stage.dropRate}% rớt`}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -239,7 +330,8 @@ export const FunnelStageChart: React.FC<FunnelStageChartProps> = ({
             </React.Fragment>
           );
         })}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -39,6 +39,19 @@ export interface FunnelStageMetric {
   avgDaysInStage: number; // Thời gian xử lý trung bình tại vòng này (ngày)
   colorClass: string;
   badgeBgClass: string;
+  isBiggestDropOff?: boolean; // Đánh dấu điểm rơi lớn nhất giữa các vòng
+}
+
+export interface DropOffAlertInfo {
+  stageId: FunnelStageId;
+  stageName: string;
+  stageOrder: number;
+  dropRate: number; // Tỷ lệ rớt (%)
+  dropCount: number; // Số lượng hồ sơ rớt
+  incomingCount: number; // Số lượng hồ sơ đầu vào vòng trước
+  passedCount: number; // Số lượng hồ sơ vượt qua
+  alertMessage: string;
+  recommendation: string;
 }
 
 export interface FunnelSummaryKpi {
@@ -83,6 +96,7 @@ export interface FunnelReportData {
   filters: FunnelFilterState;
   kpi: FunnelSummaryKpi;
   stages: FunnelStageMetric[];
+  biggestDropOff?: DropOffAlertInfo | null;
   updatedAt: string;
 }
 
