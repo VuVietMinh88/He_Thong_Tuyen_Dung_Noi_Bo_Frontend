@@ -20,6 +20,7 @@ import {
   ChevronUp,
   Share2,
   Calendar,
+  Award,
 } from 'lucide-react';
 import { tokenService } from '../../services/token.service';
 import usePermission from '../../hooks/usePermission';
@@ -628,6 +629,16 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
                 })}
               </div>
               <div className="mt-4 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  data-testid="btn-view-evaluation-summary-profile"
+                  onClick={() => navigate(`/candidates/${candidate.id}/evaluation-summary`)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3.5 py-2 text-sm font-semibold text-purple-700 transition hover:bg-purple-100 shadow-2xs"
+                  title="Xem hồ sơ tổng hợp đánh giá toàn diện để ra quyết định tuyển dụng (User Story S7-02)"
+                >
+                  <Award className="w-4 h-4 text-purple-600" />
+                  Tổng hợp đánh giá
+                </button>
                 <button
                   type="button"
                   onClick={() => setIsInterviewModalOpen(true)}

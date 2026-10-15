@@ -38,6 +38,7 @@ import InternalReferralPage from "./pages/Referral/InternalReferralPage";
 import JobPostingManagementPage from "./pages/Recruitment/JobPostingManagementPage";
 import CandidateManagementPage from "./pages/Candidate/CandidateManagementPage";
 import UnifiedCandidateProfilePage from "./pages/Candidate/UnifiedCandidateProfilePage";
+import CandidateEvaluationSummaryPage from "./pages/Candidate/CandidateEvaluationSummaryPage";
 import SlaSettingsPage from "./pages/SLA/SlaSettingsPage";
 import PersonalInterviewSchedulePage from "./pages/Interview/PersonalInterviewSchedulePage";
 
@@ -398,6 +399,14 @@ function App() {
                 element={
                   <MainLayout>
                     <UnifiedCandidateProfilePage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/candidates/:id/evaluation-summary"
+                element={
+                  <MainLayout>
+                    <CandidateEvaluationSummaryPage />
                   </MainLayout>
                 }
               />

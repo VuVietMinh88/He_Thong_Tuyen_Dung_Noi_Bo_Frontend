@@ -20,6 +20,7 @@ import {
   FileSpreadsheet,
   CalendarDays,
   Trophy,
+  Award,
 } from 'lucide-react';
 import type {
   CandidateProfile,
@@ -58,6 +59,7 @@ import { ManualCandidateCreateModal } from '../../components/Candidate/ManualCan
 import { CandidateExportExcelButton } from '../../components/Candidate/CandidateExportExcelButton';
 import { BatchInterviewScheduleModal } from '../../components/Candidate/BatchInterviewScheduleModal';
 import { CandidateComparisonModal } from '../../components/Candidate/CandidateComparisonModal';
+import { CandidateEvaluationSummaryModal } from '../../components/Candidate/EvaluationSummary/CandidateEvaluationSummaryModal';
 import { toast, ToastContext } from '../../components/notifications';
 
 type PendingStageAction = {
@@ -112,6 +114,10 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
   // Modal so sánh ứng viên ở vòng cuối (Task Jira TKNHTTDNB1-470 / User Story S7-01)
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState<boolean>(false);
   const [comparisonCandidateIds, setComparisonCandidateIds] = useState<string[]>([]);
+
+  // Modal tổng hợp đánh giá ứng viên ra quyết định (Task Jira TKNHTTDNB1-485 / User Story S7-02)
+  const [isEvaluationSummaryModalOpen, setIsEvaluationSummaryModalOpen] = useState<boolean>(false);
+  const [selectedSummaryCandidateId, setSelectedSummaryCandidateId] = useState<string | undefined>(undefined);
 
   const fetchCandidates = useCallback(async () => {
     setIsLoading(true);
@@ -431,6 +437,21 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
           >
             <Trophy className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
             <span>So sánh vòng cuối</span>
+          </button>
+
+          {/* Nút Hồ sơ tổng hợp đánh giá (Task Jira TKNHTTDNB1-485 / User Story S7-02) */}
+          <button
+            type="button"
+            data-testid="btn-open-evaluation-summary-header"
+            onClick={() => {
+              setSelectedSummaryCandidateId(undefined);
+              setIsEvaluationSummaryModalOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/70 px-3.5 py-2 text-xs font-semibold text-indigo-800 shadow-2xs hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200 dark:hover:bg-indigo-900/50 cursor-pointer"
+            title="Xem hồ sơ tổng hợp đánh giá toàn diện để ra quyết định tuyển dụng"
+          >
+            <Award className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+            <span>Tổng hợp đánh giá</span>
           </button>
 
           {/* Nút Thêm ứng viên thủ công (Task Jira TKNHTTDNB1-406 / User Story S5-06) */}
@@ -905,6 +926,21 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
                           <span className="hidden xl:inline">Lưu tiềm năng</span>
                         </button>
 
+                        {/* Nút xem tổng hợp đánh giá của ứng viên (Task Jira TKNHTTDNB1-485) */}
+                        <button
+                          type="button"
+                          data-testid={`eval-summary-btn-${candidateItem.id}`}
+                          title="Xem hồ sơ tổng hợp đánh giá và quyết định"
+                          onClick={() => {
+                            setSelectedSummaryCandidateId(candidateItem.id);
+                            setIsEvaluationSummaryModalOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300 transition-colors"
+                        >
+                          <Award className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                          <span className="hidden 2xl:inline">Tổng hợp</span>
+                        </button>
+
                         <button
                           type="button"
                           id={`view-candidate-btn-${candidateItem.id}`}
@@ -1025,6 +1061,16 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
           } else {
             toast.success(msg);
           }
+        }}
+      />
+
+      {/* Modal tổng hợp đánh giá ứng viên để quyết định tuyển dụng (Task Jira TKNHTTDNB1-485 / User Story S7-02) */}
+      <CandidateEvaluationSummaryModal
+        isOpen={isEvaluationSummaryModalOpen}
+        candidateId={selectedSummaryCandidateId}
+        onClose={() => setIsEvaluationSummaryModalOpen(false)}
+        onDecisionUpdated={(_decision) => {
+          fetchCandidates();
         }}
       />
     </div>
