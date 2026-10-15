@@ -1,7 +1,10 @@
 import type {
   EvaluationCriterionItem,
   CriterionEvaluationRecord,
+  InterviewConclusion,
+  InterviewEvaluationAccessParams,
 } from '../types/interviewEvaluation';
+import { tokenService } from '../services/token.service';
 
 /**
  * Danh sách tiêu chí mẫu tiêu chuẩn khi chưa cấu hình khung năng lực đặc thù
@@ -263,3 +266,89 @@ export const calculateEvaluationWeightedTotal = (
   const finalScore = totalWeighted / (totalWeight / 100);
   return Math.round(finalScore * 100) / 100;
 };
+
+/**
+ * Kiểm tra tính bắt buộc của kết luận phỏng vấn trước khi nộp phiếu (AC 2 - TKNHTTDNB1-464)
+ * Người phỏng vấn bắt buộc phải chọn 1 trong 3 kết luận: Nên tuyển, Cân nhắc hoặc Không nên tuyển
+ */
+export const validateInterviewConclusion = (
+  conclusionValue: InterviewConclusion | null | undefined,
+): string | null => {
+  if (!conclusionValue) {
+    return 'Vui lòng chọn kết luận phỏng vấn (Nên tuyển, Cân nhắc hoặc Không nên tuyển) trước khi nộp phiếu.';
+  }
+
+  const validConclusions: InterviewConclusion[] = [
+    'RECOMMENDED',
+    'CONSIDER',
+    'NOT_RECOMMENDED',
+  ];
+
+  if (!validConclusions.includes(conclusionValue)) {
+    return 'Kết luận phỏng vấn không hợp lệ.';
+  }
+
+  return null;
+};
+
+/**
+ * Kiểm tra phân quyền truy cập phiếu đánh giá phỏng vấn (AC 1 - TKNHTTDNB1-464)
+ * Chỉ người được mời phỏng vấn mới có quyền xem và điền phiếu này.
+ */
+export const checkInterviewEvaluationAccess = (
+  accessParams: InterviewEvaluationAccessParams,
+): boolean => {
+  // Nếu có prop isAuthorized được truyền tường minh, ưu tiên giá trị này
+  if (typeof accessParams.isAuthorized === 'boolean') {
+    return accessParams.isAuthorized;
+  }
+
+  // Danh sách ID người phỏng vấn được mời
+  const assignedInterviewerIds: string[] = [
+    ...(accessParams.interviewerIds || []),
+    ...(accessParams.interviewers?.map((interviewer) => interviewer.id).filter(Boolean) as string[] || []),
+  ];
+
+  // Danh sách email người phỏng vấn được mời
+  const assignedInterviewerEmails: string[] = [
+    ...(accessParams.interviewerEmails || []),
+    ...(accessParams.interviewers?.map((interviewer) => interviewer.email).filter(Boolean) as string[] || []),
+  ].map((emailAddress) => emailAddress.toLowerCase().trim());
+
+  // Nếu không chỉ định bất kỳ danh sách người phỏng vấn nào,
+  // cho phép truy cập để tương thích với các màn hình trước đó chưa truyền danh sách ID
+  if (assignedInterviewerIds.length === 0 && assignedInterviewerEmails.length === 0) {
+    return true;
+  }
+
+  // Lấy thông tin tài khoản người dùng hiện tại
+  let currentUserId = accessParams.currentUserId;
+  let currentUserEmail = accessParams.currentUserEmail;
+
+  if (!currentUserId || !currentUserEmail) {
+    const loggedInUserData = tokenService.getUserData();
+    if (loggedInUserData) {
+      if (!currentUserId && loggedInUserData.id) {
+        currentUserId = loggedInUserData.id;
+      }
+      if (!currentUserEmail && loggedInUserData.email) {
+        currentUserEmail = loggedInUserData.email;
+      }
+    }
+  }
+
+  const normalizedUserEmail = currentUserEmail ? currentUserEmail.toLowerCase().trim() : '';
+
+  // Khớp theo ID tài khoản
+  const hasMatchedId = Boolean(
+    currentUserId && assignedInterviewerIds.includes(currentUserId),
+  );
+
+  // Khớp theo địa chỉ Email
+  const hasMatchedEmail = Boolean(
+    normalizedUserEmail && assignedInterviewerEmails.includes(normalizedUserEmail),
+  );
+
+  return hasMatchedId || hasMatchedEmail;
+};
+

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { X, Award } from 'lucide-react';
+import { X, Award, Lock } from 'lucide-react';
 import {
   InterviewEvaluationForm,
   type InterviewEvaluationFormProps,
@@ -61,9 +61,18 @@ export const InterviewEvaluationModal: React.FC<InterviewEvaluationModalProps> =
             <div>
               <h2
                 id="modal-evaluation-title"
-                className="text-base sm:text-lg font-bold text-slate-900"
+                className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2"
               >
-                Đánh giá năng lực phỏng vấn
+                <span>Đánh giá năng lực phỏng vấn</span>
+                {formProps.isLocked && (
+                  <span
+                    data-testid="modal-locked-badge"
+                    className="inline-flex items-center gap-1 rounded bg-slate-800 text-white px-2 py-0.5 text-[11px] font-bold"
+                  >
+                    <Lock className="h-3 w-3 text-amber-400" />
+                    Đã khóa
+                  </span>
+                )}
               </h2>
               <p className="text-xs text-slate-500">
                 Ứng viên: <strong className="text-slate-700">{formProps.candidateName}</strong> • {formProps.jobTitle}

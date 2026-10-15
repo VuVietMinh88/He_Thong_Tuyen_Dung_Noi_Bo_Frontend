@@ -493,13 +493,21 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
           interviewFormat={evaluatingInterview.format}
           locationOrLink={evaluatingInterview.locationOrLink}
           interviewerNames={evaluatingInterview.interviewers?.map((interviewLeader) => interviewLeader.name) || []}
+          interviewerIds={
+            evaluatingInterview.interviewerIds ||
+            evaluatingInterview.interviewers?.map((interviewerItem) => interviewerItem.id) ||
+            []
+          }
+          interviewers={evaluatingInterview.interviewers}
+          currentUserId={currentUser?.id}
+          currentUserEmail={currentUser?.email}
           frameworkName={`Khung năng lực ${evaluatingInterview.jobTitle || 'Chuyên môn'}`}
           frameworkCode="CF-STD-2026"
           frameworkVersion="v1.0"
           criteria={resolveEvaluationCriteriaForJob(evaluatingInterview.jobTitle)}
           onSubmit={(evaluationData) => {
             addToast({
-              message: `Đã hoàn tất đánh giá năng lực cho ứng viên ${evaluatingInterview.candidateName}${
+              message: `Đã hoàn tất đánh giá và nộp phiếu cho ứng viên ${evaluatingInterview.candidateName}${
                 evaluationData.calculatedTotalScore !== null ? ` (Điểm: ${evaluationData.calculatedTotalScore}/5.0)` : ''
               }.`,
               type: 'success',
