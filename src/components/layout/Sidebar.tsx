@@ -100,6 +100,13 @@ const menuItems: SidebarMenuItem[] = [
     permissions: ['ORGANIZATION_READ_ALL'],
   },
   {
+    label: 'Tiến độ tiếp nhận nhân sự',
+    to: '/onboarding/tracking',
+    icon: '🚀',
+    roles: [ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER, ROLES.HIRING_MANAGER],
+    permissions: ['ORGANIZATION_READ_ALL'],
+  },
+  {
     label: 'Quản lý CV / Ứng viên',
     to: '/candidates',
     icon: '📄',

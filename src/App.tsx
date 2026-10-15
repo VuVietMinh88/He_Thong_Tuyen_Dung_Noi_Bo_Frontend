@@ -42,6 +42,7 @@ import CandidateEvaluationSummaryPage from "./pages/Candidate/CandidateEvaluatio
 import SlaSettingsPage from "./pages/SLA/SlaSettingsPage";
 import PersonalInterviewSchedulePage from "./pages/Interview/PersonalInterviewSchedulePage";
 import OnboardingChecklistPage from "./pages/Onboarding/OnboardingChecklistPage";
+import OnboardingTrackingPage from "./pages/Onboarding/OnboardingTrackingPage";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -372,6 +373,22 @@ function App() {
                 element={
                   <MainLayout>
                     <OnboardingChecklistPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/onboarding/tracking"
+                element={
+                  <MainLayout>
+                    <OnboardingTrackingPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/onboarding/tracking/:id"
+                element={
+                  <MainLayout>
+                    <OnboardingTrackingPage />
                   </MainLayout>
                 }
               />

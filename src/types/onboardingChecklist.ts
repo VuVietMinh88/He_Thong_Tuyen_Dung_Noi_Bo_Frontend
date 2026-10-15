@@ -1,6 +1,7 @@
 /**
  * Types & Interfaces cho Mẫu Checklist tiếp nhận nhân sự mới theo phòng ban
- * Jira Task: TKNHTTDNB1-517 / User Story S8-01
+ * & Bảng theo dõi tiến độ tiếp nhận nhân viên mới (Onboarding Tracking Board)
+ * Jira Tasks: TKNHTTDNB1-517 & TKNHTTDNB1-518 / User Story S8-01
  */
 
 export type OnboardingTaskPhase =
@@ -14,6 +15,23 @@ export type OnboardingResponsibleRole =
   | 'DIRECT_MANAGER' // Quản lý trực tiếp
   | 'IT_SUPPORT' // Bộ phận CNTT (IT Support)
   | 'NEW_HIRE'; // Bản thân nhân sự mới
+
+export type OnboardingTaskStatus =
+  | 'NOT_STARTED' // Chưa bắt đầu
+  | 'IN_PROGRESS' // Đang xử lý
+  | 'COMPLETED' // Đã xong
+  | 'OVERDUE'; // Quá hạn
+
+export interface OnboardingAttachment {
+  id: string;
+  fileName: string;
+  fileSize?: string;
+  fileType: 'PDF' | 'DOC' | 'LINK' | 'IMAGE' | 'ARCHIVE';
+  url: string;
+  description?: string;
+  uploadedAt?: string;
+  uploadedBy?: string;
+}
 
 export interface OnboardingChecklistItem {
   id: string;
@@ -59,6 +77,79 @@ export interface ChecklistTemplateStats {
   roleDistribution: Record<OnboardingResponsibleRole, number>;
 }
 
+/**
+ * Đầu việc gán cho một nhân sự mới cụ thể (Task Jira: TKNHTTDNB1-518)
+ */
+export interface OnboardingCandidateTask {
+  id: string;
+  templateItemId?: string;
+  title: string;
+  description: string;
+  phase: OnboardingTaskPhase;
+  responsibleRole: OnboardingResponsibleRole;
+  assigneeName: string; // Người chịu trách nhiệm hỗ trợ (Assignee)
+  assigneeRole?: string;
+  assigneeAvatar?: string;
+  deadline: string; // Hạn chót YYYY-MM-DD
+  status: OnboardingTaskStatus;
+  isOverdue?: boolean;
+  completedAt?: string; // Thời điểm hoàn thành
+  completedBy?: string; // Ai đánh dấu hoàn thành
+  isRequired: boolean;
+  category?: string;
+  attachments?: OnboardingAttachment[];
+  notes?: string;
+  actionUrl?: string; // Link trực tiếp thao tác
+  order: number;
+}
+
+/**
+ * Hồ sơ theo dõi tiếp nhận của nhân sự mới (AC 1, AC 2, AC 3)
+ */
+export interface CandidateOnboardingRecord {
+  id: string; // VD: "ONB-2026-0891"
+  candidateId: string;
+  candidateName: string;
+  candidateCode: string;
+  candidateAvatar?: string;
+  candidateEmail: string;
+  candidatePhone?: string;
+  jobTitle: string;
+  departmentId: string;
+  departmentName: string;
+  startDate: string; // Ngày bắt đầu làm việc
+  buddyName?: string;
+  buddyRole?: string;
+  buddyAvatar?: string;
+  managerName: string;
+  managerRole?: string;
+  hrInCharge: string;
+  tasks: OnboardingCandidateTask[];
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Thống kê tiến độ hoàn thành tiếp nhận (AC 1)
+ */
+export interface OnboardingProgressSummary {
+  totalTasks: number;
+  completedTasks: number;
+  inProgressTasks: number;
+  notStartedTasks: number;
+  overdueTasks: number;
+  percentage: number; // (completedTasks / totalTasks) * 100
+  phaseProgress: Record<
+    OnboardingTaskPhase,
+    {
+      total: number;
+      completed: number;
+      percentage: number;
+    }
+  >;
+}
+
 export const ONBOARDING_PHASES: Array<{
   id: OnboardingTaskPhase;
   label: string;
@@ -86,15 +177,15 @@ export const ONBOARDING_PHASES: Array<{
   {
     id: 'FIRST_WEEK',
     label: 'Tuần đầu tiên',
-    shortLabel: 'First Week',
+    shortLabel: 'Week 1',
     description: 'Làm quen quy trình làm việc, thiết lập mục tiêu ban đầu và đào tạo nghiệp vụ',
     badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800',
     borderClass: 'border-l-emerald-500',
   },
   {
     id: 'FIRST_MONTH',
-    label: 'Tháng đầu tiên',
-    shortLabel: 'First Month',
+    label: 'Tháng thử việc đầu tiên',
+    shortLabel: 'Month 1',
     description: 'Tham gia các dự án thực tế, đánh giá tiến độ sơ bộ tháng đầu và phản hồi 1-1',
     badgeClass: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800',
     borderClass: 'border-l-amber-500',
@@ -132,3 +223,33 @@ export const ONBOARDING_ROLES: Array<{
     iconName: 'User',
   },
 ];
+
+export const ONBOARDING_STATUS_CONFIG: Record<
+  OnboardingTaskStatus,
+  {
+    label: string;
+    badgeClass: string;
+    dotClass: string;
+  }
+> = {
+  NOT_STARTED: {
+    label: 'Chưa bắt đầu',
+    badgeClass: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
+    dotClass: 'bg-slate-400',
+  },
+  IN_PROGRESS: {
+    label: 'Đang xử lý',
+    badgeClass: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800',
+    dotClass: 'bg-blue-500 animate-pulse',
+  },
+  COMPLETED: {
+    label: 'Đã hoàn thành',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800',
+    dotClass: 'bg-emerald-500',
+  },
+  OVERDUE: {
+    label: 'Quá hạn',
+    badgeClass: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800',
+    dotClass: 'bg-rose-500 animate-ping',
+  },
+};
