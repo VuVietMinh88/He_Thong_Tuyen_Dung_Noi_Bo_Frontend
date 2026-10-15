@@ -27,12 +27,13 @@ import {
   ChevronDown,
   Trash2,
   GripVertical,
-  Loader2,
   AlertCircle,
   Sparkles,
   Coffee,
   Info,
+  ArrowRight,
 } from 'lucide-react';
+import { BatchSchedulePreviewModal } from './BatchSchedulePreviewModal';
 import type { CandidateProfile } from '../../types/candidate';
 import type {
   InterviewFormat,
@@ -275,9 +276,11 @@ export const BatchInterviewScheduleModal: React.FC<BatchInterviewScheduleModalPr
   const [interviewerSearch, setInterviewerSearch] = useState<string>('');
   const [isInterviewerDropdownOpen, setIsInterviewerDropdownOpen] = useState<boolean>(false);
 
+  // Quản lý các bước: CONFIG (Cấu hình thông số ca) -> PREVIEW (Xem trước & Xác nhận) (Jira TKNHTTDNB1-434)
+  const [currentStep, setCurrentStep] = useState<'CONFIG' | 'PREVIEW'>('CONFIG');
+
   // Validation & Processing
   const [validationErrors, setValidationErrors] = useState<BatchScheduleValidationErrors>({});
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Thiết lập dnd-kit sensors
   const sensors = useSensors(
@@ -315,6 +318,7 @@ export const BatchInterviewScheduleModal: React.FC<BatchInterviewScheduleModalPr
       setCandidatesList(mapped);
       setInterviewDate(initialDate || getDefaultTomorrowDate());
       setValidationErrors({});
+      setCurrentStep('CONFIG');
     }
   }, [isOpen, initialCandidates, initialDate]);
 
@@ -442,8 +446,8 @@ export const BatchInterviewScheduleModal: React.FC<BatchInterviewScheduleModalPr
     setValidationErrors((prev) => ({ ...prev, locationOrLink: undefined }));
   };
 
-  // Xác nhận tạo lịch hàng loạt
-  const handleSubmitBatch = async (e: React.FormEvent) => {
+  // Tiếp tục sang bước Xem trước & Xác nhận lịch (Task Jira TKNHTTDNB1-434 / AC 1 & AC 2)
+  const handleSubmitBatch = (e: React.FormEvent) => {
     e.preventDefault();
 
     const { isValid, errors } = validateBatchScheduleSettings(candidatesList, currentSettings);
@@ -457,34 +461,28 @@ export const BatchInterviewScheduleModal: React.FC<BatchInterviewScheduleModalPr
     }
 
     setValidationErrors({});
-    setIsSubmitting(true);
-
-    try {
-      const result = await interviewService.batchCreateInterviewSchedules({
-        settings: currentSettings,
-        slots: calculatedSlots,
-      });
-
-      notifyToast(
-        `Xếp lịch phỏng vấn thành công cho ${result.totalScheduled} ứng viên!`,
-        'success'
-      );
-
-      if (onSuccess) {
-        onSuccess(result);
-      }
-      onClose();
-    } catch (err: unknown) {
-      const errorMessage =
-        err instanceof Error ? err.message : 'Tạo lịch phỏng vấn đồng loạt thất bại.';
-      notifyToast(errorMessage, 'error');
-    } finally {
-      setIsSubmitting(false);
-    }
+    setCurrentStep('PREVIEW');
   };
 
   if (!isOpen) {
     return null;
+  }
+
+  // Bước 2: Hiển thị Xem trước & Xác nhận lịch hàng loạt (Task Jira TKNHTTDNB1-434)
+  if (currentStep === 'PREVIEW') {
+    return (
+      <BatchSchedulePreviewModal
+        isOpen={isOpen}
+        settings={currentSettings}
+        initialSlots={calculatedSlots}
+        onBack={() => setCurrentStep('CONFIG')}
+        onClose={onClose}
+        onSuccess={(result) => {
+          onSuccess?.(result);
+          onClose();
+        }}
+      />
+    );
   }
 
   return (
@@ -1001,8 +999,7 @@ export const BatchInterviewScheduleModal: React.FC<BatchInterviewScheduleModalPr
                 type="button"
                 data-testid="btn-cancel-batch"
                 onClick={onClose}
-                disabled={isSubmitting}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-semibold text-gray-700 shadow-2xs hover:bg-gray-50 focus:outline-hidden disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-semibold text-gray-700 shadow-2xs hover:bg-gray-50 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
               >
                 Hủy bỏ
               </button>
@@ -1010,20 +1007,11 @@ export const BatchInterviewScheduleModal: React.FC<BatchInterviewScheduleModalPr
               <button
                 type="submit"
                 data-testid="btn-submit-batch"
-                disabled={isSubmitting || candidatesList.length === 0}
+                disabled={candidatesList.length === 0}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-indigo-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin text-white" />
-                    <span>Đang xếp lịch...</span>
-                  </>
-                ) : (
-                  <>
-                    <CalendarCheck className="h-4 w-4" />
-                    <span>Xác nhận tạo {candidatesList.length} ca phỏng vấn</span>
-                  </>
-                )}
+                <span>{`Tiếp tục: Xem trước & Xác nhận (${candidatesList.length})`}</span>
+                <ArrowRight className="h-4 w-4" />
               </button>
             </div>
           </div>
@@ -1033,4 +1021,5 @@ export const BatchInterviewScheduleModal: React.FC<BatchInterviewScheduleModalPr
   );
 };
 
+export { BatchSchedulePreviewModal };
 export default BatchInterviewScheduleModal;

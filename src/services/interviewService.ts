@@ -893,10 +893,16 @@ class InterviewService {
       this.syncInterviewToTimeline(interviewItem);
     }
 
+    const sendCalendarInvite =
+      payload.sendCalendarInvite ?? settings.sendCalendarInvite ?? true;
+
     return {
       totalScheduled: scheduledInterviews.length,
       scheduledInterviews,
-      message: `Đã tạo thành công lịch phỏng vấn đồng loạt cho ${scheduledInterviews.length} ứng viên.`,
+      calendarInviteSent: sendCalendarInvite,
+      message: `Đã tạo thành công lịch phỏng vấn đồng loạt cho ${scheduledInterviews.length} ứng viên${
+        sendCalendarInvite ? ' (kèm thư mời lịch Calendar Invite)' : ''
+      }.`,
     };
   }
 }

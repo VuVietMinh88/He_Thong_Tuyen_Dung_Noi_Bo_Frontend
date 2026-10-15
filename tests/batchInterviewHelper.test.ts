@@ -8,6 +8,9 @@ import {
   moveCandidateDown,
   removeCandidateFromBatch,
   generateSampleMeetLink,
+  checkSlotConflict,
+  annotateSlotsWithConflicts,
+  updateSingleSlotTime,
 } from '../src/utils/batchInterviewHelper';
 import type {
   BatchCandidateScheduleItem,
@@ -226,6 +229,185 @@ describe('Task Jira TKNHTTDNB1-433: batchInterviewHelper Unit Tests (User Story 
     it('generateSampleMeetLink sinh ra link Google Meet hợp lệ', () => {
       const link = generateSampleMeetLink();
       expect(link).toMatch(/^https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/);
+    });
+  });
+
+  describe('4. Conflict Detection & Slot Editing Helpers (Task Jira TKNHTTDNB1-434)', () => {
+    const mockExistingInterviews = [
+      {
+        id: 'existing-01',
+        candidateId: 'can-other',
+        candidateName: 'Hoàng Minh Quân',
+        applicationId: 'app-other',
+        jobTitle: 'Backend Engineer',
+        roundName: 'Vòng Kỹ thuật',
+        interviewDate: '2026-10-20',
+        interviewTime: '09:00',
+        startTime: '09:00',
+        scheduledDateTimeISO: '2026-10-20T09:00:00Z',
+        durationMinutes: 60,
+        format: 'ONLINE' as const,
+        locationOrLink: 'https://meet.google.com/xyz',
+        interviewerIds: ['usr-001'],
+        interviewers: [{ id: 'usr-001', name: 'Nguyễn Văn Lead', role: 'Technical Lead', email: 'lead@company.com' }],
+        status: 'SCHEDULED' as const,
+        createdAt: '2026-10-15T00:00:00Z',
+      },
+      {
+        id: 'existing-room',
+        candidateId: 'can-room',
+        candidateName: 'Đặng Mai Phương',
+        applicationId: 'app-room',
+        jobTitle: 'HR Specialist',
+        roundName: 'Vòng Phỏng vấn',
+        interviewDate: '2026-10-20',
+        interviewTime: '14:00',
+        startTime: '14:00',
+        scheduledDateTimeISO: '2026-10-20T14:00:00Z',
+        durationMinutes: 45,
+        format: 'OFFLINE' as const,
+        locationOrLink: 'Phòng Họp Lotus - Tầng 8',
+        interviewerIds: ['usr-other'],
+        interviewers: [{ id: 'usr-other', name: 'Lê Văn HR', role: 'HR', email: 'hr@company.com' }],
+        status: 'SCHEDULED' as const,
+        createdAt: '2026-10-15T00:00:00Z',
+      },
+    ];
+
+    it('checkSlotConflict phát hiện xung đột khi người phỏng vấn bị trùng lịch', () => {
+      const slot = {
+        candidate: mockCandidates[0],
+        slotNumber: 1,
+        startTime: '09:15', // Trùng khung giờ 09:00 - 10:00 của usr-001
+        endTime: '10:00',
+        startDateTimeISO: '2026-10-20T09:15:00',
+        endDateTimeISO: '2026-10-20T10:00:00',
+        durationMinutes: 45,
+        breakAfterMinutes: 0,
+      };
+
+      const conflictInfo = checkSlotConflict(
+        slot,
+        '2026-10-20',
+        ['usr-001'],
+        mockExistingInterviews,
+        'ONLINE',
+        'https://meet.google.com/new'
+      );
+
+      expect(conflictInfo.hasConflict).toBe(true);
+      expect(conflictInfo.conflictType).toBe('INTERVIEWER');
+      expect(conflictInfo.conflictingInterviewerNames).toContain('Nguyễn Văn Lead');
+      expect(conflictInfo.reasons[0]).toContain('Hoàng Minh Quân');
+    });
+
+    it('checkSlotConflict phát hiện xung đột phòng họp khi họp trực tiếp OFFLINE', () => {
+      const slot = {
+        candidate: mockCandidates[1],
+        slotNumber: 2,
+        startTime: '14:15', // Trùng khung giờ 14:00 - 14:45 của phòng Lotus
+        endTime: '15:00',
+        startDateTimeISO: '2026-10-20T14:15:00',
+        endDateTimeISO: '2026-10-20T15:00:00',
+        durationMinutes: 45,
+        breakAfterMinutes: 0,
+      };
+
+      const conflictInfo = checkSlotConflict(
+        slot,
+        '2026-10-20',
+        ['usr-freeman'],
+        mockExistingInterviews,
+        'OFFLINE',
+        'Phòng Họp Lotus - Tầng 8'
+      );
+
+      expect(conflictInfo.hasConflict).toBe(true);
+      expect(conflictInfo.conflictType).toBe('ROOM');
+      expect(conflictInfo.reasons[0]).toContain('Phòng họp "Phòng Họp Lotus - Tầng 8" đang bị chiếm dụng');
+    });
+
+    it('checkSlotConflict không báo lỗi khi khung giờ hoàn toàn tách biệt', () => {
+      const slot = {
+        candidate: mockCandidates[0],
+        slotNumber: 1,
+        startTime: '11:00', // Không trùng
+        endTime: '11:45',
+        startDateTimeISO: '2026-10-20T11:00:00',
+        endDateTimeISO: '2026-10-20T11:45:00',
+        durationMinutes: 45,
+        breakAfterMinutes: 0,
+      };
+
+      const conflictInfo = checkSlotConflict(
+        slot,
+        '2026-10-20',
+        ['usr-001'],
+        mockExistingInterviews,
+        'ONLINE',
+        'https://meet.google.com/new'
+      );
+
+      expect(conflictInfo.hasConflict).toBe(false);
+      expect(conflictInfo.reasons).toHaveLength(0);
+    });
+
+    it('annotateSlotsWithConflicts gán đầy đủ thông tin xung đột cho toàn bộ ca', () => {
+      const slots = [
+        {
+          candidate: mockCandidates[0],
+          slotNumber: 1,
+          startTime: '09:00', // Trùng với existing-01
+          endTime: '09:45',
+          startDateTimeISO: '2026-10-20T09:00:00',
+          endDateTimeISO: '2026-10-20T09:45:00',
+          durationMinutes: 45,
+          breakAfterMinutes: 10,
+        },
+        {
+          candidate: mockCandidates[1],
+          slotNumber: 2,
+          startTime: '11:00', // An toàn
+          endTime: '11:45',
+          startDateTimeISO: '2026-10-20T11:00:00',
+          endDateTimeISO: '2026-10-20T11:45:00',
+          durationMinutes: 45,
+          breakAfterMinutes: 0,
+        },
+      ];
+
+      const annotated = annotateSlotsWithConflicts(
+        slots,
+        {
+          ...defaultSettings,
+          interviewDate: '2026-10-20',
+          interviewerIds: ['usr-001'],
+        },
+        mockExistingInterviews
+      );
+
+      expect(annotated[0].conflict?.hasConflict).toBe(true);
+      expect(annotated[1].conflict?.hasConflict).toBe(false);
+    });
+
+    it('updateSingleSlotTime cập nhật thời gian, tính lại endTime và đánh dấu isCustomized', () => {
+      const originalSlot = {
+        candidate: mockCandidates[0],
+        slotNumber: 1,
+        startTime: '09:00',
+        endTime: '09:45',
+        startDateTimeISO: '2026-10-20T09:00:00',
+        endDateTimeISO: '2026-10-20T09:45:00',
+        durationMinutes: 45,
+        breakAfterMinutes: 10,
+      };
+
+      const updated = updateSingleSlotTime(originalSlot, '2026-10-20', '10:30', 60);
+
+      expect(updated.startTime).toBe('10:30');
+      expect(updated.endTime).toBe('11:30');
+      expect(updated.durationMinutes).toBe(60);
+      expect(updated.isCustomized).toBe(true);
     });
   });
 });

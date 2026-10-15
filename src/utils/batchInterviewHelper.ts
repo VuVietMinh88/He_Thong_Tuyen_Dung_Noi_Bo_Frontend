@@ -3,7 +3,11 @@ import type {
   BatchInterviewScheduleSettings,
   CalculatedCandidateSlot,
   BatchScheduleValidationErrors,
+  BatchSlotConflictInfo,
+  InterviewSchedulePayload,
+  InterviewerInfo,
 } from '../types/interview';
+import { areTimeSlotsOverlapping, calculateEndTime } from '../services/interviewService';
 
 /**
  * Cộng thêm số phút vào chuỗi giờ HH:mm, trả về chuỗi giờ mới HH:mm
@@ -237,3 +241,179 @@ export const removeCandidateFromBatch = (
 ): BatchCandidateScheduleItem[] => {
   return list.filter((item) => item.candidateId !== candidateId);
 };
+
+/**
+ * Kiểm tra xem một ca phỏng vấn cụ thể có bị trùng lịch với bất kỳ lịch hẹn nào đã có trong hệ thống không (AC 2)
+ */
+export const checkSlotConflict = (
+  slot: CalculatedCandidateSlot,
+  interviewDate: string,
+  interviewerIds: string[],
+  existingInterviews: InterviewSchedulePayload[],
+  format: 'ONLINE' | 'OFFLINE' = 'ONLINE',
+  locationOrLink: string = '',
+  allInterviewers: InterviewerInfo[] = []
+): BatchSlotConflictInfo => {
+  const proposedTimeStr = slot.startTime;
+  const conflicts: string[] = [];
+  const conflictingInterviewerNames: string[] = [];
+  let conflictType: 'INTERVIEWER' | 'ROOM' | 'BOTH' | undefined = undefined;
+
+  for (const existing of existingInterviews) {
+    if (existing.status === 'CANCELLED') continue;
+    const existingDate = existing.interviewDate;
+    const existingTimeStr =
+      existing.interviewTime ||
+      (existing.startTime ? existing.startTime.split('T')[1]?.slice(0, 5) : '') ||
+      '';
+
+    if (existingDate !== interviewDate) continue;
+
+    const isOverlapping = areTimeSlotsOverlapping(
+      interviewDate,
+      proposedTimeStr,
+      slot.durationMinutes,
+      existingDate,
+      existingTimeStr,
+      existing.durationMinutes
+    );
+
+    if (!isOverlapping) continue;
+
+    const existingEndTime = calculateEndTime(existingTimeStr, existing.durationMinutes);
+
+    // 1. Kiểm tra Người phỏng vấn bị trùng lịch
+    for (const interviewerId of interviewerIds) {
+      const isAssigned =
+        (existing.interviewerIds && existing.interviewerIds.includes(interviewerId)) ||
+        (existing.interviewers && existing.interviewers.some((i) => i.id === interviewerId));
+
+      if (isAssigned) {
+        const found =
+          existing.interviewers?.find((i) => i.id === interviewerId) ||
+          allInterviewers.find((i) => i.id === interviewerId);
+        const name = found?.name || interviewerId;
+        if (!conflictingInterviewerNames.includes(name)) {
+          conflictingInterviewerNames.push(name);
+        }
+        conflicts.push(
+          `Người phỏng vấn ${name} đã có lịch phỏng vấn với ứng viên ${existing.candidateName} (${existing.roundName || 'Phỏng vấn'}) từ ${existingTimeStr} đến ${existingEndTime}.`
+        );
+        conflictType = conflictType === 'ROOM' ? 'BOTH' : 'INTERVIEWER';
+      }
+    }
+
+    // 2. Kiểm tra Phòng họp trực tiếp bị chiếm dụng
+    if (
+      format === 'OFFLINE' &&
+      existing.format === 'OFFLINE' &&
+      locationOrLink &&
+      existing.locationOrLink
+    ) {
+      const normProposed = locationOrLink.trim().toLowerCase();
+      const normExisting = existing.locationOrLink.trim().toLowerCase();
+
+      if (
+        normProposed === normExisting ||
+        normProposed.includes(normExisting) ||
+        normExisting.includes(normProposed)
+      ) {
+        conflicts.push(
+          `Phòng họp "${locationOrLink}" đang bị chiếm dụng bởi buổi phỏng vấn của ứng viên ${existing.candidateName} từ ${existingTimeStr} đến ${existingEndTime}.`
+        );
+        conflictType = conflictType === 'INTERVIEWER' ? 'BOTH' : 'ROOM';
+      }
+    }
+  }
+
+  return {
+    hasConflict: conflicts.length > 0,
+    conflictingInterviewerNames,
+    reasons: conflicts,
+    conflictType,
+  };
+};
+
+/**
+ * Quét toàn bộ danh sách ca phỏng vấn để gán nhãn cảnh báo xung đột lịch (AC 2)
+ */
+export const annotateSlotsWithConflicts = (
+  slots: CalculatedCandidateSlot[],
+  settings: BatchInterviewScheduleSettings,
+  existingInterviews: InterviewSchedulePayload[],
+  allInterviewers: InterviewerInfo[] = []
+): CalculatedCandidateSlot[] => {
+  return slots.map((slot, index) => {
+    // 1. Kiểm tra với lịch đã có trong hệ thống
+    const systemConflict = checkSlotConflict(
+      slot,
+      settings.interviewDate,
+      settings.interviewerIds,
+      existingInterviews,
+      settings.format,
+      settings.locationOrLink,
+      allInterviewers
+    );
+
+    // 2. Kiểm tra trùng lặp nội bộ trong chính danh sách batch (nếu người dùng chỉnh sửa giờ ca này đè lên ca khác)
+    const internalReasons: string[] = [];
+    for (let i = 0; i < slots.length; i++) {
+      if (i === index) continue;
+      const other = slots[i];
+      const isOverlap = areTimeSlotsOverlapping(
+        settings.interviewDate,
+        slot.startTime,
+        slot.durationMinutes,
+        settings.interviewDate,
+        other.startTime,
+        other.durationMinutes
+      );
+      if (isOverlap) {
+        internalReasons.push(
+          `Khung giờ trùng lặp với Ca ${other.slotNumber} (${other.candidate.candidateName}) trong cùng buổi phỏng vấn này.`
+        );
+      }
+    }
+
+    const hasConflict = systemConflict.hasConflict || internalReasons.length > 0;
+    const reasons = [...systemConflict.reasons, ...internalReasons];
+
+    return {
+      ...slot,
+      conflict: {
+        hasConflict,
+        conflictingInterviewerNames: systemConflict.conflictingInterviewerNames,
+        reasons,
+        conflictType:
+          systemConflict.conflictType || (internalReasons.length > 0 ? 'INTERVIEWER' : undefined),
+      },
+    };
+  });
+};
+
+/**
+ * Cập nhật thủ công khung giờ riêng cho một ca phỏng vấn cụ thể (AC 1)
+ */
+export const updateSingleSlotTime = (
+  slot: CalculatedCandidateSlot,
+  interviewDate: string,
+  newStartTime: string,
+  newDurationMinutes: number
+): CalculatedCandidateSlot => {
+  const duration = newDurationMinutes > 0 ? newDurationMinutes : slot.durationMinutes;
+  const endTime = addMinutesToTimeString(newStartTime, duration);
+  const startIso = `${interviewDate}T${newStartTime.length === 5 ? `${newStartTime}:00` : newStartTime}+07:00`;
+  const startDate = new Date(startIso);
+  const endDate = new Date(startDate.getTime() + duration * 60 * 1000);
+
+  return {
+    ...slot,
+    startTime: newStartTime,
+    endTime,
+    durationMinutes: duration,
+    startDateTimeISO: isNaN(startDate.getTime()) ? '' : startDate.toISOString(),
+    endDateTimeISO: isNaN(endDate.getTime()) ? '' : endDate.toISOString(),
+    isCustomized: true,
+  };
+};
+

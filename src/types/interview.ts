@@ -400,6 +400,13 @@ export interface BatchCandidateScheduleItem {
   customRoundName?: string;
 }
 
+export interface BatchSlotConflictInfo {
+  hasConflict: boolean;
+  conflictingInterviewerNames: string[];
+  reasons: string[];
+  conflictType?: 'INTERVIEWER' | 'ROOM' | 'BOTH';
+}
+
 export interface BatchInterviewScheduleSettings {
   interviewDate: string; // Định dạng YYYY-MM-DD
   startFirstSlotTime: string; // Định dạng HH:mm
@@ -412,6 +419,7 @@ export interface BatchInterviewScheduleSettings {
   defaultRoundType?: InterviewRoundType;
   defaultRoundName?: string;
   notes?: string;
+  sendCalendarInvite?: boolean; // AC 3: Tự động gửi email thông báo kèm thư mời lịch (Calendar Invite)
 }
 
 export interface CalculatedCandidateSlot {
@@ -423,6 +431,8 @@ export interface CalculatedCandidateSlot {
   endDateTimeISO: string;
   durationMinutes: number;
   breakAfterMinutes: number;
+  isCustomized?: boolean; // AC 1: Đã qua chỉnh sửa thủ công khung giờ riêng
+  conflict?: BatchSlotConflictInfo; // AC 2: Thông tin cảnh báo trùng lịch
 }
 
 export interface BatchScheduleValidationErrors {
@@ -438,10 +448,12 @@ export interface BatchScheduleValidationErrors {
 export interface BatchCreateInterviewSchedulePayload {
   settings: BatchInterviewScheduleSettings;
   slots: CalculatedCandidateSlot[];
+  sendCalendarInvite?: boolean;
 }
 
 export interface BatchCreateInterviewScheduleResult {
   totalScheduled: number;
   scheduledInterviews: InterviewSchedulePayload[];
   message: string;
+  calendarInviteSent?: boolean;
 }
