@@ -14,12 +14,15 @@ import {
   Check,
   ChevronRight,
   Filter,
+  Award,
 } from 'lucide-react';
 import { tokenService } from '../../services/token.service';
 import { interviewService } from '../../services/interviewService';
 import { useToast } from '../../components/notifications/useToast';
 import type { InterviewSchedulePayload } from '../../types/interview';
 import CandidateResponseStatus from '../../components/Candidate/CandidateResponseStatus';
+import { InterviewEvaluationModal } from '../../components/Interview/InterviewEvaluationModal';
+import { resolveEvaluationCriteriaForJob } from '../../utils/interviewEvaluationHelper';
 
 export const PersonalInterviewSchedulePage: React.FC = () => {
   const navigate = useNavigate();
@@ -33,6 +36,7 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
   const [formatFilter, setFormatFilter] = useState<'ALL' | 'ONLINE' | 'OFFLINE'>('ALL');
   const [dateFilter, setDateFilter] = useState<string>('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [evaluatingInterview, setEvaluatingInterview] = useState<InterviewSchedulePayload | null>(null);
 
   const currentUser = tokenService.getUserData();
 
@@ -408,7 +412,16 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
 
                   {/* Right Column: Actions */}
                   <div className="flex flex-wrap lg:flex-col items-end justify-between gap-2 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100 shrink-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEvaluatingInterview(item)}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition cursor-pointer shadow-2xs"
+                      >
+                        <Award className="w-3.5 h-3.5 text-indigo-600" />
+                        Đánh giá năng lực
+                      </button>
+
                       {item.candidateId && (
                         <button
                           type="button"
@@ -464,6 +477,43 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
             );
           })}
         </div>
+      )}
+
+      {/* Modal Phiếu đánh giá năng lực phỏng vấn (TKNHTTDNB1-457) */}
+      {evaluatingInterview && (
+        <InterviewEvaluationModal
+          isOpen={true}
+          onClose={() => setEvaluatingInterview(null)}
+          candidateName={evaluatingInterview.candidateName}
+          candidateEmail={evaluatingInterview.candidateEmail}
+          jobTitle={evaluatingInterview.jobTitle || 'Chức danh tuyển dụng'}
+          interviewRound={evaluatingInterview.roundName || evaluatingInterview.interviewRound}
+          interviewDate={evaluatingInterview.interviewDate}
+          interviewTime={evaluatingInterview.interviewTime}
+          interviewFormat={evaluatingInterview.format}
+          locationOrLink={evaluatingInterview.locationOrLink}
+          interviewerNames={evaluatingInterview.interviewers?.map((interviewLeader) => interviewLeader.name) || []}
+          frameworkName={`Khung năng lực ${evaluatingInterview.jobTitle || 'Chuyên môn'}`}
+          frameworkCode="CF-STD-2026"
+          frameworkVersion="v1.0"
+          criteria={resolveEvaluationCriteriaForJob(evaluatingInterview.jobTitle)}
+          onSubmit={(evaluationData) => {
+            addToast({
+              message: `Đã hoàn tất đánh giá năng lực cho ứng viên ${evaluatingInterview.candidateName}${
+                evaluationData.calculatedTotalScore !== null ? ` (Điểm: ${evaluationData.calculatedTotalScore}/5.0)` : ''
+              }.`,
+              type: 'success',
+            });
+            setEvaluatingInterview(null);
+          }}
+          onSaveDraft={() => {
+            addToast({
+              message: `Đã lưu bản nháp đánh giá cho ứng viên ${evaluatingInterview.candidateName}.`,
+              type: 'success',
+            });
+            setEvaluatingInterview(null);
+          }}
+        />
       )}
     </div>
   );
