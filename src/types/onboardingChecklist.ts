@@ -131,6 +131,38 @@ export interface CandidateOnboardingRecord {
 }
 
 /**
+ * Types phục vụ tích hợp cập nhật trạng thái checklist tiếp nhận (Task Jira: TKNHTTDNB1-519)
+ */
+export type ChecklistStatusApi = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'NOT_STARTED' | 'OVERDUE';
+
+export interface UpdateChecklistItemPayload {
+  status: ChecklistStatusApi;
+  completedAt?: string;
+  completedBy?: string;
+  notes?: string;
+}
+
+export interface UpdateChecklistItemResponse {
+  success: boolean;
+  data: CandidateOnboardingRecord;
+  message?: string;
+  refreshedSummary?: OnboardingProgressSummary;
+}
+
+export interface UserPermissionContext {
+  id?: string;
+  email?: string;
+  fullName?: string;
+  roles?: string[];
+  permissions?: string[];
+}
+
+export interface TaskPermissionCheckResult {
+  canUpdate: boolean;
+  reason?: string;
+}
+
+/**
  * Thống kê tiến độ hoàn thành tiếp nhận (AC 1)
  */
 export interface OnboardingProgressSummary {

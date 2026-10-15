@@ -14,12 +14,17 @@ import {
   ShieldCheck,
   Sparkles,
   Loader2,
+  Lock,
+  MessageSquare,
+  FileEdit,
+  UserCheck,
 } from 'lucide-react';
 import type {
   CandidateOnboardingRecord,
   OnboardingCandidateTask,
   OnboardingTaskPhase,
   OnboardingTaskStatus,
+  UserPermissionContext,
 } from '../../types/onboardingChecklist';
 import {
   ONBOARDING_PHASES,
@@ -28,20 +33,25 @@ import {
   onboardingTrackingService,
   MOCK_CANDIDATE_ONBOARDING_RECORDS,
 } from '../../services/onboardingTrackingService';
+import { onboardingService } from '../../services/onboardingService';
+import { tokenService } from '../../services/token.service';
 import {
   calculateOnboardingProgress,
   getDeadlineDisplay,
+  canUserUpdateTask,
 } from '../../utils/onboardingTrackingHelper';
 import {
   getRoleConfig,
 } from '../../utils/onboardingChecklistHelper';
 import { OnboardingProgressBar } from './OnboardingProgressBar';
 import { OnboardingTaskDetailModal } from './OnboardingTaskDetailModal';
+import { QuickTaskCompletionModal } from './QuickTaskCompletionModal';
 import { useToast } from '../notifications/useToast';
 
 export interface OnboardingTrackingBoardProps {
   initialCandidateId?: string;
   initialRecord?: CandidateOnboardingRecord;
+  currentUser?: UserPermissionContext | null;
   onProgressUpdated?: (record: CandidateOnboardingRecord) => void;
   onSelectCandidate?: (candidateId: string) => void;
 }
@@ -49,6 +59,7 @@ export interface OnboardingTrackingBoardProps {
 export const OnboardingTrackingBoard: React.FC<OnboardingTrackingBoardProps> = ({
   initialCandidateId = 'cand-final-001',
   initialRecord,
+  currentUser: propCurrentUser,
   onProgressUpdated,
   onSelectCandidate,
 }) => {
@@ -76,7 +87,67 @@ export const OnboardingTrackingBoard: React.FC<OnboardingTrackingBoardProps> = (
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // 2. Bộ lọc & Tìm kiếm (AC 2)
+  // 2. Ngữ cảnh phân quyền người dùng & Chế độ kiểm thử vai trò (AC 2)
+  const [activeRoleSim, setActiveRoleSim] = useState<'AUTO' | 'HR_ADMIN' | 'IT_SUPPORT' | 'NEW_HIRE' | 'OTHER_DEPT'>('AUTO');
+
+  const effectiveUser: UserPermissionContext = useMemo(() => {
+    if (activeRoleSim === 'HR_ADMIN') {
+      return {
+        id: 'usr-hr-admin',
+        fullName: 'Trần Thị Thu (HR Manager)',
+        email: 'thu.tran@smartrecruit.vn',
+        roles: ['HR_MANAGER', 'ADMIN'],
+        permissions: ['ORGANIZATION_WRITE_ALL', 'USER_ADMIN_WRITE_ALL'],
+      };
+    }
+    if (activeRoleSim === 'IT_SUPPORT') {
+      return {
+        id: 'usr-it-support',
+        fullName: 'Đặng Quốc Huy (IT Admin)',
+        email: 'huy.dang@smartrecruit.vn',
+        roles: ['IT_SUPPORT'],
+        permissions: ['ORGANIZATION_READ_ALL'],
+      };
+    }
+    if (activeRoleSim === 'NEW_HIRE') {
+      return {
+        id: currentRecord.candidateId,
+        fullName: currentRecord.candidateName,
+        email: currentRecord.candidateEmail,
+        roles: ['NEW_HIRE'],
+        permissions: [],
+      };
+    }
+    if (activeRoleSim === 'OTHER_DEPT') {
+      return {
+        id: 'usr-other-dept',
+        fullName: 'Nguyễn Văn Khác (Nhân viên Kế toán)',
+        email: 'khac.nguyen@smartrecruit.vn',
+        roles: ['ACCOUNTANT'],
+        permissions: [],
+      };
+    }
+
+    if (propCurrentUser) return propCurrentUser;
+    const stored = tokenService.getUserData();
+    if (stored) {
+      return {
+        id: stored.id,
+        email: stored.email,
+        fullName: stored.fullName,
+        roles: stored.roles,
+      };
+    }
+
+    // Mặc định vai trò quản trị HR nếu chưa đăng nhập
+    return {
+      id: 'default-hr-admin',
+      fullName: 'Quản trị viên Tuyển dụng',
+      roles: ['HR_MANAGER', 'ADMIN'],
+    };
+  }, [activeRoleSim, propCurrentUser, currentRecord]);
+
+  // 3. Bộ lọc & Tìm kiếm (AC 2)
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedPhaseFilter, setSelectedPhaseFilter] = useState<string>('ALL');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL'); // 'ALL' | 'COMPLETED' | 'PENDING' | 'OVERDUE'
@@ -89,9 +160,11 @@ export const OnboardingTrackingBoard: React.FC<OnboardingTrackingBoardProps> = (
     FIRST_MONTH: true,
   });
 
-  // 3. Modal chi tiết nhiệm vụ (AC 3)
+  // 4. Modal chi tiết nhiệm vụ (AC 3) & Modal Ghi chú nhanh (AC 1)
   const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<OnboardingCandidateTask | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
+  const [quickNoteModalTask, setQuickNoteModalTask] = useState<OnboardingCandidateTask | null>(null);
+  const [isSavingQuickNote, setIsSavingQuickNote] = useState<boolean>(false);
 
   // Tải danh sách hồ sơ khi khởi tạo nếu chưa có
   const fetchRecords = useCallback(async () => {
@@ -127,79 +200,222 @@ export const OnboardingTrackingBoard: React.FC<OnboardingTrackingBoardProps> = (
     }
   };
 
-  // 4. Toggle hoàn thành nhiệm vụ nhanh qua Checkbox (AC 2)
+  // 5. Tương tác cập nhật trạng thái với Optimistic UI & Rollback on Error (AC 1 & AC 3)
   const handleToggleTaskStatus = async (taskId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
 
+    const targetTask = currentRecord.tasks.find((t) => t.id === taskId);
+    if (!targetTask) return;
+
+    // 5.1. Xác thực quyền hạn (Permission Validation - AC 2)
+    const permission = canUserUpdateTask(targetTask, effectiveUser, currentRecord);
+    if (!permission.canUpdate) {
+      addToast({
+        type: 'warning',
+        message: permission.reason || 'Bạn không có quyền thao tác trên đầu việc của bộ phận khác.',
+      });
+      return;
+    }
+
+    const isCompleting = targetTask.status !== 'COMPLETED';
+    const nextStatus: OnboardingTaskStatus = isCompleting ? 'COMPLETED' : 'NOT_STARTED';
+
+    // 5.2. Snapshot dữ liệu phục vụ Rollback nếu API lỗi (AC 3)
+    const previousRecord = currentRecord;
+    const previousList = candidatesList;
+
+    // 5.3. Optimistic UI update: Phản hồi tức thì ngay lập tức (AC 1)
+    const optimisticTasks = currentRecord.tasks.map((t) =>
+      t.id === taskId
+        ? {
+            ...t,
+            status: nextStatus,
+            completedAt: isCompleting ? new Date().toISOString() : undefined,
+            completedBy: isCompleting ? (effectiveUser.fullName || 'Người dùng hệ thống') : undefined,
+          }
+        : t
+    );
+
+    const optimisticRecord: CandidateOnboardingRecord = {
+      ...currentRecord,
+      tasks: optimisticTasks,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setCurrentRecord(optimisticRecord);
+    setCandidatesList((prev) =>
+      prev.map((c) => (c.id === optimisticRecord.id ? optimisticRecord : c))
+    );
+
+    // 5.4. Gọi Service API Backend (AC 3)
     try {
-      const updated = await onboardingTrackingService.toggleTaskStatus(
+      const response = await onboardingService.updateChecklistItemStatus(
         currentRecord.id,
-        taskId
-      );
-
-      setCurrentRecord(updated);
-      setCandidatesList((prev) =>
-        prev.map((c) => (c.id === updated.id ? updated : c))
-      );
-
-      // Tìm task vừa đổi
-      const task = updated.tasks.find((t) => t.id === taskId);
-      if (task) {
-        if (task.status === 'COMPLETED') {
-          addToast({
-            type: 'success',
-            message: `Đã hoàn thành nhiệm vụ: "${task.title}".`,
-          });
-        } else {
-          addToast({
-            type: 'info',
-            message: `Đã mở lại nhiệm vụ: "${task.title}".`,
-          });
+        taskId,
+        {
+          status: nextStatus === 'NOT_STARTED' ? 'PENDING' : nextStatus,
+          completedAt: isCompleting ? new Date().toISOString() : undefined,
+          completedBy: isCompleting ? (effectiveUser.fullName || 'Người dùng hệ thống') : undefined,
         }
-      }
+      );
+
+      // Cập nhật lại record chuẩn từ backend
+      setCurrentRecord(response.data);
+      setCandidatesList((prev) =>
+        prev.map((c) => (c.id === response.data.id ? response.data : c))
+      );
+
+      addToast({
+        type: 'success',
+        message: isCompleting
+          ? `Đã hoàn thành nhiệm vụ: "${targetTask.title}".`
+          : `Đã mở lại nhiệm vụ: "${targetTask.title}".`,
+      });
 
       if (onProgressUpdated) {
-        onProgressUpdated(updated);
+        onProgressUpdated(response.data);
       }
-    } catch (err) {
-      console.error('Lỗi khi chuyển trạng thái nhiệm vụ:', err);
+    } catch (err: unknown) {
+      // 5.5. Rollback lại trạng thái ban đầu nếu gọi API thất bại (AC 3)
+      console.error('Lỗi khi gọi API cập nhật trạng thái checklist:', err);
+      setCurrentRecord(previousRecord);
+      setCandidatesList(previousList);
       addToast({
         type: 'error',
-        message: 'Không thể cập nhật trạng thái nhiệm vụ. Vui lòng thử lại.',
+        message: 'Không thể cập nhật trạng thái nhiệm vụ. Đã hoàn tác lại trạng thái ban đầu. Vui lòng thử lại!',
       });
+    }
+  };
+
+  // 6. Xử lý lưu ghi chú nhanh khi hoàn thành (AC 1)
+  const handleConfirmQuickCompletion = async (taskId: string, quickNotes?: string) => {
+    const targetTask = currentRecord.tasks.find((t) => t.id === taskId);
+    if (!targetTask) return;
+
+    // Xác thực quyền
+    const permission = canUserUpdateTask(targetTask, effectiveUser, currentRecord);
+    if (!permission.canUpdate) {
+      addToast({
+        type: 'warning',
+        message: permission.reason || 'Bạn không có quyền thao tác trên đầu việc của bộ phận khác.',
+      });
+      return;
+    }
+
+    const previousRecord = currentRecord;
+    const previousList = candidatesList;
+
+    // Optimistic UI update
+    const optimisticTasks = currentRecord.tasks.map((t) =>
+      t.id === taskId
+        ? {
+            ...t,
+            status: 'COMPLETED' as OnboardingTaskStatus,
+            completedAt: new Date().toISOString(),
+            completedBy: effectiveUser.fullName || 'Người dùng hệ thống',
+            notes: quickNotes !== undefined ? quickNotes : t.notes,
+          }
+        : t
+    );
+
+    const optimisticRecord = { ...currentRecord, tasks: optimisticTasks };
+    setCurrentRecord(optimisticRecord);
+    setCandidatesList((prev) =>
+      prev.map((c) => (c.id === optimisticRecord.id ? optimisticRecord : c))
+    );
+    setQuickNoteModalTask(null);
+
+    try {
+      setIsSavingQuickNote(true);
+      const response = await onboardingService.updateChecklistItemStatus(
+        currentRecord.id,
+        taskId,
+        {
+          status: 'COMPLETED',
+          completedAt: new Date().toISOString(),
+          completedBy: effectiveUser.fullName || 'Người dùng hệ thống',
+          notes: quickNotes !== undefined ? quickNotes : targetTask.notes,
+        }
+      );
+
+      setCurrentRecord(response.data);
+      setCandidatesList((prev) =>
+        prev.map((c) => (c.id === response.data.id ? response.data : c))
+      );
+
+      addToast({
+        type: 'success',
+        message: `Đã hoàn thành "${targetTask.title}" kèm ghi chú bàn giao.`,
+      });
+
+      if (onProgressUpdated) {
+        onProgressUpdated(response.data);
+      }
+    } catch (err: unknown) {
+      console.error('Lỗi khi lưu ghi chú hoàn thành:', err);
+      setCurrentRecord(previousRecord);
+      setCandidatesList(previousList);
+      addToast({
+        type: 'error',
+        message: 'Không thể cập nhật trạng thái nhiệm vụ. Đã hoàn tác lại trạng thái ban đầu. Vui lòng thử lại!',
+      });
+    } finally {
+      setIsSavingQuickNote(false);
     }
   };
 
   // Cập nhật trạng thái cụ thể từ modal chi tiết (AC 3)
   const handleUpdateStatusFromDetail = async (taskId: string, newStatus: OnboardingTaskStatus) => {
+    const targetTask = currentRecord.tasks.find((t) => t.id === taskId);
+    if (targetTask) {
+      const permission = canUserUpdateTask(targetTask, effectiveUser, currentRecord);
+      if (!permission.canUpdate) {
+        addToast({
+          type: 'warning',
+          message: permission.reason || 'Bạn không có quyền thao tác trên đầu việc này.',
+        });
+        return;
+      }
+    }
+
+    const previousRecord = currentRecord;
     try {
-      const updated = await onboardingTrackingService.toggleTaskStatus(
+      const isCompleted = newStatus === 'COMPLETED';
+      const response = await onboardingService.updateChecklistItemStatus(
         currentRecord.id,
         taskId,
-        newStatus
-      );
-      setCurrentRecord(updated);
-      setCandidatesList((prev) =>
-        prev.map((c) => (c.id === updated.id ? updated : c))
+        {
+          status: newStatus === 'NOT_STARTED' ? 'PENDING' : newStatus,
+          completedAt: isCompleted ? new Date().toISOString() : undefined,
+          completedBy: isCompleted ? effectiveUser.fullName : undefined,
+        }
       );
 
-      const task = updated.tasks.find((t) => t.id === taskId);
-      if (task) {
-        setSelectedTaskForDetail(task);
+      setCurrentRecord(response.data);
+      setCandidatesList((prev) =>
+        prev.map((c) => (c.id === response.data.id ? response.data : c))
+      );
+
+      // Cập nhật lại task đang mở modal
+      const refreshedTask = response.data.tasks.find((t) => t.id === taskId);
+      if (refreshedTask) {
+        setSelectedTaskForDetail(refreshedTask);
       }
 
       addToast({
         type: 'success',
-        message: `Đã cập nhật trạng thái nhiệm vụ thành công.`,
+        message: 'Đã cập nhật trạng thái nhiệm vụ thành công.',
       });
 
       if (onProgressUpdated) {
-        onProgressUpdated(updated);
+        onProgressUpdated(response.data);
       }
-    } catch {
+    } catch (err: unknown) {
+      console.error('Lỗi khi cập nhật từ modal chi tiết:', err);
+      setCurrentRecord(previousRecord);
       addToast({
         type: 'error',
-        message: 'Lỗi cập nhật trạng thái.',
+        message: 'Không thể cập nhật trạng thái. Đã hoàn tác lại trạng thái ban đầu.',
       });
     }
   };
@@ -207,45 +423,50 @@ export const OnboardingTrackingBoard: React.FC<OnboardingTrackingBoardProps> = (
   // Lưu ghi chú nội bộ từ modal chi tiết (AC 3)
   const handleSaveNotesFromDetail = async (taskId: string, notes: string) => {
     try {
-      const updated = await onboardingTrackingService.updateTaskDetails(
+      const currentStatus = selectedTaskForDetail?.status || 'IN_PROGRESS';
+      const response = await onboardingService.updateChecklistItemStatus(
         currentRecord.id,
         taskId,
-        { notes }
-      );
-      setCurrentRecord(updated);
-      setCandidatesList((prev) =>
-        prev.map((c) => (c.id === updated.id ? updated : c))
+        {
+          status: currentStatus === 'NOT_STARTED' ? 'PENDING' : currentStatus,
+          notes,
+        }
       );
 
-      const task = updated.tasks.find((t) => t.id === taskId);
-      if (task) {
-        setSelectedTaskForDetail(task);
+      setCurrentRecord(response.data);
+      setCandidatesList((prev) =>
+        prev.map((c) => (c.id === response.data.id ? response.data : c))
+      );
+
+      const refreshedTask = response.data.tasks.find((t) => t.id === taskId);
+      if (refreshedTask) {
+        setSelectedTaskForDetail(refreshedTask);
       }
 
       addToast({
         type: 'success',
-        message: 'Đã lưu ghi chú nhiệm vụ.',
+        message: 'Đã lưu ghi chú nhiệm vụ thành công.',
       });
-    } catch {
+    } catch (err: unknown) {
+      console.error('Lỗi khi lưu ghi chú:', err);
       addToast({
         type: 'error',
-        message: 'Không thể lưu ghi chú.',
+        message: 'Không thể lưu ghi chú. Vui lòng thử lại.',
       });
     }
   };
 
-  // Mở modal chi tiết
   const handleOpenTaskDetail = (task: OnboardingCandidateTask) => {
     setSelectedTaskForDetail(task);
     setIsDetailModalOpen(true);
   };
 
-  // 5. Tính toán tiến độ hoàn thành % tổng quan (AC 1)
+  // 7. Thống kê tiến độ % hoàn thành tự động (AC 1)
   const progressSummary = useMemo(() => {
     return calculateOnboardingProgress(currentRecord.tasks);
   }, [currentRecord.tasks]);
 
-  // Lọc nhiệm vụ theo search, phase, status (AC 2)
+  // Lọc nhiệm vụ theo thanh tìm kiếm và bộ lọc (AC 2)
   const filteredTasks = useMemo(() => {
     return currentRecord.tasks.filter((task) => {
       // 1. Tìm kiếm
@@ -402,26 +623,48 @@ export const OnboardingTrackingBoard: React.FC<OnboardingTrackingBoardProps> = (
           </div>
         </div>
 
-        {/* Bộ chọn hồ sơ nhân sự (nếu có nhiều người mới) */}
-        {candidatesList.length > 1 && (
-          <div className="flex items-center gap-2 self-start lg:self-center shrink-0">
-            <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">
-              Chuyển nhân sự:
-            </label>
+        {/* Thanh công cụ: Bộ chọn hồ sơ nhân sự & Chế độ phân quyền kiểm thử (AC 2) */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 shrink-0">
+          {/* Bộ chọn giả lập vai trò phân quyền (AC 2) */}
+          <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-gray-800/80 p-1.5 rounded-xl border border-gray-200 dark:border-gray-700 text-xs">
+            <UserCheck className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+            <span className="font-semibold text-gray-600 dark:text-gray-400">Vai trò:</span>
             <select
-              data-testid="select-candidate-record"
-              value={selectedRecordId}
-              onChange={(e) => handleSelectCandidate(e.target.value)}
-              className="rounded-xl border border-gray-300 bg-white py-1.5 px-3 text-xs text-gray-900 focus:border-indigo-500 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+              data-testid="select-simulated-role"
+              value={activeRoleSim}
+              onChange={(e) => setActiveRoleSim(e.target.value as any)}
+              className="bg-transparent font-bold text-indigo-700 dark:text-indigo-300 focus:outline-hidden cursor-pointer"
+              title="Chuyển đổi vai trò để kiểm thử phân quyền cập nhật đầu việc"
             >
-              {candidatesList.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.candidateName} ({c.jobTitle})
-                </option>
-              ))}
+              <option value="AUTO">Tự động (Đăng nhập)</option>
+              <option value="HR_ADMIN">Quản trị HR (Toàn quyền)</option>
+              <option value="IT_SUPPORT">IT Support (Đặng Quốc Huy)</option>
+              <option value="NEW_HIRE">Nhân sự mới ({currentRecord.candidateName})</option>
+              <option value="OTHER_DEPT">Bộ phận khác (Không có quyền)</option>
             </select>
           </div>
-        )}
+
+          {/* Bộ chọn hồ sơ nhân sự */}
+          {candidatesList.length > 1 && (
+            <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                Chuyển nhân sự:
+              </label>
+              <select
+                data-testid="select-candidate-record"
+                value={selectedRecordId}
+                onChange={(e) => handleSelectCandidate(e.target.value)}
+                className="rounded-xl border border-gray-300 bg-white py-1.5 px-3 text-xs text-gray-900 focus:border-indigo-500 focus:outline-hidden dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+              >
+                {candidatesList.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.candidateName} ({c.jobTitle})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 2. Thanh tiến trình & Chỉ số hoàn thành (Progress Overview Card - AC 1) */}
@@ -543,14 +786,30 @@ export const OnboardingTrackingBoard: React.FC<OnboardingTrackingBoardProps> = (
                       Không có nhiệm vụ nào phù hợp với bộ lọc trong giai đoạn này.
                     </div>
                   ) : (
-                    phaseTasks.map((task) => (
-                      <TaskRowItem
-                        key={task.id}
-                        task={task}
-                        onToggleComplete={(e) => handleToggleTaskStatus(task.id, e)}
-                        onClickDetail={() => handleOpenTaskDetail(task)}
-                      />
-                    ))
+                    phaseTasks.map((task) => {
+                      const permission = canUserUpdateTask(task, effectiveUser, currentRecord);
+                      return (
+                        <TaskRowItem
+                          key={task.id}
+                          task={task}
+                          canUpdate={permission.canUpdate}
+                          permissionReason={permission.reason}
+                          onToggleComplete={(e) => handleToggleTaskStatus(task.id, e)}
+                          onClickDetail={() => handleOpenTaskDetail(task)}
+                          onOpenQuickNote={(e) => {
+                            e.stopPropagation();
+                            if (!permission.canUpdate) {
+                              addToast({
+                                type: 'warning',
+                                message: permission.reason || 'Bạn không có quyền thao tác trên đầu việc này.',
+                              });
+                              return;
+                            }
+                            setQuickNoteModalTask(task);
+                          }}
+                        />
+                      );
+                    })
                   )}
                 </div>
               )}
@@ -570,6 +829,15 @@ export const OnboardingTrackingBoard: React.FC<OnboardingTrackingBoardProps> = (
         onUpdateStatus={handleUpdateStatusFromDetail}
         onSaveNotes={handleSaveNotesFromDetail}
       />
+
+      {/* Modal Nhập ghi chú nhanh khi hoàn thành (AC 1) */}
+      <QuickTaskCompletionModal
+        isOpen={Boolean(quickNoteModalTask)}
+        task={quickNoteModalTask}
+        onClose={() => setQuickNoteModalTask(null)}
+        onConfirm={handleConfirmQuickCompletion}
+        isLoading={isSavingQuickNote}
+      />
     </div>
   );
 };
@@ -579,14 +847,20 @@ export const OnboardingTrackingBoard: React.FC<OnboardingTrackingBoardProps> = (
 // ==========================================
 interface TaskRowItemProps {
   task: OnboardingCandidateTask;
-  onToggleComplete: (e: React.MouseEvent) => void;
+  canUpdate: boolean;
+  permissionReason?: string;
+  onToggleComplete: (e?: React.MouseEvent) => void;
   onClickDetail: () => void;
+  onOpenQuickNote: (e: React.MouseEvent) => void;
 }
 
 const TaskRowItem: React.FC<TaskRowItemProps> = ({
   task,
+  canUpdate,
+  permissionReason,
   onToggleComplete,
   onClickDetail,
+  onOpenQuickNote,
 }) => {
   const isCompleted = task.status === 'COMPLETED';
   const roleConfig = getRoleConfig(task.responsibleRole);
@@ -605,19 +879,40 @@ const TaskRowItem: React.FC<TaskRowItemProps> = ({
       }`}
     >
       <div className="flex items-start gap-3.5 flex-1 min-w-0">
-        {/* Checkbox đánh dấu hoàn thành (AC 2) */}
-        <div className="pt-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+        {/* Checkbox đánh dấu hoàn thành & Phân quyền (AC 1 & AC 2) */}
+        <div
+          className="pt-0.5 shrink-0 relative group"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleComplete(e);
+          }}
+          title={!canUpdate ? permissionReason : isCompleted ? 'Bỏ chọn hoàn thành' : 'Đánh dấu hoàn thành'}
+        >
           <input
             type="checkbox"
             data-testid={`checkbox-task-complete-${task.id}`}
             checked={isCompleted}
+            disabled={!canUpdate}
             onChange={() => {
-              // Synthetic event
+              // Synthetic event handled in onClick
             }}
-            onClick={onToggleComplete}
-            className="h-5 w-5 rounded-md border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer transition-transform active:scale-90"
+            className={`h-5 w-5 rounded-md border-gray-300 transition-transform active:scale-90 ${
+              !canUpdate
+                ? 'cursor-not-allowed opacity-50 bg-gray-100 dark:bg-gray-800'
+                : 'text-emerald-600 focus:ring-emerald-500 cursor-pointer'
+            }`}
             aria-label={`Đánh dấu hoàn thành ${task.title}`}
           />
+
+          {!canUpdate && (
+            <div
+              data-testid={`badge-locked-task-${task.id}`}
+              className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-white shadow-xs"
+              title={permissionReason}
+            >
+              <Lock className="h-2 w-2" />
+            </div>
+          )}
         </div>
 
         {/* Thông tin nhiệm vụ */}
@@ -654,6 +949,17 @@ const TaskRowItem: React.FC<TaskRowItemProps> = ({
                 <span>{task.attachments.length} tệp</span>
               </span>
             )}
+
+            {task.notes && (
+              <span
+                data-testid={`badge-has-notes-${task.id}`}
+                className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 truncate max-w-[200px]"
+                title={`Ghi chú: ${task.notes}`}
+              >
+                <MessageSquare className="h-3 w-3 shrink-0" />
+                <span className="truncate">{task.notes}</span>
+              </span>
+            )}
           </div>
 
           {task.description && (
@@ -688,12 +994,35 @@ const TaskRowItem: React.FC<TaskRowItemProps> = ({
               )}
               <span>Hạn: {deadlineInfo.formattedDate} ({deadlineInfo.badgeText})</span>
             </span>
+
+            {/* Cảnh báo quyền hạn nếu bị khóa (AC 2) */}
+            {!canUpdate && (
+              <span
+                data-testid={`badge-permission-locked-${task.id}`}
+                className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                title={permissionReason}
+              >
+                <Lock className="h-2.5 w-2.5" />
+                <span>Khác bộ phận</span>
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Action: Click xem chi tiết (AC 3) */}
-      <div className="shrink-0 self-end sm:self-center">
+      {/* Nút Thao tác: Ghi chú nhanh (AC 1) & Xem chi tiết */}
+      <div className="shrink-0 self-end sm:self-center flex items-center gap-2">
+        <button
+          type="button"
+          data-testid={`btn-quick-note-${task.id}`}
+          onClick={onOpenQuickNote}
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/60 text-xs font-semibold text-gray-600 hover:text-indigo-600 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+          title="Nhập ghi chú nhanh hoàn thành"
+        >
+          <FileEdit className="h-3 w-3" />
+          <span>Ghi chú</span>
+        </button>
+
         <button
           type="button"
           data-testid={`btn-view-detail-${task.id}`}
