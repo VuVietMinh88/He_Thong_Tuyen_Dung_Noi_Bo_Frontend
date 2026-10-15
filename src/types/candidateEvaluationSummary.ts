@@ -98,10 +98,32 @@ export interface FinalHiringDecisionRecord {
   offeredSalary?: number; // Mức lương đề xuất (VNĐ)
   offeredSalaryFormatted?: string; // "38.000.000 ₫"
   startDate?: string; // Ngày dự kiến nhận việc
+  responseDeadline?: string; // Hạn chót phản hồi offer
+  sendOfferEmail?: boolean; // Chuẩn bị gửi thư mời nhận việc qua email
   probationMonths?: number; // Thời gian thử việc (tháng)
   talentPoolCategory?: string; // Phân nhóm talent pool nếu lưu trữ
   rejectionReason?: string; // Lý do từ chối nếu reject
   rejectionEmailSent?: boolean;
+  notes?: string;
+}
+
+export const STANDARDIZED_REJECTION_REASONS = [
+  'Chưa đáp ứng chuyên môn kỹ thuật',
+  'Không phù hợp văn hóa & phong cách làm việc',
+  'Kỳ vọng lương quá cao so với khung ngân sách',
+  'Thiếu kinh nghiệm thực chiến hoặc kỹ năng quản lý',
+  'Đã lựa chọn ứng viên khác phù hợp hơn',
+  'Thời gian bắt đầu làm việc quá dài (> 60 ngày)',
+  'Lý do khác',
+] as const;
+
+export type StandardizedRejectionReason = (typeof STANDARDIZED_REJECTION_REASONS)[number];
+
+export interface DecisionValidationErrors {
+  offeredSalary?: string;
+  startDate?: string;
+  responseDeadline?: string;
+  rejectionReason?: string;
   notes?: string;
 }
 

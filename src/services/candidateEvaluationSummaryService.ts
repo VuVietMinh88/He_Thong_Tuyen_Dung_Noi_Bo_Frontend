@@ -296,4 +296,27 @@ export const candidateEvaluationSummaryService = {
 
     return updated;
   },
+
+  /**
+   * Gọi API cập nhật quyết định tuyển dụng: Offer hoặc Từ chối có lý do (AC 4 - Task TKNHTTDNB1-486)
+   */
+  async updateCandidateDecision(
+    candidateId: string,
+    decisionData: FinalHiringDecisionRecord
+  ): Promise<CandidateEvaluationSummaryData> {
+    try {
+      const response = await axiosClient.post<CandidateEvaluationSummaryData>(
+        `/recruitment/candidates/${encodeURIComponent(candidateId)}/decision`,
+        decisionData
+      );
+      if (response.data) {
+        const raw = response.data as unknown as { data?: CandidateEvaluationSummaryData };
+        return raw.data || response.data;
+      }
+    } catch {
+      // Fallback về submitHiringDecision
+    }
+
+    return this.submitHiringDecision(candidateId, decisionData);
+  },
 };

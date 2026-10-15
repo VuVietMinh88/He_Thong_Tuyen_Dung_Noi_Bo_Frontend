@@ -15,6 +15,7 @@ import type {
   FinalHiringDecisionRecord,
   CandidateEvaluationSummaryData,
 } from '../../../types/candidateEvaluationSummary';
+import { STANDARDIZED_REJECTION_REASONS } from '../../../types/candidateEvaluationSummary';
 import { formatCurrencyVND } from '../../../utils/candidateEvaluationSummaryHelper';
 
 export interface HiringDecisionModalProps {
@@ -36,10 +37,12 @@ export const HiringDecisionModal: React.FC<HiringDecisionModalProps> = ({
     candidateSummary.compensation.expectedSalary || 35000000
   );
   const [startDate, setStartDate] = useState<string>('2026-11-01');
+  const [responseDeadline, setResponseDeadline] = useState<string>('2026-11-10');
   const [probationMonths, setProbationMonths] = useState<number>(2);
+  const [sendOfferEmail, setSendOfferEmail] = useState<boolean>(true);
   const [talentPoolCategory, setTalentPoolCategory] = useState<string>('Senior Frontend & Architecture');
   const [rejectionReason, setRejectionReason] = useState<string>(
-    'Mức lương kỳ vọng vượt khung ngân sách vị trí'
+    'Chưa đáp ứng chuyên môn kỹ thuật'
   );
   const [sendRejectionEmail, setSendRejectionEmail] = useState<boolean>(true);
   const [notes, setNotes] = useState<string>('');
@@ -62,7 +65,9 @@ export const HiringDecisionModal: React.FC<HiringDecisionModalProps> = ({
         decisionPayload.offeredSalary = offeredSalary;
         decisionPayload.offeredSalaryFormatted = formatCurrencyVND(offeredSalary);
         decisionPayload.startDate = startDate;
+        decisionPayload.responseDeadline = responseDeadline;
         decisionPayload.probationMonths = probationMonths;
+        decisionPayload.sendOfferEmail = sendOfferEmail;
       } else if (decisionType === 'TALENT_POOL') {
         decisionPayload.talentPoolCategory = talentPoolCategory;
       } else if (decisionType === 'REJECT') {
@@ -171,21 +176,53 @@ export const HiringDecisionModal: React.FC<HiringDecisionModalProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                    Thời gian thử việc *
+                    Hạn chót phản hồi offer *
                   </label>
                   <div className="relative">
                     <Clock className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                    <select
-                      value={probationMonths}
-                      onChange={(e) => setProbationMonths(Number(e.target.value))}
+                    <input
+                      type="date"
+                      value={responseDeadline}
+                      onChange={(e) => setResponseDeadline(e.target.value)}
+                      required
                       className="w-full rounded-xl border border-gray-300 bg-white py-2 pl-9 pr-3 text-xs text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                    >
-                      <option value={1}>1 tháng (Hưởng 85% hoặc 100% lương)</option>
-                      <option value={2}>2 tháng (Quy chuẩn vị trí chuyên gia)</option>
-                      <option value={0}>Không thử việc (Ký HĐLĐ chính thức)</option>
-                    </select>
+                    />
                   </div>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  Thời gian thử việc *
+                </label>
+                <div className="relative">
+                  <Clock className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                  <select
+                    value={probationMonths}
+                    onChange={(e) => setProbationMonths(Number(e.target.value))}
+                    className="w-full rounded-xl border border-gray-300 bg-white py-2 pl-9 pr-3 text-xs text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  >
+                    <option value={1}>1 tháng (Hưởng 85% hoặc 100% lương)</option>
+                    <option value={2}>2 tháng (Quy chuẩn vị trí chuyên gia)</option>
+                    <option value={0}>Không thử việc (Ký HĐLĐ chính thức)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="send-offer-email"
+                  checked={sendOfferEmail}
+                  onChange={(e) => setSendOfferEmail(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <label
+                  htmlFor="send-offer-email"
+                  className="text-xs font-medium text-gray-700 dark:text-gray-300 cursor-pointer"
+                >
+                  Chuẩn bị gửi thư mời nhận việc (Offer Letter) qua email
+                </label>
               </div>
             </div>
           )}
@@ -224,19 +261,11 @@ export const HiringDecisionModal: React.FC<HiringDecisionModalProps> = ({
                   onChange={(e) => setRejectionReason(e.target.value)}
                   className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
                 >
-                  <option value="Mức lương kỳ vọng vượt khung ngân sách vị trí">
-                    Mức lương kỳ vọng vượt khung ngân sách vị trí
-                  </option>
-                  <option value="Chưa đáp ứng đủ kinh nghiệm quản lý hoặc chuyên sâu">
-                    Chưa đáp ứng đủ kinh nghiệm quản lý hoặc chuyên sâu
-                  </option>
-                  <option value="Đã chọn được ứng viên khác phù hợp hơn">
-                    Đã chọn được ứng viên khác phù hợp hơn
-                  </option>
-                  <option value="Thời gian bắt đầu làm việc quá dài">
-                    Thời gian bắt đầu làm việc quá dài
-                  </option>
-                  <option value="Lý do khác">Lý do khác</option>
+                  {STANDARDIZED_REJECTION_REASONS.map((reason) => (
+                    <option key={reason} value={reason}>
+                      {reason}
+                    </option>
+                  ))}
                 </select>
               </div>
 

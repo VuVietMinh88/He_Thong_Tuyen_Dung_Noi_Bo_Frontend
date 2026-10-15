@@ -28,7 +28,7 @@ import { ConsensusGaugeCard } from './ConsensusGaugeCard';
 import { CompetencyRadarChart } from './CompetencyRadarChart';
 import { CompetencyBarChart } from './CompetencyBarChart';
 import { RoundEvaluationAccordion } from './RoundEvaluationAccordion';
-import { HiringDecisionModal } from './HiringDecisionModal';
+import { FinalHiringDecisionModal } from '../Decision/FinalHiringDecisionModal';
 import { getDecisionStatusBadgeConfig } from '../../../utils/candidateEvaluationSummaryHelper';
 
 export interface CandidateEvaluationSummaryViewProps {
@@ -77,13 +77,19 @@ export const CandidateEvaluationSummaryView: React.FC<CandidateEvaluationSummary
     window.print();
   };
 
-  const handleSubmitDecision = async (decision: FinalHiringDecisionRecord) => {
+  const handleSubmitDecision = (decision: FinalHiringDecisionRecord) => {
     if (!summaryData) return;
-    const updated = await candidateEvaluationSummaryService.submitHiringDecision(
-      summaryData.id,
-      decision
+    setSummaryData((prev) =>
+      prev
+        ? {
+            ...prev,
+            hiringDecision: {
+              ...decision,
+              decidedAt: decision.decidedAt || new Date().toISOString(),
+            },
+          }
+        : prev
     );
-    setSummaryData(updated);
     if (onDecisionUpdated) {
       onDecisionUpdated(decision);
     }
@@ -466,12 +472,17 @@ export const CandidateEvaluationSummaryView: React.FC<CandidateEvaluationSummary
 
       {/* Modal nhập quyết định tuyển dụng */}
       {activeDecisionModal && (
-        <HiringDecisionModal
+        <FinalHiringDecisionModal
           isOpen={true}
-          decisionType={activeDecisionModal}
-          candidateSummary={summaryData}
+          initialDecisionType={activeDecisionModal}
+          candidateId={summaryData.id}
+          candidateName={summaryData.fullName}
+          candidateCode={summaryData.candidateCode}
+          jobTitle={summaryData.appliedJobTitle}
+          expectedSalary={summaryData.compensation.expectedSalary}
+          expectedSalaryFormatted={summaryData.compensation.expectedSalaryFormatted}
           onClose={() => setActiveDecisionModal(null)}
-          onSubmitDecision={handleSubmitDecision}
+          onSuccess={handleSubmitDecision}
         />
       )}
     </div>

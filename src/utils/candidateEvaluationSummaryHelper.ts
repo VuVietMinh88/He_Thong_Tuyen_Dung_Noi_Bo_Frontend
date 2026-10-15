@@ -11,6 +11,7 @@ import type {
   CompetencyBenchmarkItem,
   CompetencyGapStatus,
   FinalHiringDecisionStatus,
+  DecisionValidationErrors,
 } from '../types/candidateEvaluationSummary';
 
 /**
@@ -383,3 +384,47 @@ export const getDecisionStatusBadgeConfig = (status: FinalHiringDecisionStatus) 
       };
   }
 };
+
+/**
+ * Validate tính hợp lệ của quyết định tuyển dụng Offer hoặc Từ chối (AC 4 - Task TKNHTTDNB1-486)
+ */
+export const validateFinalHiringDecision = (
+  status: FinalHiringDecisionStatus,
+  data: {
+    offeredSalary?: number;
+    startDate?: string;
+    responseDeadline?: string;
+    rejectionReason?: string;
+    notes?: string;
+  }
+): { isValid: boolean; errors: DecisionValidationErrors } => {
+  const errors: DecisionValidationErrors = {};
+
+  if (status === 'OFFER') {
+    if (data.offeredSalary === undefined || data.offeredSalary === null || isNaN(data.offeredSalary) || data.offeredSalary <= 0) {
+      errors.offeredSalary = 'Vui lòng nhập mức lương đề xuất hợp lệ (> 0 VNĐ)';
+    }
+
+    if (!data.startDate || !data.startDate.trim()) {
+      errors.startDate = 'Vui lòng chọn ngày dự kiến gia nhập (Onboarding Date)';
+    }
+
+    if (!data.responseDeadline || !data.responseDeadline.trim()) {
+      errors.responseDeadline = 'Vui lòng chọn hạn chót phản hồi offer';
+    } else if (data.startDate && data.responseDeadline > data.startDate) {
+      errors.responseDeadline = 'Hạn chót phản hồi offer phải trước hoặc cùng ngày gia nhập';
+    }
+  } else if (status === 'REJECT') {
+    if (!data.rejectionReason || !data.rejectionReason.trim()) {
+      errors.rejectionReason = 'Bắt buộc chọn lý do từ chối chính từ danh mục';
+    } else if (data.rejectionReason === 'Lý do khác' && (!data.notes || !data.notes.trim())) {
+      errors.notes = 'Vui lòng nhập chi tiết lý do từ chối vào phần ghi chú phản hồi';
+    }
+  }
+
+  return {
+    isValid: Object.keys(errors).length === 0,
+    errors,
+  };
+};
+
