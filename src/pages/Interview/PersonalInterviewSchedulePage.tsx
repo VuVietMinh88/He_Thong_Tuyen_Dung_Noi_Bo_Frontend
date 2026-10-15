@@ -484,6 +484,7 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
         <InterviewEvaluationModal
           isOpen={true}
           onClose={() => setEvaluatingInterview(null)}
+          candidateId={evaluatingInterview.candidateId}
           candidateName={evaluatingInterview.candidateName}
           candidateEmail={evaluatingInterview.candidateEmail}
           jobTitle={evaluatingInterview.jobTitle || 'Chức danh tuyển dụng'}
@@ -501,6 +502,7 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
           interviewers={evaluatingInterview.interviewers}
           currentUserId={currentUser?.id}
           currentUserEmail={currentUser?.email}
+          currentUserRoles={currentUser?.roles}
           frameworkName={`Khung năng lực ${evaluatingInterview.jobTitle || 'Chuyên môn'}`}
           frameworkCode="CF-STD-2026"
           frameworkVersion="v1.0"

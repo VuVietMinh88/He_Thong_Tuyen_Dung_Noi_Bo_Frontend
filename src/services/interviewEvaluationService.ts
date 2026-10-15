@@ -144,4 +144,27 @@ export const interviewEvaluationService = {
       throw getRequestError(error, 'Không thể gửi thông báo kết quả phỏng vấn.');
     }
   },
+
+  /**
+   * Yêu cầu mở lại phiếu đánh giá đã nộp dành cho Recruiter trong thời hạn 24 giờ (AC 1 - TKNHTTDNB1-465)
+   */
+  async reopenEvaluation(
+    candidateId: string,
+    payload: { evaluationId?: string; reason?: string } = {},
+  ): Promise<{ success: boolean; reopenedAt: string }> {
+    if (!candidateId.trim()) {
+      throw new Error('Thiếu mã ứng viên để mở lại phiếu đánh giá.');
+    }
+
+    try {
+      const response = await axiosClient.post<{ success: boolean; reopenedAt: string }>(
+        `/recruitment/candidates/${encodeURIComponent(candidateId)}/interviews/reopen-evaluation`,
+        payload,
+      );
+      return response.data;
+    } catch (error: unknown) {
+      throw getRequestError(error, 'Không thể mở lại phiếu đánh giá phỏng vấn.');
+    }
+  },
 };
+

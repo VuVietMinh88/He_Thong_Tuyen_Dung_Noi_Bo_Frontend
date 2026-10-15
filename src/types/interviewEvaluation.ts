@@ -98,6 +98,44 @@ export interface InterviewEvaluationAccessParams {
 }
 
 /**
+ * Bản ghi đánh giá năng lực của các thành viên khác trong Hội đồng phỏng vấn (AC 2 - TKNHTTDNB1-465)
+ */
+export interface PeerInterviewerEvaluation {
+  interviewerId: string;
+  interviewerName: string;
+  interviewerRole?: string;
+  interviewerEmail?: string;
+  avatarUrl?: string;
+  isSubmitted: boolean;
+  submittedAt?: string;
+  calculatedTotalScore?: number | null;
+  conclusion?: InterviewConclusion | null;
+  generalNotes?: string;
+  criteriaScores?: Record<string, number | null>;
+}
+
+/**
+ * Trạng thái cho phép mở lại phiếu đánh giá trong thời hạn 24 giờ (AC 1 - TKNHTTDNB1-465)
+ */
+export interface ReopenEvaluationStatus {
+  canReopen: boolean;
+  isExpired: boolean;
+  timeRemainingFormatted: string;
+  remainingMs: number;
+  hoursRemaining: number;
+  minutesRemaining: number;
+  deadlineTimestamp?: string;
+}
+
+export interface ReopenEvaluationPayload {
+  evaluationId?: string;
+  candidateId?: string;
+  reason?: string;
+  reopenedByUserId?: string;
+  reopenedByUserName?: string;
+}
+
+/**
  * Định nghĩa 5 mức điểm đánh giá năng lực phỏng vấn chuẩn hóa
  * Giúp người phỏng vấn nắm rõ tiêu chuẩn khi chấm điểm từ 1 đến 5
  */

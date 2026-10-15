@@ -3,6 +3,7 @@ import type {
   CriterionEvaluationRecord,
   InterviewConclusion,
   InterviewEvaluationAccessParams,
+  ReopenEvaluationStatus,
 } from '../types/interviewEvaluation';
 import { tokenService } from '../services/token.service';
 
@@ -351,4 +352,104 @@ export const checkInterviewEvaluationAccess = (
 
   return hasMatchedId || hasMatchedEmail;
 };
+
+export const REOPEN_EVALUATION_WINDOW_HOURS = 24;
+export const REOPEN_EVALUATION_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Tính toán thời gian còn lại cho phép Recruiter mở lại phiếu đã nộp (AC 1 - TKNHTTDNB1-465)
+ * Giới hạn mở lại: 24 giờ kể từ thời điểm nộp (submittedAt). Quá 24 giờ thì hết hạn.
+ */
+export const calculateRemainingReopenTime = (
+  submittedAt?: string | null,
+  currentTimestamp: number = Date.now(),
+): ReopenEvaluationStatus => {
+  if (!submittedAt) {
+    return {
+      canReopen: false,
+      isExpired: false,
+      timeRemainingFormatted: 'Chưa có thông tin nộp phiếu',
+      remainingMs: 0,
+      hoursRemaining: 0,
+      minutesRemaining: 0,
+    };
+  }
+
+  const submittedTime = new Date(submittedAt).getTime();
+  if (isNaN(submittedTime)) {
+    return {
+      canReopen: false,
+      isExpired: true,
+      timeRemainingFormatted: 'Thời điểm nộp không hợp lệ',
+      remainingMs: 0,
+      hoursRemaining: 0,
+      minutesRemaining: 0,
+    };
+  }
+
+  const deadline = submittedTime + REOPEN_EVALUATION_WINDOW_MS;
+  const remainingMs = deadline - currentTimestamp;
+
+  if (remainingMs <= 0) {
+    return {
+      canReopen: false,
+      isExpired: true,
+      timeRemainingFormatted: 'Đã hết hạn mở lại (quá 24 giờ)',
+      remainingMs: 0,
+      hoursRemaining: 0,
+      minutesRemaining: 0,
+      deadlineTimestamp: new Date(deadline).toISOString(),
+    };
+  }
+
+  const totalMinutes = Math.floor(remainingMs / (1000 * 60));
+  const hoursRemaining = Math.floor(totalMinutes / 60);
+  const minutesRemaining = totalMinutes % 60;
+
+  const timeRemainingFormatted =
+    hoursRemaining > 0
+      ? `Còn ${hoursRemaining} giờ ${minutesRemaining} phút`
+      : `Còn ${minutesRemaining} phút`;
+
+  return {
+    canReopen: true,
+    isExpired: false,
+    timeRemainingFormatted,
+    remainingMs,
+    hoursRemaining,
+    minutesRemaining,
+    deadlineTimestamp: new Date(deadline).toISOString(),
+  };
+};
+
+/**
+ * Kiểm tra xem người dùng hiện tại có quyền mở lại phiếu phỏng vấn không (AC 1 - TKNHTTDNB1-465)
+ * Chỉ dành cho người dùng có role RECRUITER (hoặc ADMIN / HR_MANAGER).
+ */
+export const checkIsRecruiterRole = (
+  userRoles?: string[] | null,
+  isRecruiterExplicit?: boolean,
+): boolean => {
+  if (typeof isRecruiterExplicit === 'boolean') {
+    return isRecruiterExplicit;
+  }
+
+  const activeRoles: string[] = userRoles || tokenService.getUserData()?.roles || [];
+  const normalizedRoles = activeRoles.map((role) => role.toUpperCase().trim());
+
+  return (
+    normalizedRoles.includes('RECRUITER') ||
+    normalizedRoles.includes('ADMIN') ||
+    normalizedRoles.includes('HR_MANAGER')
+  );
+};
+
+/**
+ * Kiểm tra điều kiện xem đánh giá chéo của các Interviewer khác (AC 2 - TKNHTTDNB1-465)
+ * Chỉ hiển thị khi người dùng hiện tại đã hoàn tất và nộp phiếu của chính mình.
+ */
+export const isPeerReviewVisible = (hasSubmittedOwnEvaluation: boolean): boolean => {
+  return Boolean(hasSubmittedOwnEvaluation);
+};
+
 
