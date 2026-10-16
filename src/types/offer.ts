@@ -1,7 +1,20 @@
 /**
  * Định nghĩa kiểu dữ liệu cho Đề nghị tuyển dụng (Offer Management)
- * Jira Subtask: TKNHTTDNB1-491 - Thiết kế biểu mẫu soạn đề nghị tuyển dụng (Story TKNHTTDNB1-71)
+ * Jira Subtask: TKNHTTDNB1-491 & TKNHTTDNB1-492 (Story TKNHTTDNB1-71)
  */
+
+/**
+ * Trạng thái của một đề nghị tuyển dụng trong quy trình
+ */
+export type OfferStatus =
+  | 'DRAFT'
+  | 'PENDING_APPROVAL'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'SENT_TO_CANDIDATE'
+  | 'ACCEPTED'
+  | 'DECLINED'
+  | 'CANCELLED';
 
 /**
  * Trạng thái so sánh mức lương đề xuất với dải lương chuẩn của vị trí
@@ -43,20 +56,125 @@ export interface JobPositionOption {
   isActive?: boolean;
 }
 
+import { z } from 'zod/v3';
+
 /**
- * Dữ liệu các trường nhập liệu trong biểu mẫu soạn đề nghị tuyển dụng
+ * Zod validation schema chuẩn cho các trường nhập liệu biểu mẫu soạn đề nghị tuyển dụng
+ * Đảm bảo đồng bộ 100% giữa Zod Schema và kiểu dữ liệu Form
  */
-export interface OfferFormValues {
+export const offerFormSchema = z.object({
+  jobTitle: z
+    .string({
+      required_error: 'Vui lòng chọn hoặc nhập chức danh tuyển dụng.',
+      invalid_type_error: 'Chức danh không hợp lệ.',
+    })
+    .trim()
+    .min(1, 'Vui lòng chọn hoặc nhập chức danh tuyển dụng.'),
+  positionId: z.string().optional(),
+  offeredSalary: z
+    .number({
+      required_error: 'Vui lòng nhập mức lương cơ bản.',
+      invalid_type_error: 'Vui lòng nhập mức lương bằng số hợp lệ.',
+    })
+    .min(1000000, 'Mức lương cơ bản tối thiểu phải từ 1.000.000 ₫ trở lên.'),
+  allowanceAmount: z
+    .number({
+      required_error: 'Vui lòng nhập số tiền phụ cấp hợp lệ.',
+      invalid_type_error: 'Vui lòng nhập số tiền phụ cấp hợp lệ.',
+    })
+    .min(0, 'Số tiền phụ cấp không được là số âm.'),
+  allowanceDescription: z.string().optional(),
+  expectedStartDate: z
+    .string({
+      required_error: 'Vui lòng chọn ngày dự kiến nhận việc của ứng viên.',
+      invalid_type_error: 'Ngày dự kiến nhận việc không hợp lệ.',
+    })
+    .min(1, 'Vui lòng chọn ngày dự kiến nhận việc của ứng viên.'),
+  responseDeadline: z
+    .string({
+      required_error: 'Vui lòng chọn hạn chót phản hồi đề nghị tuyển dụng.',
+      invalid_type_error: 'Hạn chót phản hồi không hợp lệ.',
+    })
+    .min(1, 'Vui lòng chọn hạn chót phản hồi đề nghị tuyển dụng.'),
+  outOfRangeReason: z.string().optional(),
+  additionalNotes: z.string().optional(),
+  sendEmailToCandidate: z.boolean().optional(),
+});
+
+/**
+ * Kiểu dữ liệu các trường trong biểu mẫu được tự động sinh (inferred) từ Zod Schema
+ * Tránh hoàn toàn lỗi lệch kiểu (type mismatch) giữa form values và zodResolver
+ */
+export type OfferFormValues = z.infer<typeof offerFormSchema>;
+
+/**
+ * Thông tin bản ghi đề nghị tuyển dụng đã được lưu trữ trong hệ thống
+ */
+export interface OfferRecord {
+  offerId: string;
+  offerCode: string;
+  candidateId: string;
+  candidateName: string;
+  candidateCode?: string;
+  candidateEmail?: string;
+  candidatePhoneNumber?: string;
   jobTitle: string;
   positionId?: string;
+  jobLevel?: string;
+  departmentName?: string;
   offeredSalary: number;
   allowanceAmount: number;
   allowanceDescription?: string;
+  totalMonthlyCompensation: number;
   expectedStartDate: string;
   responseDeadline: string;
   outOfRangeReason?: string;
+  isSalaryOutOfRange: boolean;
+  salaryComparisonStatus: SalaryComparisonStatus;
+  status: OfferStatus;
   additionalNotes?: string;
-  sendEmailToCandidate?: boolean;
+  sendEmailToCandidate: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: string;
+}
+
+/**
+ * Thông tin kiểm tra xung đột đề nghị tuyển dụng đang còn hiệu lực
+ */
+export interface ActiveOfferConflict {
+  hasActiveOffer: boolean;
+  activeOffer?: OfferRecord;
+  conflictMessage?: string;
+}
+
+/**
+ * Cấu trúc nội dung chuẩn bị cho bản xem trước thư mời nhận việc (Offer Letter Preview)
+ */
+export interface OfferPreviewContent {
+  letterTitle: string;
+  letterReferenceNumber: string;
+  issuedDateFormatted: string;
+  companyName: string;
+  companyAddress: string;
+  candidateName: string;
+  candidateCode?: string;
+  candidateEmail?: string;
+  candidatePhoneNumber?: string;
+  jobTitle: string;
+  jobLevel?: string;
+  departmentName?: string;
+  offeredSalaryFormatted: string;
+  offeredSalaryInWords: string;
+  allowanceAmountFormatted: string;
+  allowanceDescription?: string;
+  totalMonthlyCompensationFormatted: string;
+  standardSalaryRangeFormatted: string;
+  isSalaryOutOfRange: boolean;
+  outOfRangeReason?: string;
+  expectedStartDateFormatted: string;
+  responseDeadlineFormatted: string;
+  additionalNotes?: string;
 }
 
 /**
@@ -79,10 +197,13 @@ export interface OfferDraftFormProps {
   initialOutOfRangeReason?: string;
   initialAdditionalNotes?: string;
   availablePositions?: JobPositionOption[];
+  existingActiveOffer?: OfferRecord | null;
   isSubmitting?: boolean;
   isSavingDraft?: boolean;
   onSubmitOffer?: (offerFormValues: OfferFormValues) => Promise<void> | void;
-  onSaveDraft?: (offerFormValues: OfferFormValues) => Promise<void> | void;
+  onSaveDraft?: (offerFormValues: Partial<OfferFormValues>) => Promise<void> | void;
+  onPreviewOffer?: (offerFormValues: OfferFormValues) => void;
+  onSubmitSuccess?: (offerRecord: OfferRecord) => void;
   onCancel?: () => void;
   containerClassName?: string;
 }

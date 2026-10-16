@@ -3,11 +3,13 @@
  * Jira Subtask: TKNHTTDNB1-491 - Thiết kế biểu mẫu soạn đề nghị tuyển dụng (Story TKNHTTDNB1-71)
  */
 
-import { z } from 'zod';
-import type {
-  StandardSalaryRange,
-  SalaryComparisonResult,
-  JobPositionOption,
+import { z } from 'zod/v3';
+import {
+  offerFormSchema,
+  type OfferFormValues,
+  type StandardSalaryRange,
+  type SalaryComparisonResult,
+  type JobPositionOption,
 } from '../types/offer';
 
 /**
@@ -213,65 +215,207 @@ export const evaluateSalaryAgainstRange = (
 };
 
 /**
+ * Base schema cho biểu mẫu đề nghị tuyển dụng khớp 100% với OfferFormValues
+ */
+export const offerFormBaseSchema = offerFormSchema;
+export type OfferFormSchemaType = OfferFormValues;
+
+/**
  * Xây dựng Zod validation schema động cho biểu mẫu đề nghị tuyển dụng
  * Khi isSalaryOutOfRange = true, trường outOfRangeReason được chuyển thành bắt buộc
  */
 export const createOfferFormValidationSchema = (isSalaryOutOfRange: boolean) => {
-  return z
-    .object({
-      jobTitle: z
-        .string()
-        .trim()
-        .min(1, 'Vui lòng chọn hoặc nhập chức danh tuyển dụng.'),
-      positionId: z.string().optional(),
-      offeredSalary: z.coerce
-        .number({
-          invalid_type_error: 'Vui lòng nhập mức lương bằng số hợp lệ.',
-        })
-        .min(1000000, 'Mức lương cơ bản tối thiểu phải từ 1.000.000 ₫ trở lên.'),
-      allowanceAmount: z.coerce
-        .number({
-          invalid_type_error: 'Vui lòng nhập số tiền phụ cấp hợp lệ.',
-        })
-        .min(0, 'Số tiền phụ cấp không được là số âm.')
-        .default(0),
-      allowanceDescription: z.string().optional(),
-      expectedStartDate: z
-        .string()
-        .min(1, 'Vui lòng chọn ngày dự kiến nhận việc của ứng viên.'),
-      responseDeadline: z
-        .string()
-        .min(1, 'Vui lòng chọn hạn chót phản hồi đề nghị tuyển dụng.'),
-      outOfRangeReason: isSalaryOutOfRange
-        ? z
-            .string({
-              required_error: 'Bắt buộc nhập lý do vượt khung dải lương chuẩn.',
-            })
-            .trim()
-            .min(
-              10,
-              'Mức lương nằm ngoài dải chuẩn. Vui lòng nhập lý do giải trình chi tiết (tối thiểu 10 ký tự).'
-            )
-        : z.string().optional(),
-      additionalNotes: z.string().optional(),
-      sendEmailToCandidate: z.boolean().optional(),
-    })
-    .superRefine((formDataValues, refinementContext) => {
-      // Logic kiểm tra tính hợp lệ về mốc thời gian: Hạn phản hồi không được muộn hơn ngày nhận việc
-      if (
-        formDataValues.expectedStartDate &&
-        formDataValues.responseDeadline
-      ) {
-        if (
-          formDataValues.responseDeadline > formDataValues.expectedStartDate
-        ) {
-          refinementContext.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ['responseDeadline'],
-            message:
-              'Hạn phản hồi đề nghị phải diễn ra trước hoặc cùng ngày dự kiến nhận việc.',
-          });
-        }
+  return offerFormBaseSchema.superRefine((formDataValues, refinementContext) => {
+    // 1. Kiểm tra lý do vượt khung khi lương ngoài dải chuẩn
+    if (isSalaryOutOfRange) {
+      const trimmedReason = formDataValues.outOfRangeReason?.trim() || '';
+      if (trimmedReason.length < 10) {
+        refinementContext.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['outOfRangeReason'],
+          message:
+            'Mức lương nằm ngoài dải chuẩn. Vui lòng nhập lý do giải trình chi tiết (tối thiểu 10 ký tự).',
+        });
       }
-    });
+    }
+
+    // 2. Logic kiểm tra tính hợp lệ về mốc thời gian: Hạn phản hồi không được muộn hơn ngày nhận việc
+    if (
+      formDataValues.expectedStartDate &&
+      formDataValues.responseDeadline
+    ) {
+      if (
+        formDataValues.responseDeadline > formDataValues.expectedStartDate
+      ) {
+        refinementContext.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['responseDeadline'],
+          message:
+            'Hạn phản hồi đề nghị phải diễn ra trước hoặc cùng ngày dự kiến nhận việc.',
+        });
+      }
+    }
+  });
 };
+
+/**
+ * Định dạng chuỗi ngày YYYY-MM-DD sang định dạng ngày Việt Nam DD/MM/YYYY
+ */
+export const formatDateVietnamese = (dateString?: string): string => {
+  if (!dateString) return 'Chưa xác định';
+  const parts = dateString.split('-');
+  if (parts.length === 3) {
+    const [year, month, day] = parts;
+    return `${day}/${month}/${year}`;
+  }
+  return dateString;
+};
+
+/**
+ * Chuyển đổi số tiền VNĐ thành văn bản đọc bằng chữ cơ bản
+ */
+export const formatVndWords = (amountNumber?: number): string => {
+  if (!amountNumber || amountNumber <= 0 || Number.isNaN(amountNumber)) {
+    return 'Không đồng';
+  }
+
+  // Đọc các mốc thông dụng trong hợp đồng tuyển dụng
+  const billions = Math.floor(amountNumber / 1000000000);
+  const remainderAfterBillions = amountNumber % 1000000000;
+  const millions = Math.floor(remainderAfterBillions / 1000000);
+  const remainderAfterMillions = remainderAfterBillions % 1000000;
+  const thousands = Math.floor(remainderAfterMillions / 1000);
+
+  const textSegments: string[] = [];
+
+  if (billions > 0) {
+    textSegments.push(`${billions} tỷ`);
+  }
+  if (millions > 0) {
+    textSegments.push(`${millions} triệu`);
+  }
+  if (thousands > 0) {
+    textSegments.push(`${thousands} nghìn`);
+  }
+
+  if (textSegments.length === 0) {
+    return `${amountNumber.toLocaleString('vi-VN')} đồng chẵn`;
+  }
+
+  return `${textSegments.join(' ')} đồng chẵn`;
+};
+
+/**
+ * Tạo dữ liệu đầy đủ cho bản xem trước Thư mời nhận việc (Offer Letter Preview)
+ */
+export const generateOfferPreviewContent = (
+  formValues: import('../types/offer').OfferFormValues,
+  candidateDetails: {
+    candidateName?: string;
+    candidateCode?: string;
+    candidateEmail?: string;
+    candidatePhoneNumber?: string;
+  },
+  positionOption?: import('../types/offer').JobPositionOption
+): import('../types/offer').OfferPreviewContent => {
+  const currentTimestamp = new Date();
+  const dateFormatted = `${currentTimestamp.getDate().toString().padStart(2, '0')}/${(
+    currentTimestamp.getMonth() + 1
+  )
+    .toString()
+    .padStart(2, '0')}/${currentTimestamp.getFullYear()}`;
+
+  const offeredSalary = Number(formValues.offeredSalary) || 0;
+  const allowanceAmount = Number(formValues.allowanceAmount) || 0;
+  const totalMonthlyCompensation = offeredSalary + allowanceAmount;
+
+  const standardSalaryRange = positionOption?.standardSalaryRange;
+  const isSalaryOutOfRange = standardSalaryRange
+    ? offeredSalary < standardSalaryRange.minimumSalary ||
+      offeredSalary > standardSalaryRange.maximumSalary
+    : false;
+
+  const standardSalaryRangeFormatted = standardSalaryRange
+    ? `${formatVndCurrency(standardSalaryRange.minimumSalary)} – ${formatVndCurrency(
+        standardSalaryRange.maximumSalary
+      )}`
+    : 'Chưa có dải lương chuẩn';
+
+  const candidateName = candidateDetails.candidateName || 'Ứng viên tiềm năng';
+
+  return {
+    letterTitle: 'THƯ MỜI NHẬN VIỆC (JOB OFFER LETTER)',
+    letterReferenceNumber: `OFF-${currentTimestamp.getFullYear()}-${Math.floor(
+      1000 + Math.random() * 9000
+    )}`,
+    issuedDateFormatted: dateFormatted,
+    companyName: 'CÔNG TY CỔ PHẦN CÔNG NGHỆ TTCS & HỆ THỐNG TUYỂN DỤNG NỘI BỘ',
+    companyAddress: 'Tầng 12, Tòa nhà Công Nghệ Cao, Quận Cầu Giấy, Hà Nội, Việt Nam',
+    candidateName,
+    candidateCode: candidateDetails.candidateCode,
+    candidateEmail: candidateDetails.candidateEmail || 'chua-co-email@example.com',
+    candidatePhoneNumber: candidateDetails.candidatePhoneNumber || 'Chưa cập nhật',
+    jobTitle: formValues.jobTitle || positionOption?.positionTitle || 'Chức danh chưa đặt',
+    jobLevel: positionOption?.jobLevel || 'Chuyên viên',
+    departmentName: positionOption?.departmentName || 'Khối Kỹ Thuật & Công Nghệ',
+    offeredSalaryFormatted: formatVndCurrency(offeredSalary),
+    offeredSalaryInWords: formatVndWords(offeredSalary),
+    allowanceAmountFormatted: formatVndCurrency(allowanceAmount),
+    allowanceDescription:
+      formValues.allowanceDescription || 'Phụ cấp ăn trưa và gửi xe theo chính sách công ty',
+    totalMonthlyCompensationFormatted: formatVndCurrency(totalMonthlyCompensation),
+    standardSalaryRangeFormatted,
+    isSalaryOutOfRange,
+    outOfRangeReason: formValues.outOfRangeReason,
+    expectedStartDateFormatted: formatDateVietnamese(formValues.expectedStartDate),
+    responseDeadlineFormatted: formatDateVietnamese(formValues.responseDeadline),
+    additionalNotes: formValues.additionalNotes,
+  };
+};
+
+/**
+ * Tạo một bản ghi OfferRecord hoàn chỉnh từ dữ liệu form và thông tin ứng viên
+ */
+export const createOfferRecordFromValues = (
+  candidateId: string,
+  candidateName: string,
+  candidateCode: string | undefined,
+  candidateEmail: string | undefined,
+  candidatePhoneNumber: string | undefined,
+  formDataValues: import('../types/offer').OfferFormValues,
+  isSalaryOutOfRange: boolean,
+  salaryComparisonStatus: import('../types/offer').SalaryComparisonStatus,
+  status: import('../types/offer').OfferStatus = 'PENDING_APPROVAL'
+): import('../types/offer').OfferRecord => {
+  const currentTimestamp = new Date().toISOString();
+  const offeredSalary = Number(formDataValues.offeredSalary) || 0;
+  const allowanceAmount = Number(formDataValues.allowanceAmount) || 0;
+
+  return {
+    offerId: `offer-${Date.now()}`,
+    offerCode: `OFF-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`,
+    candidateId,
+    candidateName,
+    candidateCode,
+    candidateEmail,
+    candidatePhoneNumber,
+    jobTitle: formDataValues.jobTitle,
+    positionId: formDataValues.positionId,
+    offeredSalary,
+    allowanceAmount,
+    allowanceDescription: formDataValues.allowanceDescription || '',
+    totalMonthlyCompensation: offeredSalary + allowanceAmount,
+    expectedStartDate: formDataValues.expectedStartDate,
+    responseDeadline: formDataValues.responseDeadline,
+    outOfRangeReason: formDataValues.outOfRangeReason || '',
+    isSalaryOutOfRange,
+    salaryComparisonStatus,
+    status,
+    additionalNotes: formDataValues.additionalNotes || '',
+    sendEmailToCandidate: formDataValues.sendEmailToCandidate ?? true,
+    createdAt: currentTimestamp,
+    updatedAt: currentTimestamp,
+  };
+};
+
+

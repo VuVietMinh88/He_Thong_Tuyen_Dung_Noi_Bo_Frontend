@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useContext } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -17,12 +17,17 @@ import {
   TrendingDown,
   Info,
   Sparkles,
+  Eye,
+  ShieldAlert,
 } from 'lucide-react';
 import type {
   OfferDraftFormProps,
   OfferFormValues,
   JobPositionOption,
   StandardSalaryRange,
+  ActiveOfferConflict,
+  OfferPreviewContent,
+  OfferRecord,
 } from '../../types/offer';
 import {
   DEFAULT_STANDARD_POSITIONS,
@@ -31,11 +36,16 @@ import {
   calculateTotalMonthlyPackage,
   createOfferFormValidationSchema,
   calculateDefaultFutureDate,
+  generateOfferPreviewContent,
+  createOfferRecordFromValues,
 } from '../../utils/offerHelper';
+import { offerService } from '../../services/offerService';
+import { OfferPreviewModal } from './OfferPreviewModal';
+import { ToastContext } from '../notifications/ToastContext';
 
 /**
  * Biểu mẫu soạn thảo đề nghị tuyển dụng (Offer Letter)
- * Jira Subtask: TKNHTTDNB1-491 (Story TKNHTTDNB1-71)
+ * Jira Subtask: TKNHTTDNB1-491 & TKNHTTDNB1-492 (Story TKNHTTDNB1-71)
  */
 export const OfferDraftForm: React.FC<OfferDraftFormProps> = ({
   candidateId,
@@ -54,13 +64,32 @@ export const OfferDraftForm: React.FC<OfferDraftFormProps> = ({
   initialOutOfRangeReason = '',
   initialAdditionalNotes = '',
   availablePositions = DEFAULT_STANDARD_POSITIONS,
+  existingActiveOffer = null,
   isSubmitting = false,
   isSavingDraft = false,
   onSubmitOffer,
   onSaveDraft,
+  onPreviewOffer,
+  onSubmitSuccess,
   onCancel,
   containerClassName = '',
 }) => {
+  const toastContext = useContext(ToastContext);
+  const toast = useMemo(() => {
+    if (toastContext) {
+      return toastContext;
+    }
+    return {
+      notify: () => {},
+      addToast: () => {},
+      removeToast: () => {},
+      success: () => {},
+      error: () => {},
+      warning: () => {},
+      info: () => {},
+    };
+  }, [toastContext]);
+
   // 1. Khởi tạo chức danh và dải lương chuẩn ban đầu
   const initialSelectedPosition = useMemo(() => {
     if (initialPositionId) {
@@ -86,6 +115,48 @@ export const OfferDraftForm: React.FC<OfferDraftFormProps> = ({
   const [selectedPositionId, setSelectedPositionId] = useState<string>(
     initialSelectedPosition ? initialSelectedPosition.positionId : ''
   );
+
+  // Trạng thái modal xem trước thư offer
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState<boolean>(false);
+  const [previewContentData, setPreviewContentData] = useState<OfferPreviewContent | null>(null);
+
+  // Trạng thái loading cục bộ khi người dùng thao tác
+  const [isLocalSubmitting, setIsLocalSubmitting] = useState<boolean>(false);
+  const [isLocalSavingDraft, setIsLocalSavingDraft] = useState<boolean>(false);
+
+  // Trạng thái kiểm tra trùng lặp offer còn hiệu lực
+  const [activeOfferConflict, setActiveOfferConflict] = useState<ActiveOfferConflict | null>(() => {
+    if (existingActiveOffer) {
+      return {
+        hasActiveOffer: true,
+        activeOffer: existingActiveOffer,
+        conflictMessage: `Ứng viên này đã có một đề nghị tuyển dụng đang còn hiệu lực (${existingActiveOffer.offerCode} - ${existingActiveOffer.jobTitle}).`,
+      };
+    }
+    return null;
+  });
+
+  // Tự động kiểm tra xung đột offer khi candidateId thay đổi
+  useEffect(() => {
+    let isCurrentRequest = true;
+
+    if (candidateId && !existingActiveOffer) {
+      offerService
+        .checkActiveOfferConflict(candidateId)
+        .then((conflictCheckResult) => {
+          if (isCurrentRequest && conflictCheckResult.hasActiveOffer) {
+            setActiveOfferConflict(conflictCheckResult);
+          }
+        })
+        .catch(() => {
+          // Bỏ qua lỗi mạng trong background check để không chặn luồng soạn thảo ban đầu
+        });
+    }
+
+    return () => {
+      isCurrentRequest = false;
+    };
+  }, [candidateId, existingActiveOffer]);
 
   // Lấy dải lương chuẩn của chức danh đang được lựa chọn
   const activeStandardSalaryRange: StandardSalaryRange | undefined = useMemo(() => {
@@ -125,6 +196,7 @@ export const OfferDraftForm: React.FC<OfferDraftFormProps> = ({
     handleSubmit,
     control,
     setValue,
+    getValues,
     trigger,
     formState: { errors },
   } = useForm<OfferFormValues>({
@@ -233,34 +305,146 @@ export const OfferDraftForm: React.FC<OfferDraftFormProps> = ({
     });
   };
 
-  // Xử lý gửi biểu mẫu đề nghị tuyển dụng
-  const handleFormSubmit = async (formDataValues: OfferFormValues) => {
-    if (onSubmitOffer) {
-      await onSubmitOffer(formDataValues);
+  // 3. XỬ LÝ HÀNH ĐỘNG: LƯU BẢN NHÁP (SAVE DRAFT - AC 1)
+  // Cho phép lưu form mà không cần phải thỏa mãn toàn bộ validation bắt buộc
+  const handleSaveDraft = async () => {
+    try {
+      setIsLocalSavingDraft(true);
+      const currentFormValues = getValues();
+
+      if (onSaveDraft) {
+        await onSaveDraft(currentFormValues);
+      } else {
+        await offerService.saveOfferDraft(
+          candidateId || 'temp-candidate',
+          currentFormValues
+        );
+      }
+
+      toast.success('Đã lưu bản nháp đề nghị tuyển dụng thành công.');
+    } catch (saveError: unknown) {
+      const errorMessage =
+        (saveError as Error)?.message || 'Lỗi khi lưu bản nháp đề nghị tuyển dụng.';
+      toast.error(errorMessage);
+    } finally {
+      setIsLocalSavingDraft(false);
     }
   };
 
-  // Xử lý lưu bản nháp đề nghị tuyển dụng
-  const handleSaveDraft = async () => {
-    if (onSaveDraft) {
-      // Dùng dữ liệu hiện tại trong form mà không chặn validate nghiêm ngặt
-      const currentValues: OfferFormValues = {
-        jobTitle:
-          availablePositions.find(
-            (positionOption: JobPositionOption) =>
-              positionOption.positionId === selectedPositionId
-          )?.positionTitle || '',
-        positionId: selectedPositionId,
-        offeredSalary: Number(watchedOfferedSalary) || 0,
-        allowanceAmount: Number(watchedAllowanceAmount) || 0,
-        expectedStartDate: defaultExpectedStartDate,
-        responseDeadline: defaultResponseDeadline,
-        outOfRangeReason: '',
-        sendEmailToCandidate: false,
-      };
-      await onSaveDraft(currentValues);
+  // 4. XỬ LÝ HÀNH ĐỘNG: XEM TRƯỚC THƯ OFFER (PREVIEW - AC 1)
+  const handleOpenPreviewModal = () => {
+    const currentFormValues = getValues();
+    const currentPosition = availablePositions.find(
+      (positionOption: JobPositionOption) =>
+        positionOption.positionId === selectedPositionId
+    );
+
+    const generatedPreview = generateOfferPreviewContent(
+      currentFormValues,
+      {
+        candidateName,
+        candidateCode,
+        candidateEmail,
+        candidatePhoneNumber,
+      },
+      currentPosition
+    );
+
+    setPreviewContentData(generatedPreview);
+    setIsPreviewModalOpen(true);
+
+    if (onPreviewOffer) {
+      onPreviewOffer(currentFormValues);
     }
   };
+
+  // 5. XỬ LÝ HÀNH ĐỘNG: GỬI DUYỆT ĐỀ NGHỊ (SUBMIT FOR APPROVAL - AC 1 & AC 2)
+  const handleFormSubmit = async (formDataValues: OfferFormValues) => {
+    // Chặn gửi duyệt ngay nếu ứng viên này đã có một offer khác đang còn hiệu lực
+    if (activeOfferConflict?.hasActiveOffer) {
+      toast.error(
+        activeOfferConflict.conflictMessage ||
+          'Không thể gửi duyệt: Ứng viên này đã có một đề nghị tuyển dụng đang còn hiệu lực.'
+      );
+      return;
+    }
+
+    try {
+      setIsLocalSubmitting(true);
+
+      // Kiểm tra API backend xem có xung đột mới phát sinh hay không
+      if (candidateId) {
+        const conflictCheckResult = await offerService.checkActiveOfferConflict(candidateId);
+        if (conflictCheckResult.hasActiveOffer) {
+          setActiveOfferConflict(conflictCheckResult);
+          toast.error(
+            conflictCheckResult.conflictMessage ||
+              'Ứng viên đã có đề nghị tuyển dụng đang còn hiệu lực tại cùng thời điểm.'
+          );
+          return;
+        }
+      }
+
+      let submittedOfferRecord: OfferRecord;
+
+      if (onSubmitOffer) {
+        await onSubmitOffer(formDataValues);
+        submittedOfferRecord = createOfferRecordFromValues(
+          candidateId || 'cand-001',
+          candidateName,
+          candidateCode,
+          candidateEmail,
+          candidatePhoneNumber,
+          formDataValues,
+          isSalaryOutOfRange,
+          salaryComparison.comparisonStatus
+        );
+      } else {
+        submittedOfferRecord = await offerService.submitOfferForApproval(
+          candidateId || 'temp-candidate',
+          formDataValues
+        );
+      }
+
+      toast.success(
+        `Đã gửi duyệt đề nghị tuyển dụng cho ứng viên ${candidateName} thành công.`
+      );
+
+      // Đóng modal xem trước nếu đang mở
+      setIsPreviewModalOpen(false);
+
+      if (onSubmitSuccess) {
+        onSubmitSuccess(submittedOfferRecord);
+      }
+    } catch (submissionError: unknown) {
+      // Xử lý lỗi API triệt để: không nuốt lỗi, bắt và hiển thị thông báo
+      const responseError = submissionError as {
+        response?: { status?: number; data?: { message?: string } };
+        statusCode?: number;
+        message?: string;
+      };
+
+      const statusCode = responseError.response?.status || responseError.statusCode;
+      const errorMessage =
+        responseError.response?.data?.message ||
+        responseError.message ||
+        'Đã xảy ra lỗi khi gửi duyệt đề nghị tuyển dụng.';
+
+      if (statusCode === 409) {
+        setActiveOfferConflict({
+          hasActiveOffer: true,
+          conflictMessage: errorMessage,
+        });
+      }
+
+      toast.error(errorMessage);
+    } finally {
+      setIsLocalSubmitting(false);
+    }
+  };
+
+  const isFormSubmitting = isSubmitting || isLocalSubmitting;
+  const isFormSavingDraft = isSavingDraft || isLocalSavingDraft;
 
   return (
     <div
@@ -321,6 +505,41 @@ export const OfferDraftForm: React.FC<OfferDraftFormProps> = ({
           </div>
         </div>
       </div>
+
+      {/* CẢNH BÁO TRÙNG OFFER CÒN HIỆU LỰC (AC 2) */}
+      {activeOfferConflict?.hasActiveOffer && (
+        <div
+          data-testid="active-offer-conflict-alert"
+          className="mx-6 mt-6 rounded-xl border border-rose-300 bg-rose-50/90 p-4 text-rose-900 dark:border-rose-900/70 dark:bg-rose-950/40 dark:text-rose-200 animate-in fade-in duration-200"
+        >
+          <div className="flex items-start gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-rose-200 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300">
+              <ShieldAlert className="h-5 w-5" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-bold uppercase tracking-wide">
+                  Cảnh báo: Ứng viên đang có đề nghị tuyển dụng còn hiệu lực
+                </h4>
+                <span className="rounded-md bg-rose-600 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-2xs">
+                  Không thể gửi duyệt
+                </span>
+              </div>
+              <p className="text-xs leading-relaxed">
+                {activeOfferConflict.conflictMessage ||
+                  'Ứng viên đã có một offer đang trong quy trình phê duyệt hoặc đã gửi. Vui lòng hủy hoặc kết thúc offer cũ trước khi gửi đề xuất mới.'}
+              </p>
+              {activeOfferConflict.activeOffer && (
+                <div className="mt-2 text-[11px] text-rose-800 dark:text-rose-300 font-semibold bg-white/60 dark:bg-black/20 p-2 rounded-lg border border-rose-200 dark:border-rose-900/50">
+                  Mã offer hiện tại: <strong>{activeOfferConflict.activeOffer.offerCode}</strong> •
+                  Vị trí: <strong>{activeOfferConflict.activeOffer.jobTitle}</strong> •
+                  Trạng thái: <strong>{activeOfferConflict.activeOffer.status}</strong>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Nội dung form */}
       <form onSubmit={handleSubmit(handleFormSubmit)} className="p-6 space-y-6">
@@ -819,7 +1038,7 @@ export const OfferDraftForm: React.FC<OfferDraftFormProps> = ({
           </div>
         </div>
 
-        {/* NÚT THAO TÁC BIỂU MẪU */}
+        {/* NÚT THAO TÁC BIỂU MẪU (AC 1) */}
         <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-3 border-t border-gray-100 dark:border-gray-800">
           {onCancel && (
             <button
@@ -833,34 +1052,56 @@ export const OfferDraftForm: React.FC<OfferDraftFormProps> = ({
             </button>
           )}
 
-          {onSaveDraft && (
-            <button
-              type="button"
-              data-testid="btn-save-draft-offer"
-              disabled={isSavingDraft || isSubmitting}
-              onClick={handleSaveDraft}
-              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-xs font-bold text-indigo-700 shadow-2xs hover:bg-indigo-100 dark:border-indigo-900/50 dark:bg-indigo-950/40 dark:text-indigo-300 cursor-pointer disabled:opacity-50"
-            >
-              <Save className="h-4 w-4" />
-              <span>{isSavingDraft ? 'Đang Lưu Nháp...' : 'Lưu Bản Nháp'}</span>
-            </button>
-          )}
+          {/* 1. NÚT XEM TRƯỚC THƯ OFFER (AC 1) */}
+          <button
+            type="button"
+            data-testid="btn-preview-offer"
+            onClick={handleOpenPreviewModal}
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/80 px-4 py-2.5 text-xs font-bold text-indigo-700 shadow-2xs hover:bg-indigo-100 hover:border-indigo-300 dark:border-indigo-900/50 dark:bg-indigo-950/40 dark:text-indigo-300 cursor-pointer"
+          >
+            <Eye className="h-4 w-4" />
+            <span>Xem Trước (Preview)</span>
+          </button>
 
+          {/* 2. NÚT LƯU BẢN NHÁP (AC 1) */}
+          <button
+            type="button"
+            data-testid="btn-save-draft-offer"
+            disabled={isFormSavingDraft || isFormSubmitting}
+            onClick={handleSaveDraft}
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-300 cursor-pointer disabled:opacity-50"
+          >
+            <Save className="h-4 w-4" />
+            <span>{isFormSavingDraft ? 'Đang Lưu Nháp...' : 'Lưu Bản Nháp'}</span>
+          </button>
+
+          {/* 3. NÚT GỬI DUYỆT (AC 1) */}
           <button
             type="submit"
             data-testid="btn-submit-offer"
-            disabled={isSubmitting || isSavingDraft}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-2.5 text-xs font-bold text-white shadow-md hover:bg-emerald-700 ring-2 ring-emerald-500/20 active:scale-98 cursor-pointer disabled:opacity-50"
+            disabled={isFormSubmitting || isFormSavingDraft || !!activeOfferConflict?.hasActiveOffer}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-2.5 text-xs font-bold text-white shadow-md hover:bg-emerald-700 ring-2 ring-emerald-500/20 active:scale-98 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send className="h-4 w-4" />
             <span>
-              {isSubmitting
-                ? 'Đang Khởi Tạo Đề Nghị...'
-                : 'Xác Nhận & Soạn Đề Nghị Tuyển Dụng'}
+              {isFormSubmitting
+                ? 'Đang Gửi Duyệt...'
+                : 'Gửi Duyệt Đề Nghị (Submit)'}
             </span>
           </button>
         </div>
       </form>
+
+      {/* MODAL XEM TRƯỚC THƯ OFFER (AC 1) */}
+      {isPreviewModalOpen && previewContentData && (
+        <OfferPreviewModal
+          isOpen={isPreviewModalOpen}
+          onClose={() => setIsPreviewModalOpen(false)}
+          previewContent={previewContentData}
+          onConfirmSubmit={handleSubmit(handleFormSubmit)}
+          isSubmitting={isFormSubmitting}
+        />
+      )}
     </div>
   );
 };
