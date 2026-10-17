@@ -41,6 +41,7 @@ describe('offerService.respondOffer', () => {
     expect(post).toHaveBeenCalledWith('/offers/offer-123/respond', {
       decision: 'ACCEPT',
     });
+
     expect(moveCandidate).toHaveBeenCalledWith('candidate-456', {
       applicationId: 'application-789',
       toStage: 'HIRED',
@@ -50,6 +51,41 @@ describe('offerService.respondOffer', () => {
       offer: savedOffer,
       pipelineStage: 'HIRED',
       pipelineSynced: true,
+    });
+  });
+
+  describe('offerService.createCounterOffer', () => {
+    it('creates a replacement offer linked to its source offer', async () => {
+      const post = vi.spyOn(axiosClient, 'post').mockResolvedValueOnce({ data: savedOffer });
+      const request = {
+        jobTitle: 'Frontend Developer',
+        offeredSalary: 35_000_000,
+        allowanceAmount: 1_000_000,
+        expectedStartDate: '2026-11-20',
+        responseDeadline: '2026-11-10',
+        sendEmailToCandidate: true,
+      };
+
+      await expect(
+        offerService.createCounterOffer('offer-source', request),
+      ).resolves.toEqual(savedOffer);
+      expect(post).toHaveBeenCalledWith('/offers/offer-source/counter-offer', request);
+    });
+
+    it('validates counter-offer data before making the API request', async () => {
+      const post = vi.spyOn(axiosClient, 'post');
+
+      await expect(
+        offerService.createCounterOffer('offer-source', {
+          jobTitle: 'Frontend Developer',
+          offeredSalary: 0,
+          allowanceAmount: 0,
+          expectedStartDate: '2026-11-20',
+          responseDeadline: '2026-11-10',
+          sendEmailToCandidate: true,
+        }),
+      ).rejects.toThrow('Vui lòng kiểm tra chức danh và mức lương của offer thay thế.');
+      expect(post).not.toHaveBeenCalled();
     });
   });
 

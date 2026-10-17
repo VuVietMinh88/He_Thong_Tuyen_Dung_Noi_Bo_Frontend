@@ -48,6 +48,19 @@ export interface CandidateOfferIdentity {
   applicationId?: string;
 }
 
+export interface CounterOfferRequest {
+  jobTitle: string;
+  positionId?: string;
+  offeredSalary: number;
+  allowanceAmount: number;
+  allowanceDescription?: string;
+  expectedStartDate: string;
+  responseDeadline: string;
+  outOfRangeReason?: string;
+  additionalNotes?: string;
+  sendEmailToCandidate: boolean;
+}
+
 export interface OfferResponseResult {
   offer: OfferRecord;
   pipelineStage: CandidateStage;
@@ -131,6 +144,36 @@ const persistOffers = (offersList: OfferRecord[]): void => {
 };
 
 export const offerService = {
+  /**
+   * Tạo và gửi phiên bản offer thay thế dựa trên offer gốc đã được ứng viên phản hồi.
+   */
+  async createCounterOffer(
+    originalOfferId: string,
+    request: CounterOfferRequest,
+  ): Promise<OfferRecord> {
+    if (!originalOfferId.trim()) {
+      throw new Error('Không tìm thấy mã offer gốc để tạo offer thay thế.');
+    }
+    if (!request.jobTitle.trim() || request.offeredSalary < 1_000_000) {
+      throw new Error('Vui lòng kiểm tra chức danh và mức lương của offer thay thế.');
+    }
+    if (!request.expectedStartDate || !request.responseDeadline) {
+      throw new Error('Vui lòng nhập ngày nhận việc và hạn phản hồi.');
+    }
+
+    try {
+      const response = await axiosClient.post<OfferRecord>(
+        `/offers/${encodeURIComponent(originalOfferId)}/counter-offer`,
+        request,
+      );
+      return response.data;
+    } catch (error: unknown) {
+      throw new Error(
+        getResponseErrorMessage(error, 'Không thể tạo offer thay thế. Vui lòng thử lại.'),
+      );
+    }
+  },
+
   /**
    * Gửi quyết định của ứng viên và đồng bộ stage pipeline sau khi Offer được lưu thành công.
    */

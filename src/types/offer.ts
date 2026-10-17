@@ -119,6 +119,7 @@ export interface OfferRecord {
   candidateCode?: string;
   candidateEmail?: string;
   candidatePhoneNumber?: string;
+  jobPostingId?: string;
   jobTitle: string;
   positionId?: string;
   jobLevel?: string;

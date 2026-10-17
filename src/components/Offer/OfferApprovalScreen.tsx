@@ -35,6 +35,7 @@ import { offerService } from '../../services/offerService';
 import { OfferApprovalModal } from './OfferApprovalModal';
 import { OfferPreviewModal } from './OfferPreviewModal';
 import { OfferApprovalHistoryTimeline } from './OfferApprovalHistoryTimeline';
+import { OfferRecoveryPanel } from './OfferRecoveryPanel';
 import { ToastContext } from '../notifications/ToastContext';
 
 /**
@@ -388,6 +389,13 @@ export const OfferApprovalScreen: React.FC<OfferApprovalScreenProps> = ({
           </div>
         </div>
       </div>
+
+      {status === 'DECLINED' && (
+        <OfferRecoveryPanel
+          offer={currentOfferData}
+          jobId={currentOfferData.jobPostingId}
+        />
+      )}
 
       {/* 2. CHUỖI CẤP DUYỆT (APPROVAL CHAIN / WORKFLOW UI - AC 2) */}
       <div
