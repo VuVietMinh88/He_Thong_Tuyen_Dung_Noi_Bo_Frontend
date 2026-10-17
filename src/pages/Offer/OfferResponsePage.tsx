@@ -1,8 +1,7 @@
-import { useEffect, useState, type FC, type FormEvent } from 'react';
-import {
-  AlertCircle,
-  ArrowRight,
-  BriefcaseBusiness,
+  import { useEffect, useState, type FC } from 'react';
+  import {
+    AlertCircle,
+    BriefcaseBusiness,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -12,26 +11,25 @@ import {
   Send,
   ShieldCheck,
   Wallet,
-  X,
   XCircle,
 } from 'lucide-react';
 import type { OfferRecord, OfferStatus } from '../../types/offer';
 import { formatVndCurrency } from '../../utils/offerHelper';
 import {
   offerService,
+  type OfferNegotiation,
   type OfferResponsePayload,
 } from '../../services/offerService';
 import { toast } from '../../components/notifications';
+import { DeclineModal } from '../../components/Offer/DeclineModal';
+import { NegotiateModal } from '../../components/Offer/NegotiateModal';
+
+export type { OfferNegotiation } from '../../services/offerService';
 
 export interface OfferResponseDetails extends OfferRecord {
   applicationId?: string;
   workLocation?: string;
   benefits?: string[];
-}
-
-export interface OfferNegotiation {
-  requestedSalary?: number;
-  requestedTerms?: string;
 }
 
 export interface OfferResponsePageProps {
@@ -99,9 +97,6 @@ export const OfferResponsePage: FC<OfferResponsePageProps> = ({
 }) => {
   const [now, setNow] = useState(() => new Date());
   const [activeAction, setActiveAction] = useState<ResponseAction | null>(null);
-  const [declineReason, setDeclineReason] = useState('');
-  const [requestedSalary, setRequestedSalary] = useState('');
-  const [requestedTerms, setRequestedTerms] = useState('');
   const [formError, setFormError] = useState('');
   const [requestError, setRequestError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -178,14 +173,7 @@ export const OfferResponsePage: FC<OfferResponsePageProps> = ({
     }
   };
 
-  const submitDecline = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const reason = declineReason.trim();
-    if (reason.length < 5) {
-      setFormError('Vui lòng nhập lý do từ chối (tối thiểu 5 ký tự).');
-      return;
-    }
-
+  const submitDecline = async (reason: string) => {
     setIsSubmitting(true);
     setFormError('');
     try {
@@ -211,33 +199,20 @@ export const OfferResponsePage: FC<OfferResponsePageProps> = ({
     }
   };
 
-  const submitNegotiation = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const salary = requestedSalary.trim() ? Number(requestedSalary) : undefined;
-    const terms = requestedTerms.trim();
-    if (salary !== undefined && (!Number.isFinite(salary) || salary < 1_000_000)) {
-      setFormError('Mức lương đề xuất phải từ 1.000.000 ₫ trở lên.');
-      return;
-    }
-    if (salary === undefined && !terms) {
-      setFormError('Vui lòng đề xuất mức lương hoặc điều khoản bạn mong muốn.');
-      return;
-    }
-
+  const submitNegotiation = async (proposal: OfferNegotiation) => {
     setIsSubmitting(true);
     setFormError('');
     try {
-      const proposal: OfferNegotiation = {
-        ...(salary !== undefined ? { requestedSalary: salary } : {}),
-        ...(terms ? { requestedTerms: terms } : {}),
-      };
       if (onNegotiate) {
         await onNegotiate(offer.offerId, proposal);
         setLocalResponse({ offerId: offer.offerId, value: 'negotiated' });
         toast.success('Đã gửi đề xuất thương lượng.');
       } else {
         await submitOfferResponse(
-          { decision: 'NEGOTIATE', ...proposal },
+          {
+            decision: 'NEGOTIATE',
+            ...proposal,
+          },
           'Đã gửi đề xuất thương lượng và cập nhật pipeline.',
         );
       }
@@ -558,129 +533,23 @@ export const OfferResponsePage: FC<OfferResponsePageProps> = ({
         </div>
       </main>
 
-      {activeAction && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !isSubmitting) setActiveAction(null);
-          }}
-        >
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="offer-response-modal-title"
-            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl sm:p-7"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 id="offer-response-modal-title" className="text-xl font-bold text-slate-900">
-                  {activeAction === 'decline' ? 'Từ chối thư mời' : 'Đề xuất thương lượng'}
-                </h2>
-                <p className="mt-1 text-sm leading-5 text-slate-500">
-                  {activeAction === 'decline'
-                    ? 'Chia sẻ lý do để chúng tôi ghi nhận phản hồi của bạn.'
-                    : 'Hãy cho chúng tôi biết mức lương hoặc điều khoản bạn mong muốn.'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveAction(null)}
-                disabled={isSubmitting}
-                aria-label="Đóng"
-                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
-              >
-                <X className="h-5 w-5" aria-hidden="true" />
-              </button>
-            </div>
-
-            {activeAction === 'decline' ? (
-              <form className="mt-5 space-y-4" onSubmit={submitDecline}>
-                <label className="block text-sm font-semibold text-slate-700" htmlFor="decline-reason">
-                  Lý do từ chối <span className="text-rose-600">*</span>
-                  <textarea
-                    id="decline-reason"
-                    value={declineReason}
-                    onChange={(event) => setDeclineReason(event.target.value)}
-                    rows={4}
-                    required
-                    minLength={5}
-                    maxLength={1000}
-                    autoFocus
-                    placeholder="Nhập lý do của bạn..."
-                    className="mt-2 block w-full resize-y rounded-xl border border-slate-300 px-3.5 py-3 text-sm font-normal text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                  />
-                </label>
-                {formError && <p className="text-sm text-rose-700" role="alert">{formError}</p>}
-                <div className="flex justify-end gap-3 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setActiveAction(null)}
-                    disabled={isSubmitting}
-                    className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    Quay lại
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50"
-                  >
-                    {isSubmitting ? 'Đang gửi...' : 'Xác nhận từ chối'}
-                    {!isSubmitting && <ArrowRight className="h-4 w-4" aria-hidden="true" />}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <form className="mt-5 space-y-4" onSubmit={submitNegotiation}>
-                <label className="block text-sm font-semibold text-slate-700" htmlFor="requested-salary">
-                  Mức lương mong muốn (₫ / tháng)
-                  <input
-                    id="requested-salary"
-                    type="number"
-                    min={1_000_000}
-                    step={500_000}
-                    value={requestedSalary}
-                    onChange={(event) => setRequestedSalary(event.target.value)}
-                    autoFocus
-                    placeholder="Ví dụ: 35000000"
-                    className="mt-2 block w-full rounded-xl border border-slate-300 px-3.5 py-3 text-sm font-normal text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                  />
-                </label>
-                <label className="block text-sm font-semibold text-slate-700" htmlFor="requested-terms">
-                  Điều khoản mong muốn
-                  <textarea
-                    id="requested-terms"
-                    value={requestedTerms}
-                    onChange={(event) => setRequestedTerms(event.target.value)}
-                    rows={3}
-                    maxLength={1000}
-                    placeholder="Ví dụ: ngày bắt đầu, chế độ làm việc, phụ cấp..."
-                    className="mt-2 block w-full resize-y rounded-xl border border-slate-300 px-3.5 py-3 text-sm font-normal text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                  />
-                </label>
-                {formError && <p className="text-sm text-rose-700" role="alert">{formError}</p>}
-                <div className="flex justify-end gap-3 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setActiveAction(null)}
-                    disabled={isSubmitting}
-                    className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    Hủy
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
-                  >
-                    {isSubmitting ? 'Đang gửi...' : 'Gửi đề xuất'}
-                    {!isSubmitting && <Send className="h-4 w-4" aria-hidden="true" />}
-                  </button>
-                </div>
-              </form>
-            )}
-          </section>
-        </div>
+      {activeAction === 'decline' && (
+        <DeclineModal
+          isSubmitting={isSubmitting}
+          error={formError}
+          onClose={() => setActiveAction(null)}
+          onSubmit={submitDecline}
+        />
+      )}
+      {activeAction === 'negotiate' && (
+        <NegotiateModal
+          isSubmitting={isSubmitting}
+          error={formError}
+          currentSalary={offer.offeredSalary}
+          currentStartDate={offer.expectedStartDate}
+          onClose={() => setActiveAction(null)}
+          onSubmit={submitNegotiation}
+        />
       )}
     </div>
   );
