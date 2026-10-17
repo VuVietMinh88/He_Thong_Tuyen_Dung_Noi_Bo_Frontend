@@ -60,6 +60,7 @@ export const OfferApprovalModal: React.FC<OfferApprovalModalProps> = ({
     actionMode === 'APPROVE' ? PRESET_COMMENTS.APPROVE[0] : ''
   );
   const [validationErrorMessage, setValidationErrorMessage] = useState<string>('');
+  const [apiErrorMessage, setApiErrorMessage] = useState<string>('');
 
   if (!isOpen) {
     return null;
@@ -108,19 +109,43 @@ export const OfferApprovalModal: React.FC<OfferApprovalModalProps> = ({
   const handleSelectPresetComment = (presetText: string) => {
     setCommentText(presetText);
     setValidationErrorMessage('');
+    setApiErrorMessage('');
   };
 
+  /**
+   * Xử lý xác nhận phê duyệt, từ chối hoặc yêu cầu sửa đổi
+   * Kiểm tra bắt buộc nhập ý kiến đối với Từ chối và Yêu cầu sửa đổi (AC 1)
+   */
   const handleFormSubmission = async (submitEvent: React.FormEvent<HTMLFormElement>) => {
     submitEvent.preventDefault();
 
     const trimmedComment = commentText.trim();
-    if (modalConfiguration.isCommentRequired && trimmedComment.length < 5) {
-      setValidationErrorMessage('Vui lòng nhập lý do/nội dung chi tiết tối thiểu 5 ký tự.');
-      return;
+
+    // 1. Kiểm tra bắt buộc nhập ý kiến (Mandatory Comment Logic - AC 1)
+    if (modalConfiguration.isCommentRequired) {
+      if (!trimmedComment || trimmedComment.length === 0) {
+        setValidationErrorMessage('Ý kiến nhận xét là bắt buộc khi từ chối hoặc yêu cầu sửa đổi.');
+        return;
+      }
+      if (trimmedComment.length < 5) {
+        setValidationErrorMessage('Nội dung ý kiến quá ngắn, vui lòng nhập tối thiểu 5 ký tự.');
+        return;
+      }
     }
 
     setValidationErrorMessage('');
-    await onConfirm(trimmedComment);
+    setApiErrorMessage('');
+
+    // 2. Gọi hàm callback xử lý và bắt lỗi API triệt để (AC 3)
+    try {
+      await onConfirm(trimmedComment);
+    } catch (submissionError: unknown) {
+      const errorMessage =
+        submissionError instanceof Error
+          ? submissionError.message
+          : 'Đã có lỗi xảy ra trong quá trình xử lý phê duyệt.';
+      setApiErrorMessage(errorMessage);
+    }
   };
 
   return (
@@ -246,6 +271,16 @@ export const OfferApprovalModal: React.FC<OfferApprovalModalProps> = ({
               >
                 {validationErrorMessage}
               </p>
+            )}
+
+            {apiErrorMessage && (
+              <div
+                data-testid="error-modal-api"
+                className="mt-2 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 font-medium"
+              >
+                <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
+                <span>{apiErrorMessage}</span>
+              </div>
             )}
           </div>
 
