@@ -17,8 +17,14 @@ import {
 } from 'lucide-react';
 import type { OfferRecord, OfferStatus } from '../../types/offer';
 import { formatVndCurrency } from '../../utils/offerHelper';
+import {
+  offerService,
+  type OfferResponsePayload,
+} from '../../services/offerService';
+import { toast } from '../../components/notifications';
 
 export interface OfferResponseDetails extends OfferRecord {
+  applicationId?: string;
   workLocation?: string;
   benefits?: string[];
 }
@@ -30,9 +36,9 @@ export interface OfferNegotiation {
 
 export interface OfferResponsePageProps {
   offer: OfferResponseDetails;
-  onAccept: (offerId: string) => Promise<void> | void;
-  onDecline: (offerId: string, reason: string) => Promise<void> | void;
-  onNegotiate: (
+  onAccept?: (offerId: string) => Promise<void> | void;
+  onDecline?: (offerId: string, reason: string) => Promise<void> | void;
+  onNegotiate?: (
     offerId: string,
     proposal: OfferNegotiation,
   ) => Promise<void> | void;
@@ -41,7 +47,7 @@ export interface OfferResponsePageProps {
 type ResponseAction = 'decline' | 'negotiate';
 type ResponseState = 'accepted' | 'declined' | 'negotiated' | null;
 
-const respondedStatuses: OfferStatus[] = ['ACCEPTED', 'DECLINED'];
+const respondedStatuses: OfferStatus[] = ['ACCEPTED', 'DECLINED', 'NEGOTIATING'];
 
 const formatDate = (value: string): string => {
   const date = new Date(value);
@@ -75,6 +81,7 @@ const getDeadlineDate = (value: string): Date | null => {
 const statusMessage = (status: OfferStatus): string => {
   if (status === 'ACCEPTED') return 'Bạn đã xác nhận nhận việc.';
   if (status === 'DECLINED') return 'Bạn đã gửi phản hồi từ chối offer này.';
+  if (status === 'NEGOTIATING') return 'Đề xuất thương lượng của bạn đang được xem xét.';
   if (status === 'CANCELLED' || status === 'REJECTED') {
     return 'Offer này không còn khả dụng để phản hồi.';
   }
@@ -122,7 +129,9 @@ export const OfferResponsePage: FC<OfferResponsePageProps> = ({
   const response: ResponseState = respondedStatuses.includes(offer.status)
     ? offer.status === 'ACCEPTED'
       ? 'accepted'
-      : 'declined'
+      : offer.status === 'DECLINED'
+        ? 'declined'
+        : 'negotiated'
     : localResponse?.offerId === offer.offerId
       ? localResponse.value
       : null;
@@ -145,6 +154,30 @@ export const OfferResponsePage: FC<OfferResponsePageProps> = ({
     setActiveAction(action);
   };
 
+  const submitOfferResponse = async (
+    payload: OfferResponsePayload,
+    successMessage: string,
+  ) => {
+    const result = await offerService.respondOffer(offer, payload);
+    setLocalResponse({
+      offerId: offer.offerId,
+      value:
+        payload.decision === 'ACCEPT'
+          ? 'accepted'
+          : payload.decision === 'DECLINE'
+            ? 'declined'
+            : 'negotiated',
+    });
+    if (result.pipelineSynced) {
+      toast.success(successMessage);
+    } else {
+      toast.warning(
+        `Phản hồi offer đã được ghi nhận, nhưng chưa đồng bộ được pipeline (${result.pipelineSyncError ?? 'lỗi không xác định'}). Vui lòng liên hệ bộ phận tuyển dụng.`,
+        7000,
+      );
+    }
+  };
+
   const submitDecline = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const reason = declineReason.trim();
@@ -156,13 +189,23 @@ export const OfferResponsePage: FC<OfferResponsePageProps> = ({
     setIsSubmitting(true);
     setFormError('');
     try {
-      await onDecline(offer.offerId, reason);
-      setLocalResponse({ offerId: offer.offerId, value: 'declined' });
+      if (onDecline) {
+        await onDecline(offer.offerId, reason);
+        setLocalResponse({ offerId: offer.offerId, value: 'declined' });
+        toast.success('Đã gửi phản hồi từ chối offer.');
+      } else {
+        await submitOfferResponse(
+          { decision: 'DECLINE', reason },
+          'Đã gửi phản hồi từ chối offer và cập nhật pipeline.',
+        );
+      }
       setActiveAction(null);
     } catch (error: unknown) {
-      setFormError(
-        error instanceof Error ? error.message : 'Không thể gửi phản hồi. Vui lòng thử lại.',
-      );
+      const message = error instanceof Error
+        ? error.message
+        : 'Không thể gửi phản hồi. Vui lòng thử lại.';
+      setFormError(message);
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -184,16 +227,27 @@ export const OfferResponsePage: FC<OfferResponsePageProps> = ({
     setIsSubmitting(true);
     setFormError('');
     try {
-      await onNegotiate(offer.offerId, {
+      const proposal: OfferNegotiation = {
         ...(salary !== undefined ? { requestedSalary: salary } : {}),
         ...(terms ? { requestedTerms: terms } : {}),
-      });
-      setLocalResponse({ offerId: offer.offerId, value: 'negotiated' });
+      };
+      if (onNegotiate) {
+        await onNegotiate(offer.offerId, proposal);
+        setLocalResponse({ offerId: offer.offerId, value: 'negotiated' });
+        toast.success('Đã gửi đề xuất thương lượng.');
+      } else {
+        await submitOfferResponse(
+          { decision: 'NEGOTIATE', ...proposal },
+          'Đã gửi đề xuất thương lượng và cập nhật pipeline.',
+        );
+      }
       setActiveAction(null);
     } catch (error: unknown) {
-      setFormError(
-        error instanceof Error ? error.message : 'Không thể gửi đề xuất. Vui lòng thử lại.',
-      );
+      const message = error instanceof Error
+        ? error.message
+        : 'Không thể gửi đề xuất. Vui lòng thử lại.';
+      setFormError(message);
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -203,12 +257,22 @@ export const OfferResponsePage: FC<OfferResponsePageProps> = ({
     setIsSubmitting(true);
     setRequestError('');
     try {
-      await onAccept(offer.offerId);
-      setLocalResponse({ offerId: offer.offerId, value: 'accepted' });
+      if (onAccept) {
+        await onAccept(offer.offerId);
+        setLocalResponse({ offerId: offer.offerId, value: 'accepted' });
+        toast.success('Chúc mừng bạn đã nhận việc! Đội ngũ tuyển dụng sẽ liên hệ hướng dẫn các bước tiếp theo.');
+      } else {
+        await submitOfferResponse(
+          { decision: 'ACCEPT' },
+          'Chúc mừng bạn đã nhận việc! Pipeline đã được cập nhật.',
+        );
+      }
     } catch (error: unknown) {
-      setRequestError(
-        error instanceof Error ? error.message : 'Không thể xác nhận offer. Vui lòng thử lại.',
-      );
+      const message = error instanceof Error
+        ? error.message
+        : 'Không thể xác nhận offer. Vui lòng thử lại.';
+      setRequestError(message);
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }

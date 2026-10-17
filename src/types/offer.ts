@@ -14,6 +14,7 @@ export type OfferStatus =
   | 'SENT_TO_CANDIDATE'
   | 'ACCEPTED'
   | 'DECLINED'
+  | 'NEGOTIATING'
   | 'CANCELLED';
 
 /**
@@ -302,4 +303,3 @@ export interface OfferApprovalScreenProps {
   readOnly?: boolean;
   containerClassName?: string;
 }
-
