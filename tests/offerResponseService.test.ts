@@ -81,13 +81,14 @@ describe('offerService.respondOffer', () => {
     await offerService.respondOffer(candidateOffer, {
       decision: 'NEGOTIATE',
       requestedSalary: 35_000_000,
+      requestedStartDate: '2026-12-01',
       requestedTerms: 'Làm việc hybrid.',
     });
 
     expect(moveCandidate).toHaveBeenCalledWith('candidate-456', {
       applicationId: 'application-789',
       toStage: 'OFFER',
-      notes: 'Ứng viên đề nghị thương lượng. Mức lương đề xuất: 35.000.000 ₫/tháng. Điều khoản đề xuất: Làm việc hybrid.',
+      notes: 'Ứng viên đề nghị thương lượng. Mức lương đề xuất: 35.000.000 ₫/tháng. Ngày nhận việc mong muốn: 2026-12-01. Điều khoản đề xuất: Làm việc hybrid.',
     });
   });
 

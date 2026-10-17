@@ -26,12 +26,19 @@ let inMemoryOffersList: OfferRecord[] = [];
 
 export type OfferCandidateDecision = 'ACCEPT' | 'DECLINE' | 'NEGOTIATE';
 
+export interface OfferNegotiation {
+  requestedSalary?: number;
+  requestedStartDate?: string;
+  requestedTerms?: string;
+}
+
 export type OfferResponsePayload =
   | { decision: 'ACCEPT' }
   | { decision: 'DECLINE'; reason: string }
   | {
       decision: 'NEGOTIATE';
       requestedSalary?: number;
+      requestedStartDate?: string;
       requestedTerms?: string;
     };
 
@@ -81,6 +88,9 @@ const getPipelineNotes = (response: OfferResponsePayload): string => {
       const details = [
         response.requestedSalary !== undefined
           ? `Mức lương đề xuất: ${response.requestedSalary.toLocaleString('vi-VN')} ₫/tháng`
+          : '',
+        response.requestedStartDate
+          ? `Ngày nhận việc mong muốn: ${response.requestedStartDate}`
           : '',
         response.requestedTerms ? `Điều khoản đề xuất: ${response.requestedTerms}` : '',
       ].filter(Boolean);
@@ -138,7 +148,9 @@ export const offerService = {
       response.decision === 'NEGOTIATE' &&
       (response.requestedSalary !== undefined &&
         (!Number.isFinite(response.requestedSalary) || response.requestedSalary < 1_000_000)
-        || !response.requestedTerms?.trim() && response.requestedSalary === undefined)
+        || !response.requestedTerms?.trim()
+          && !response.requestedStartDate
+          && response.requestedSalary === undefined)
     ) {
       throw new Error('Đề xuất thương lượng cần mức lương hợp lệ hoặc điều khoản mong muốn.');
     }
