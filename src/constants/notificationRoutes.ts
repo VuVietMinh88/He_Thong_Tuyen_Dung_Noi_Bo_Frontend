@@ -32,7 +32,10 @@ export const NOTIFICATION_ROUTE_PATHS = {
   OFFER_APPROVAL_DETAIL: '/offers/:id/approval',
   OFFER_APPROVAL_LIST: '/offers/approval',
 
-  // 5. Đường dẫn điều hướng dự phòng
+  // 5. Trang cài đặt & tùy chọn thông báo (Jira TKNHTTDNB1-547)
+  NOTIFICATION_SETTINGS: '/settings/notifications',
+
+  // 6. Đường dẫn điều hướng dự phòng
   UNAUTHORIZED: '/unauthorized',
   DASHBOARD: '/dashboard',
 } as const;
@@ -68,6 +71,9 @@ export const buildNotificationRoute = {
 
   offerApprovalList: (): string =>
     NOTIFICATION_ROUTE_PATHS.OFFER_APPROVAL_LIST,
+
+  notificationSettings: (): string =>
+    NOTIFICATION_ROUTE_PATHS.NOTIFICATION_SETTINGS,
 
   unauthorized: (): string =>
     NOTIFICATION_ROUTE_PATHS.UNAUTHORIZED,

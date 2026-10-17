@@ -46,6 +46,7 @@ import OnboardingTrackingPage from "./pages/Onboarding/OnboardingTrackingPage";
 import RecruitmentFunnelPage from "./pages/RecruitmentFunnel/RecruitmentFunnelPage";
 import CandidateSourceReportPage from "./pages/CandidateSourceReport/CandidateSourceReportPage";
 import OfferApprovalPage from "./pages/Offer/OfferApprovalPage";
+import NotificationSettingsPage from "./pages/Settings/NotificationSettingsPage";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -179,6 +180,14 @@ function App() {
                 element={
                   <MainLayout>
                     <InternalReferralPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/settings/notifications"
+                element={
+                  <MainLayout>
+                    <NotificationSettingsPage />
                   </MainLayout>
                 }
               />
