@@ -1,4 +1,4 @@
-import { useEffect, useState, type FC } from 'react';
+import { lazy, Suspense, useEffect, useState, type FC } from 'react';
 import {
   ArrowDownRight,
   ArrowRight,
@@ -10,6 +10,9 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import type { CandidateProfile } from '../../types/candidate';
+import { slaService } from '../../services/slaService';
+import OverdueTasksPanel from '../../components/Dashboard/OverdueTasksPanel';
 import type { FunnelFilterState } from '../../types/recruitmentFunnel';
 import {
   candidateService,
@@ -25,10 +28,20 @@ import {
   getDashboardOverviewMetrics,
   type DashboardOverviewMetrics,
 } from '../../utils/dashboardOverviewHelper';
+import {
+  getDashboardActionItems,
+  type DashboardActionItem,
+} from '../../utils/dashboardAnalyticsHelper';
 import { toast } from '../../components/notifications';
+
+const RecruitmentTrendChart = lazy(
+  () => import('../../components/Dashboard/RecruitmentTrendChart'),
+);
 
 interface OverviewData {
   metrics: DashboardOverviewMetrics;
+  candidates: CandidateProfile[];
+  actionItems: DashboardActionItem[];
   updatedAt: Date;
 }
 
@@ -98,17 +111,27 @@ export const DashboardOverview: FC = () => {
       jobPostingService.getManageableJobPostings(),
       candidateService.getCandidates(),
       recruitmentFunnelService.getFunnelReportData(filters),
+      slaService.getSlaSettings(),
     ])
-      .then(([postings, candidates, funnel]) => {
+      .then(([postings, candidates, funnel, slaSettings]) => {
         if (!isCurrentRequest) return;
         const offeredStage = funnel.stages.find((stage) => stage.id === 'OFFERED');
+        const referenceDate = new Date();
         setOverview({
           metrics: getDashboardOverviewMetrics(
             postings,
             candidates,
             offeredStage?.count ?? 0,
+            referenceDate,
           ),
-          updatedAt: new Date(),
+          candidates,
+          actionItems: getDashboardActionItems(
+            candidates,
+            postings,
+            slaSettings,
+            referenceDate,
+          ),
+          updatedAt: referenceDate,
         });
         setError('');
       })
@@ -217,6 +240,20 @@ export const DashboardOverview: FC = () => {
               </Link>
             );
           })}
+        </section>
+
+        <section className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+          <Suspense
+            fallback={
+              <div className="h-[360px] animate-pulse rounded-2xl border border-slate-200 bg-white shadow-sm" />
+            }
+          >
+            <RecruitmentTrendChart candidates={overview?.candidates ?? []} />
+          </Suspense>
+          <OverdueTasksPanel
+            items={overview?.actionItems ?? []}
+            isLoading={isLoading && !overview}
+          />
         </section>
 
         <section className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
