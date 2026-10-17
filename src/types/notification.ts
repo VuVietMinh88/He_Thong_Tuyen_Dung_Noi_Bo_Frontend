@@ -38,6 +38,47 @@ export interface AppNotificationItem {
 }
 
 /**
+ * Metadata mở rộng đính kèm theo từng thông báo
+ */
+export interface NotificationMetadata {
+  offerId?: string;
+  offerCode?: string;
+  candidateId?: string;
+  candidateName?: string;
+  interviewId?: string;
+  jobId?: string;
+  postingId?: string;
+  departmentId?: string;
+  departmentName?: string;
+  requiredRoles?: string[];
+  requiredPermissions?: string[];
+  statusCode?: number;
+  [key: string]: unknown;
+}
+
+/**
+ * Kết quả kiểm tra quyền truy cập đối tượng thông báo
+ * Jira Subtask: TKNHTTDNB1-542 - Tích hợp mở đúng đối tượng từ thông báo
+ */
+export interface NotificationAccessCheckResult {
+  hasAccess: boolean;
+  errorMessage?: string;
+  targetUrl?: string;
+  denialReason?: 'DEPARTMENT_MISMATCH' | 'INSUFFICIENT_PERMISSIONS' | 'UNAUTHENTICATED' | 'FORBIDDEN';
+}
+
+/**
+ * Tuỳ chọn xử lý điều hướng thông báo
+ */
+export interface NotificationRoutingHandlerOptions {
+  onSuccess?: (notificationItem: AppNotificationItem, targetUrl: string) => void;
+  onPermissionDenied?: (notificationItem: AppNotificationItem, errorMessage: string) => void;
+  onError?: (notificationItem: AppNotificationItem, error: unknown) => void;
+  onNotificationRead?: (notificationId: string) => void;
+  skipPermissionCheck?: boolean;
+}
+
+/**
  * Props cho component NotificationBell (Chuông thông báo)
  */
 export interface NotificationBellProps {
@@ -72,3 +113,4 @@ export interface NotificationItemProps {
   onMarkAsRead: (notificationId: string) => void;
   onItemClick: (notificationItem: AppNotificationItem) => void;
 }
+

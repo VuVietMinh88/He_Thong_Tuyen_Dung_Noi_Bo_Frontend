@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Bell } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import type {
   AppNotificationItem,
   NotificationBellProps,
   NotificationFilterTab,
 } from '../../types/notification';
 import { notificationService } from '../../services/notificationService';
+import { useNotificationRouting } from '../../hooks/useNotificationRouting';
 import { NotificationDropdown } from './NotificationDropdown';
 
 /**
  * Component Chuông thông báo (Notification Bell) đặt trên Header/Topbar
- * Jira Subtask: TKNHTTDNB1-541 - Thiết kế chuông và danh sách thông báo (Story TKNHTTDNB1-79)
+ * Jira Subtask: TKNHTTDNB1-541 & TKNHTTDNB1-542 (Story TKNHTTDNB1-79)
  */
 export const NotificationBell: React.FC<NotificationBellProps> = ({
   initialNotifications,
@@ -20,7 +20,6 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
   containerClassName = '',
   dropdownPlacement = 'bottom-right',
 }) => {
-  const navigate = useNavigate();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // State quản lý danh sách thông báo & trạng thái mở đóng
@@ -143,19 +142,28 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
     });
   }, []);
 
-  // Xử lý click vào item thông báo
+  // Tích hợp hook điều hướng thông báo và kiểm soát phân quyền (AC 1, AC 2, AC 3)
+  const { handleNotificationClick: routeToTargetObject } = useNotificationRouting({
+    onNotificationRead: handleMarkAsRead,
+    onSuccess: () => {
+      setIsDropdownOpen(false);
+    },
+  });
+
+  // Xử lý click vào item thông báo (AC 1, AC 2, AC 3)
   const handleNotificationItemClick = useCallback(
-    (notificationItem: AppNotificationItem) => {
+    async (notificationItem: AppNotificationItem) => {
+      // Đánh dấu đã đọc trước để giảm số lượng Badge ngay lập tức (AC 2)
       handleMarkAsRead(notificationItem.notificationId);
 
       if (onNotificationClick) {
         onNotificationClick(notificationItem);
-      } else if (notificationItem.targetUrl) {
-        navigate(notificationItem.targetUrl);
-        setIsDropdownOpen(false);
+        return;
       }
+
+      await routeToTargetObject(notificationItem);
     },
-    [handleMarkAsRead, navigate, onNotificationClick]
+    [handleMarkAsRead, onNotificationClick, routeToTargetObject]
   );
 
   return (
