@@ -155,6 +155,12 @@ const menuItems: SidebarMenuItem[] = [
     roles: Object.values(ROLES),
     permissions: ['SELF_SECURITY_WRITE'],
   },
+  {
+    label: 'Tùy chọn thông báo',
+    to: '/settings/notifications',
+    icon: '🔔',
+    roles: Object.values(ROLES),
+  },
 ];
 
 const isRole = (role: string): role is Role => Object.hasOwn(ROLE_NAMES, role);

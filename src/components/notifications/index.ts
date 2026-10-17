@@ -5,9 +5,12 @@ export * from './ToastProvider';
 export * from './useToast';
 export * from './NotificationBell';
 export * from './NotificationDropdown';
+export * from './ToggleSwitch';
+export * from './NotificationSettingsTable';
 export * from '../../constants/notificationRoutes';
 export * from '../../utils/notificationPermissionHelper';
 export * from '../../hooks/useNotificationRouting';
+export * from '../../services/notificationSettingsService';
 
 export const toast = {
   show: (options: ToastOptions | string) => {

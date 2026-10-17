@@ -114,3 +114,57 @@ export interface NotificationItemProps {
   onItemClick: (notificationItem: AppNotificationItem) => void;
 }
 
+/**
+ * Phân loại danh mục sự kiện thông báo
+ * Jira Subtask: TKNHTTDNB1-547 - Thiết kế trang tùy chọn nhận thông báo (Story TKNHTTDNB1-80)
+ */
+export type NotificationEventCategory =
+  | 'REQUISITION'
+  | 'POSITION'
+  | 'INTERVIEW'
+  | 'OFFER'
+  | 'CANDIDATE'
+  | 'SLA_SYSTEM';
+
+/**
+ * Cấu trúc một mục cấu hình tùy chọn nhận thông báo
+ */
+export interface NotificationSettingItem {
+  eventId: string;
+  eventName: string;
+  eventDescription: string;
+  category: NotificationEventCategory;
+  inAppEnabled: boolean;
+  emailEnabled: boolean;
+  isMandatoryInApp?: boolean;
+  isMandatoryEmail?: boolean;
+  mandatoryExplanation?: string;
+}
+
+/**
+ * Props cho Component công tắc Bật/Tắt (Toggle/Switch Component)
+ * Có hỗ trợ trạng thái khóa cứng (Disabled) và hiển thị Tooltip giải thích
+ */
+export interface ToggleSwitchProps {
+  id?: string;
+  checked: boolean;
+  onChange?: (checked: boolean) => void;
+  disabled?: boolean;
+  tooltipMessage?: string;
+  ariaLabel?: string;
+  testId?: string;
+  className?: string;
+}
+
+/**
+ * Props cho Component Bảng tùy chọn nhận thông báo
+ */
+export interface NotificationSettingsTableProps {
+  settingsList: NotificationSettingItem[];
+  onToggleInApp: (eventId: string, nextValue: boolean) => void;
+  onToggleEmail: (eventId: string, nextValue: boolean) => void;
+  searchQuery?: string;
+  selectedCategory?: NotificationEventCategory | 'ALL';
+  className?: string;
+}
+
