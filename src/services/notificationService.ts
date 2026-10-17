@@ -84,6 +84,22 @@ const DEFAULT_INITIAL_NOTIFICATIONS: AppNotificationItem[] = [
       postingId: 'jp-devops-001',
     },
   },
+  {
+    notificationId: 'notif-cross-dept-006',
+    title: 'Yêu cầu duyệt offer phòng Tiếp thị',
+    content: 'Đề nghị tuyển dụng OFF-2026-9012 của phòng Marketing cần trưởng bộ phận phê duyệt.',
+    type: 'OFFER',
+    priority: 'HIGH',
+    isRead: false,
+    createdAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+    targetUrl: '/offers/OFF-2026-9012/approval',
+    senderName: 'Trưởng ban Tiếp thị',
+    metadata: {
+      offerId: 'OFF-2026-9012',
+      departmentId: 'dept-marketing-02',
+      departmentName: 'Phòng Tiếp thị & Marketing',
+    },
+  },
 ];
 
 /**
@@ -244,6 +260,35 @@ export const notificationService = {
   },
 
   /**
+   * Xác thực thẩm quyền truy cập đối tượng thông báo từ máy chủ
+   * Jira Subtask: TKNHTTDNB1-542 - Tích hợp mở đúng đối tượng từ thông báo
+   */
+  async verifyNotificationTargetPermission(
+    notificationId: string
+  ): Promise<{ hasAccess: boolean; errorMessage?: string }> {
+    try {
+      const apiResponse = await axiosClient.get<{ hasAccess: boolean; errorMessage?: string }>(
+        `/notifications/${notificationId}/verify-access`
+      );
+      return apiResponse.data;
+    } catch (networkException) {
+      // Xử lý mã lỗi HTTP 403 Forbidden theo AC 3
+      if (
+        typeof networkException === 'object' &&
+        networkException !== null &&
+        'response' in networkException &&
+        (networkException as { response?: { status?: number } }).response?.status === 403
+      ) {
+        return {
+          hasAccess: false,
+          errorMessage: 'Không có quyền truy cập: Máy chủ từ chối yêu cầu (HTTP 403 Forbidden).',
+        };
+      }
+      return { hasAccess: true };
+    }
+  },
+
+  /**
    * Đặt lại danh sách thông báo về mặc định (phục vụ viết test)
    */
   resetToDefaultNotifications(): AppNotificationItem[] {
@@ -268,3 +313,4 @@ export const notificationService = {
     }
   },
 };
+

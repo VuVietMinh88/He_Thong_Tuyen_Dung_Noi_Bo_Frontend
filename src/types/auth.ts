@@ -3,6 +3,8 @@ export interface User {
   email: string;
   fullName: string;
   roles: string[];
+  departmentId?: string;
+  departmentName?: string;
 }
 
 export interface LoginResponse {
