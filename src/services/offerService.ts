@@ -3,7 +3,9 @@
  * Jira Task: TKNHTTDNB1-492 - Tích hợp xem trước và lưu offer nháp (Story TKNHTTDNB1-71)
  */
 
+import axios from 'axios';
 import axiosClient from '../utils/axiosClient';
+import { candidateStageService } from './candidateStageService';
 import type {
   OfferFormValues,
   OfferRecord,
@@ -12,6 +14,7 @@ import type {
   OfferApprovalStep,
   OfferApprovalHistoryItem,
 } from '../types/offer';
+import type { CandidateStage } from '../types/candidate';
 import {
   evaluateSalaryAgainstRange,
   DEFAULT_STANDARD_POSITIONS,
@@ -20,6 +23,71 @@ import {
 const STORAGE_KEY_OFFERS = 'smart_recruit_offers_storage';
 
 let inMemoryOffersList: OfferRecord[] = [];
+
+export type OfferCandidateDecision = 'ACCEPT' | 'DECLINE' | 'NEGOTIATE';
+
+export type OfferResponsePayload =
+  | { decision: 'ACCEPT' }
+  | { decision: 'DECLINE'; reason: string }
+  | {
+      decision: 'NEGOTIATE';
+      requestedSalary?: number;
+      requestedTerms?: string;
+    };
+
+export interface CandidateOfferIdentity {
+  offerId: string;
+  candidateId: string;
+  applicationId?: string;
+}
+
+export interface OfferResponseResult {
+  offer: OfferRecord;
+  pipelineStage: CandidateStage;
+  pipelineSynced: boolean;
+  pipelineSyncError?: string;
+}
+
+const getResponseErrorMessage = (error: unknown, fallback: string): string => {
+  if (axios.isAxiosError<{ message?: string }>(error)) {
+    if (error.response?.data?.message) return error.response.data.message;
+    if (!error.response) {
+      return 'Không thể kết nối máy chủ. Vui lòng kiểm tra kết nối và thử lại.';
+    }
+  }
+  return error instanceof Error ? error.message : fallback;
+};
+
+const getCandidateStageForDecision = (
+  decision: OfferCandidateDecision,
+): CandidateStage => {
+  switch (decision) {
+    case 'ACCEPT':
+      return 'HIRED';
+    case 'DECLINE':
+      return 'WITHDRAWN';
+    case 'NEGOTIATE':
+      return 'OFFER';
+  }
+};
+
+const getPipelineNotes = (response: OfferResponsePayload): string => {
+  switch (response.decision) {
+    case 'ACCEPT':
+      return 'Ứng viên đã đồng ý thư mời nhận việc.';
+    case 'DECLINE':
+      return `Ứng viên từ chối thư mời nhận việc. Lý do: ${response.reason}`;
+    case 'NEGOTIATE': {
+      const details = [
+        response.requestedSalary !== undefined
+          ? `Mức lương đề xuất: ${response.requestedSalary.toLocaleString('vi-VN')} ₫/tháng`
+          : '',
+        response.requestedTerms ? `Điều khoản đề xuất: ${response.requestedTerms}` : '',
+      ].filter(Boolean);
+      return `Ứng viên đề nghị thương lượng. ${details.join('. ')}`;
+    }
+  }
+};
 
 /**
  * Trích xuất danh sách offers từ localStorage hoặc inMemory fallback
@@ -53,6 +121,67 @@ const persistOffers = (offersList: OfferRecord[]): void => {
 };
 
 export const offerService = {
+  /**
+   * Gửi quyết định của ứng viên và đồng bộ stage pipeline sau khi Offer được lưu thành công.
+   */
+  async respondOffer(
+    offer: CandidateOfferIdentity,
+    response: OfferResponsePayload,
+  ): Promise<OfferResponseResult> {
+    if (!offer.offerId.trim() || !offer.candidateId.trim()) {
+      throw new Error('Thiếu thông tin offer hoặc ứng viên để gửi phản hồi.');
+    }
+    if (response.decision === 'DECLINE' && response.reason.trim().length < 5) {
+      throw new Error('Lý do từ chối cần có ít nhất 5 ký tự.');
+    }
+    if (
+      response.decision === 'NEGOTIATE' &&
+      (response.requestedSalary !== undefined &&
+        (!Number.isFinite(response.requestedSalary) || response.requestedSalary < 1_000_000)
+        || !response.requestedTerms?.trim() && response.requestedSalary === undefined)
+    ) {
+      throw new Error('Đề xuất thương lượng cần mức lương hợp lệ hoặc điều khoản mong muốn.');
+    }
+
+    let updatedOffer: OfferRecord;
+    try {
+      const apiResponse = await axiosClient.post<OfferRecord>(
+        `/offers/${encodeURIComponent(offer.offerId)}/respond`,
+        response,
+      );
+      updatedOffer = apiResponse.data;
+    } catch (error: unknown) {
+      throw new Error(
+        getResponseErrorMessage(error, 'Không thể gửi phản hồi offer. Vui lòng thử lại.'),
+      );
+    }
+
+    const pipelineStage = getCandidateStageForDecision(response.decision);
+    try {
+      await candidateStageService.moveCandidateToStage(offer.candidateId, {
+        applicationId: offer.applicationId,
+        toStage: pipelineStage,
+        notes: getPipelineNotes(response),
+      });
+
+      return {
+        offer: updatedOffer,
+        pipelineStage,
+        pipelineSynced: true,
+      };
+    } catch (error: unknown) {
+      return {
+        offer: updatedOffer,
+        pipelineStage,
+        pipelineSynced: false,
+        pipelineSyncError: getResponseErrorMessage(
+          error,
+          'Không thể đồng bộ giai đoạn pipeline.',
+        ),
+      };
+    }
+  },
+
   /**
    * Kiểm tra xem ứng viên có đề nghị tuyển dụng nào đang còn hiệu lực hay không
    * Một offer được coi là còn hiệu lực nếu đang ở trạng thái Chờ duyệt, Đã duyệt hoặc Đã gửi ứng viên
@@ -810,5 +939,3 @@ export const offerService = {
     }
   },
 };
-
-
