@@ -7,17 +7,10 @@ import {
   Search,
   UsersRound,
 } from 'lucide-react';
-import {
-  businessService,
-  type Requisition,
-} from '../../services/business.service';
-import { candidateService } from '../../services/candidateService';
-import { jobPostingService, type JobPostingData } from '../../services/jobPostingService';
+import { positionService } from '../../services/positionService';
 import { tokenService } from '../../services/token.service';
-import type { CandidateProfile } from '../../types/candidate';
+import { toast } from '../../components/notifications';
 import {
-  buildDepartmentPositionProgress,
-  collectDepartmentRequisitions,
   filterDepartmentPositionProgress,
   type DepartmentPositionProgressRow,
   type DepartmentPositionStatus,
@@ -54,36 +47,20 @@ const DepartmentPositionProgress: FC = () => {
     let isCurrent = true;
     if (!departmentId) return;
 
-    Promise.all([
-      collectDepartmentRequisitions((page) =>
-        businessService.getRequisitions({
-          departmentId,
-          page,
-          size: 100,
-        }),
-      ),
-      jobPostingService.getManageableJobPostings(),
-      candidateService.getCandidates(),
-    ])
-      .then(([requisitions, postings, candidates]: [
-        Requisition[],
-        JobPostingData[],
-        CandidateProfile[],
-      ]) => {
+    positionService.getPositionsByDepartment()
+      .then((positions) => {
         if (!isCurrent) return;
-        setRows(buildDepartmentPositionProgress(
-          requisitions,
-          postings,
-          candidates,
-          departmentId,
-        ));
+        setRows(positions);
+        setError('');
       })
       .catch((requestError: unknown) => {
         if (!isCurrent) return;
-        setError(requestError instanceof Error
+        const message = requestError instanceof Error
           ? requestError.message
-          : 'Không thể tải tiến độ tuyển dụng của phòng ban.');
+          : 'Không thể tải tiến độ tuyển dụng của phòng ban.';
+        setError(message);
         setRows([]);
+        toast.error(message);
       })
       .finally(() => {
         if (isCurrent) setIsLoading(false);
