@@ -207,3 +207,69 @@ export interface OfferDraftFormProps {
   onCancel?: () => void;
   containerClassName?: string;
 }
+
+/**
+ * Trạng thái của từng bước trong chuỗi phê duyệt offer
+ */
+export type ApprovalStepStatus =
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'REQUEST_CHANGE'
+  | 'WAITING';
+
+/**
+ * Các loại hành động phê duyệt của người quản lý
+ */
+export type OfferApprovalActionType = 'APPROVE' | 'REJECT' | 'REQUEST_CHANGE';
+
+/**
+ * Cấu trúc thông tin của một bước trong chuỗi duyệt đề nghị tuyển dụng
+ */
+export interface OfferApprovalStep {
+  stepOrder: number;
+  stepName: string;
+  approverRole: string;
+  approverName: string;
+  approverAvatar?: string;
+  approverEmail?: string;
+  status: ApprovalStepStatus;
+  isCurrentStep: boolean;
+  reviewedAt?: string;
+  approvalComment?: string;
+  changeRequestDetails?: string;
+}
+
+/**
+ * Dữ liệu chi tiết cho màn hình phê duyệt đề nghị tuyển dụng (Offer Approval Details)
+ * Jira Subtask: TKNHTTDNB1-498 (Story TKNHTTDNB1-72)
+ */
+export interface OfferApprovalDetails extends OfferRecord {
+  standardSalaryRange?: StandardSalaryRange;
+  approvalWorkflowChain: OfferApprovalStep[];
+  currentStepIndex: number;
+  recruiterNote?: string;
+  candidateSummary?: {
+    yearsOfExperience?: number;
+    highestEducation?: string;
+    interviewScore?: number;
+    matchingScore?: number;
+  };
+}
+
+/**
+ * Props cho component màn hình phê duyệt Offer
+ */
+export interface OfferApprovalScreenProps {
+  offerDetails?: OfferApprovalDetails;
+  offerId?: string;
+  isLoading?: boolean;
+  onApprove?: (offerId: string, comment: string) => Promise<void> | void;
+  onReject?: (offerId: string, reason: string) => Promise<void> | void;
+  onRequestChange?: (offerId: string, changeDetails: string) => Promise<void> | void;
+  onBack?: () => void;
+  onViewOfferLetter?: () => void;
+  readOnly?: boolean;
+  containerClassName?: string;
+}
+

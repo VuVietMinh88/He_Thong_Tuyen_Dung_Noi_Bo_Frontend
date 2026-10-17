@@ -45,6 +45,7 @@ import OnboardingChecklistPage from "./pages/Onboarding/OnboardingChecklistPage"
 import OnboardingTrackingPage from "./pages/Onboarding/OnboardingTrackingPage";
 import RecruitmentFunnelPage from "./pages/RecruitmentFunnel/RecruitmentFunnelPage";
 import CandidateSourceReportPage from "./pages/CandidateSourceReport/CandidateSourceReportPage";
+import OfferApprovalPage from "./pages/Offer/OfferApprovalPage";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -487,6 +488,37 @@ function App() {
                 element={
                   <MainLayout>
                     <PersonalInterviewSchedulePage />
+                  </MainLayout>
+                }
+              />
+            </Route>
+
+            <Route
+              element={
+                <ProtectedRoute
+                  allowedRoles={[
+                    ROLES.ADMIN,
+                    ROLES.HR_MANAGER,
+                    ROLES.HIRING_MANAGER,
+                    ROLES.APPROVER,
+                    ROLES.RECRUITER,
+                  ]}
+                />
+              }
+            >
+              <Route
+                path="/offers/:id/approval"
+                element={
+                  <MainLayout>
+                    <OfferApprovalPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/offers/approval"
+                element={
+                  <MainLayout>
+                    <OfferApprovalPage />
                   </MainLayout>
                 }
               />

@@ -8,6 +8,8 @@ import type {
   OfferFormValues,
   OfferRecord,
   ActiveOfferConflict,
+  OfferApprovalDetails,
+  OfferApprovalStep,
 } from '../types/offer';
 import {
   evaluateSalaryAgainstRange,
@@ -329,4 +331,295 @@ export const offerService = {
       // Bỏ qua lỗi dọn dẹp storage
     }
   },
+
+  /**
+   * Khởi tạo chuỗi duyệt mẫu (Approval Chain) cho đề nghị tuyển dụng
+   */
+  createDefaultApprovalWorkflowChain(
+    isSalaryOutOfRange: boolean,
+    currentStatus: OfferRecord['status'] = 'PENDING_APPROVAL'
+  ): OfferApprovalStep[] {
+    const isApproved = currentStatus === 'APPROVED';
+    const isRejected = currentStatus === 'REJECTED';
+
+    return [
+      {
+        stepOrder: 1,
+        stepName: 'Thẩm định Chuyên môn & Khung ngân sách',
+        approverRole: 'Trưởng phòng Nhân sự & Đào tạo',
+        approverName: 'Bà Nguyễn Thị Minh Thảo',
+        approverAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&auto=format&fit=crop&q=80',
+        approverEmail: 'thao.nguyen@smartrecruit.vn',
+        status: 'APPROVED',
+        isCurrentStep: false,
+        reviewedAt: '2026-10-15T09:30:00Z',
+        approvalComment: isSalaryOutOfRange
+          ? 'Đã đối soát dải chuẩn. Mức lương vượt khung đã có giải trình từ Recruiter. Hồ sơ năng lực ứng viên xuất sắc, phù hợp đề xuất đặc cách.'
+          : 'Hồ sơ tuyển dụng đầy đủ, mức lương nằm trong dải chuẩn được phê duyệt.',
+      },
+      {
+        stepOrder: 2,
+        stepName: 'Phê duyệt Khối Chuyên môn & Định biên',
+        approverRole: 'Giám đốc Khối Kỹ thuật & Công nghệ',
+        approverName: 'Ông Trần Hoàng Long',
+        approverAvatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=120&auto=format&fit=crop&q=80',
+        approverEmail: 'long.tran@smartrecruit.vn',
+        status: isApproved ? 'APPROVED' : isRejected ? 'REJECTED' : 'PENDING',
+        isCurrentStep: !isApproved && !isRejected,
+        reviewedAt: isApproved ? '2026-10-16T14:15:00Z' : undefined,
+        approvalComment: isApproved ? 'Đồng ý duyệt mức đãi ngộ chuyên môn.' : undefined,
+      },
+      {
+        stepOrder: 3,
+        stepName: 'Phê duyệt Điều hành Cấp cao (BOD/CEO)',
+        approverRole: 'Tổng Giám Đốc Điều Hành (CEO)',
+        approverName: 'Ông Lê Quốc Khánh',
+        approverAvatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=120&auto=format&fit=crop&q=80',
+        approverEmail: 'khanh.le@smartrecruit.vn',
+        status: isApproved ? 'APPROVED' : 'WAITING',
+        isCurrentStep: false,
+        reviewedAt: isApproved ? '2026-10-16T17:00:00Z' : undefined,
+        approvalComment: isApproved ? 'Thông qua đề nghị tuyển dụng chính thức.' : undefined,
+      },
+    ];
+  },
+
+  /**
+   * Lấy chi tiết đề nghị tuyển dụng phục vụ màn hình phê duyệt của cấp quản lý
+   */
+  async getOfferApprovalDetails(offerId: string): Promise<OfferApprovalDetails> {
+    try {
+      const apiResponse = await axiosClient.get<OfferApprovalDetails>(
+        `/offers/${offerId}/approval-details`
+      );
+      return apiResponse.data;
+    } catch {
+      // Fallback lấy từ stored offers hoặc tạo dữ liệu mẫu nếu chưa có
+      const storedOffers = getStoredOffers();
+      const existingRecord = storedOffers.find(
+        (recordItem) => recordItem.offerId === offerId || recordItem.offerCode === offerId
+      );
+
+      const matchingPosition = DEFAULT_STANDARD_POSITIONS.find(
+        (positionItem) => positionItem.positionId === existingRecord?.positionId
+      ) || DEFAULT_STANDARD_POSITIONS[0];
+
+      const baseOffer: OfferRecord = existingRecord || {
+        offerId: offerId || 'offer-demo-001',
+        offerCode: 'OFF-2026-8899',
+        candidateId: 'cand-tran-minh-duc',
+        candidateName: 'Trần Minh Đức',
+        candidateCode: 'UNG-VIEN-2026-08',
+        candidateEmail: 'duc.tran.dev@gmail.com',
+        candidatePhoneNumber: '0988 123 456',
+        jobTitle: matchingPosition.positionTitle,
+        positionId: matchingPosition.positionId,
+        jobLevel: matchingPosition.jobLevel,
+        departmentName: matchingPosition.departmentName,
+        offeredSalary: 48000000,
+        allowanceAmount: 2500000,
+        allowanceDescription: 'Phụ cấp ăn trưa, gửi xe và trợ cấp điện thoại di động',
+        totalMonthlyCompensation: 50500000,
+        expectedStartDate: '2026-11-15',
+        responseDeadline: '2026-11-05',
+        isSalaryOutOfRange: true,
+        salaryComparisonStatus: 'ABOVE',
+        outOfRangeReason:
+          'Ứng viên có 6 năm kinh nghiệm chuyên sâu với Microservices, React 19 và Cloud Native AWS. Đã từng giữ vị trí Senior Fullstack tại tập đoàn công nghệ lớn, có chứng chỉ AWS Solutions Architect Professional và đạt 94% điểm đánh giá kỹ năng chuyên môn ở vòng phỏng vấn kỹ thuật.',
+        status: 'PENDING_APPROVAL',
+        sendEmailToCandidate: true,
+        createdAt: '2026-10-15T08:00:00Z',
+        updatedAt: '2026-10-15T09:30:00Z',
+        createdBy: 'Recruiter: Nguyễn Phương Anh (HR Specialist)',
+      };
+
+      const workflowChain = this.createDefaultApprovalWorkflowChain(
+        baseOffer.isSalaryOutOfRange,
+        baseOffer.status
+      );
+
+      return {
+        ...baseOffer,
+        standardSalaryRange: matchingPosition.standardSalaryRange,
+        approvalWorkflowChain: workflowChain,
+        currentStepIndex: 1, // Bước 2 đang chờ xử lý
+        recruiterNote: 'Đề xuất ký hợp đồng lao động chính thức 12 tháng sau 2 tháng thử việc hưởng 100% lương.',
+        candidateSummary: {
+          yearsOfExperience: 6,
+          highestEducation: 'Kỹ sư CNTT - Đại học Bách Khoa Hà Nội',
+          interviewScore: 9.4,
+          matchingScore: 94,
+        },
+      };
+    }
+  },
+
+  /**
+   * Quản lý phê duyệt đề nghị tuyển dụng (Approve)
+   */
+  async approveOffer(
+    offerId: string,
+    approvalComment: string
+  ): Promise<OfferApprovalDetails> {
+    try {
+      const apiResponse = await axiosClient.post<OfferApprovalDetails>(
+        `/offers/${offerId}/approve`,
+        { approvalComment }
+      );
+      return apiResponse.data;
+    } catch {
+      const approvalDetails = await this.getOfferApprovalDetails(offerId);
+      const currentTimestamp = new Date().toISOString();
+
+      // Cập nhật trạng thái bước hiện tại sang APPROVED
+      const updatedWorkflowChain = approvalDetails.approvalWorkflowChain.map(
+        (stepItem) => {
+          if (stepItem.isCurrentStep) {
+            return {
+              ...stepItem,
+              status: 'APPROVED' as const,
+              isCurrentStep: false,
+              reviewedAt: currentTimestamp,
+              approvalComment,
+            };
+          }
+          if (stepItem.stepOrder === 3) {
+            return {
+              ...stepItem,
+              status: 'APPROVED' as const,
+              reviewedAt: currentTimestamp,
+              approvalComment: 'Ban Giám đốc đã thông qua đề xuất phê duyệt.',
+            };
+          }
+          return stepItem;
+        }
+      );
+
+      const updatedDetails: OfferApprovalDetails = {
+        ...approvalDetails,
+        status: 'APPROVED',
+        updatedAt: currentTimestamp,
+        approvalWorkflowChain: updatedWorkflowChain,
+        currentStepIndex: 2,
+      };
+
+      // Đồng bộ vào stored offers
+      const storedOffers = getStoredOffers();
+      const existingOfferIndex = storedOffers.findIndex(
+        (offerItem) => offerItem.offerId === offerId
+      );
+      if (existingOfferIndex >= 0) {
+        storedOffers[existingOfferIndex].status = 'APPROVED';
+        storedOffers[existingOfferIndex].updatedAt = currentTimestamp;
+        persistOffers(storedOffers);
+      }
+
+      return updatedDetails;
+    }
+  },
+
+  /**
+   * Quản lý từ chối đề nghị tuyển dụng (Reject)
+   */
+  async rejectOffer(
+    offerId: string,
+    rejectionReason: string
+  ): Promise<OfferApprovalDetails> {
+    try {
+      const apiResponse = await axiosClient.post<OfferApprovalDetails>(
+        `/offers/${offerId}/reject`,
+        { rejectionReason }
+      );
+      return apiResponse.data;
+    } catch {
+      const approvalDetails = await this.getOfferApprovalDetails(offerId);
+      const currentTimestamp = new Date().toISOString();
+
+      const updatedWorkflowChain = approvalDetails.approvalWorkflowChain.map(
+        (stepItem) => {
+          if (stepItem.isCurrentStep) {
+            return {
+              ...stepItem,
+              status: 'REJECTED' as const,
+              isCurrentStep: false,
+              reviewedAt: currentTimestamp,
+              approvalComment: `Từ chối duyệt: ${rejectionReason}`,
+            };
+          }
+          if (stepItem.stepOrder > 2) {
+            return {
+              ...stepItem,
+              status: 'WAITING' as const,
+              isCurrentStep: false,
+            };
+          }
+          return stepItem;
+        }
+      );
+
+      const updatedDetails: OfferApprovalDetails = {
+        ...approvalDetails,
+        status: 'REJECTED',
+        updatedAt: currentTimestamp,
+        approvalWorkflowChain: updatedWorkflowChain,
+      };
+
+      const storedOffers = getStoredOffers();
+      const existingOfferIndex = storedOffers.findIndex(
+        (offerItem) => offerItem.offerId === offerId
+      );
+      if (existingOfferIndex >= 0) {
+        storedOffers[existingOfferIndex].status = 'REJECTED';
+        storedOffers[existingOfferIndex].updatedAt = currentTimestamp;
+        persistOffers(storedOffers);
+      }
+
+      return updatedDetails;
+    }
+  },
+
+  /**
+   * Quản lý yêu cầu chỉnh sửa đề nghị tuyển dụng (Request Change)
+   */
+  async requestChangeOffer(
+    offerId: string,
+    changeRequestDetails: string
+  ): Promise<OfferApprovalDetails> {
+    try {
+      const apiResponse = await axiosClient.post<OfferApprovalDetails>(
+        `/offers/${offerId}/request-change`,
+        { changeRequestDetails }
+      );
+      return apiResponse.data;
+    } catch {
+      const approvalDetails = await this.getOfferApprovalDetails(offerId);
+      const currentTimestamp = new Date().toISOString();
+
+      const updatedWorkflowChain = approvalDetails.approvalWorkflowChain.map(
+        (stepItem) => {
+          if (stepItem.isCurrentStep) {
+            return {
+              ...stepItem,
+              status: 'REQUEST_CHANGE' as const,
+              isCurrentStep: false,
+              reviewedAt: currentTimestamp,
+              changeRequestDetails,
+              approvalComment: `Yêu cầu chỉnh sửa: ${changeRequestDetails}`,
+            };
+          }
+          return stepItem;
+        }
+      );
+
+      const updatedDetails: OfferApprovalDetails = {
+        ...approvalDetails,
+        status: 'PENDING_APPROVAL',
+        updatedAt: currentTimestamp,
+        approvalWorkflowChain: updatedWorkflowChain,
+      };
+
+      return updatedDetails;
+    }
+  },
 };
+
