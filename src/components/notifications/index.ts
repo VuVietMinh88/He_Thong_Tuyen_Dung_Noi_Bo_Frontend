@@ -3,6 +3,8 @@ import type { ToastOptions } from './ToastContext';
 export * from './ToastContext';
 export * from './ToastProvider';
 export * from './useToast';
+export * from './NotificationBell';
+export * from './NotificationDropdown';
 
 export const toast = {
   show: (options: ToastOptions | string) => {
