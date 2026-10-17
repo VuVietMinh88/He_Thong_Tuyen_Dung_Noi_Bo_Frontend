@@ -168,3 +168,46 @@ export interface NotificationSettingsTableProps {
   className?: string;
 }
 
+/**
+ * Phản hồi API chuẩn từ máy chủ khi cập nhật hoặc lấy cấu hình thông báo
+ * Jira Subtask: TKNHTTDNB1-548 - Tích hợp lưu và tải tùy chọn cá nhân (Story TKNHTTDNB1-80)
+ */
+export interface NotificationPreferencesApiResponse {
+  success: boolean;
+  message?: string;
+  data: NotificationSettingItem[];
+  updatedAt?: string;
+}
+
+/**
+ * Cấu trúc lỗi từ chối của máy chủ khi phát hiện vi phạm quy định thông báo bắt buộc
+ */
+export interface NotificationPreferenceApiError {
+  statusCode: number;
+  message: string;
+  errorCode?: 'MANDATORY_NOTIFICATION_LOCKED' | 'INVALID_PAYLOAD' | 'UNAUTHORIZED' | string;
+  violatedEventId?: string;
+}
+
+/**
+ * Return type cho Custom Hook useNotificationPreferences
+ */
+export interface UseNotificationPreferencesReturn {
+  preferencesList: NotificationSettingItem[];
+  isLoadingPreferences: boolean;
+  isSavingPreferences: boolean;
+  preferencesError: string | null;
+  securityViolationMessage: string | null;
+  hasUnsavedChanges: boolean;
+  fetchUserNotificationPreferences: () => Promise<NotificationSettingItem[]>;
+  updateNotificationSettings: (customSettingsList?: NotificationSettingItem[]) => Promise<boolean>;
+  handleToggleInApp: (eventId: string, nextEnabledValue: boolean) => void;
+  handleToggleEmail: (eventId: string, nextEnabledValue: boolean) => void;
+  enableAllPreferences: () => void;
+  disableOptionalPreferences: () => void;
+  resetToDefaultPreferences: () => Promise<void>;
+  rollbackPreferences: () => void;
+  clearPreferencesError: () => void;
+}
+
+

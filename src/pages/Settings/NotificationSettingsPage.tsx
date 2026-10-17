@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
   Bell,
   Save,
@@ -6,14 +6,12 @@ import {
   Search,
   ShieldCheck,
   Info,
+  AlertTriangle,
+  AlertCircle,
 } from 'lucide-react';
-import type {
-  NotificationEventCategory,
-  NotificationSettingItem,
-} from '../../types/notification';
-import { notificationSettingsService } from '../../services/notificationSettingsService';
+import type { NotificationEventCategory } from '../../types/notification';
+import { useNotificationPreferences } from '../../hooks/useNotificationPreferences';
 import { NotificationSettingsTable } from '../../components/notifications/NotificationSettingsTable';
-import { toast } from '../../components/notifications';
 
 const CATEGORY_TABS: Array<{ id: NotificationEventCategory | 'ALL'; label: string }> = [
   { id: 'ALL', label: 'Tất cả sự kiện' },
@@ -26,118 +24,33 @@ const CATEGORY_TABS: Array<{ id: NotificationEventCategory | 'ALL'; label: strin
 
 /**
  * Trang Tùy chọn nhận thông báo (Notification Settings Page)
- * Jira Subtask: TKNHTTDNB1-547 - Thiết kế trang tùy chọn nhận thông báo (Story TKNHTTDNB1-80)
+ * Jira Subtasks:
+ * - TKNHTTDNB1-547: Thiết kế trang tùy chọn nhận thông báo
+ * - TKNHTTDNB1-548: Tích hợp lưu và tải tùy chọn cá nhân
  */
 export const NotificationSettingsPage: React.FC = () => {
-  const [settingsList, setSettingsList] = useState<NotificationSettingItem[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
+  const {
+    preferencesList,
+    isLoadingPreferences,
+    isSavingPreferences,
+    preferencesError,
+    securityViolationMessage,
+    hasUnsavedChanges,
+    fetchUserNotificationPreferences,
+    updateNotificationSettings,
+    handleToggleInApp,
+    handleToggleEmail,
+    enableAllPreferences,
+    disableOptionalPreferences,
+    resetToDefaultPreferences,
+  } = useNotificationPreferences();
+
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<NotificationEventCategory | 'ALL'>('ALL');
 
-  // Tải cấu hình từ service khi trang được mount
-  const loadPreferences = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const loadedSettings = await notificationSettingsService.getNotificationSettings();
-      setSettingsList(loadedSettings);
-      setHasUnsavedChanges(false);
-    } catch (loadException) {
-      toast.error('Không thể tải cấu hình thông báo. Vui lòng thử tải lại trang.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadPreferences();
-  }, [loadPreferences]);
-
-  // Thay đổi trạng thái Bật/Tắt trong ứng dụng (In-app)
-  const handleToggleInApp = useCallback((eventId: string, nextValue: boolean) => {
-    setSettingsList((previousList: NotificationSettingItem[]) =>
-      previousList.map((settingItem: NotificationSettingItem) => {
-        if (settingItem.eventId === eventId) {
-          // Khóa cứng nếu là thông báo bắt buộc của hệ thống (AC 2)
-          if (settingItem.isMandatoryInApp) return settingItem;
-          return { ...settingItem, inAppEnabled: nextValue };
-        }
-        return settingItem;
-      })
-    );
-    setHasUnsavedChanges(true);
-  }, []);
-
-  // Thay đổi trạng thái Bật/Tắt qua Email
-  const handleToggleEmail = useCallback((eventId: string, nextValue: boolean) => {
-    setSettingsList((previousList: NotificationSettingItem[]) =>
-      previousList.map((settingItem: NotificationSettingItem) => {
-        if (settingItem.eventId === eventId) {
-          // Khóa cứng nếu là thông báo bắt buộc qua email (AC 2)
-          if (settingItem.isMandatoryEmail) return settingItem;
-          return { ...settingItem, emailEnabled: nextValue };
-        }
-        return settingItem;
-      })
-    );
-    setHasUnsavedChanges(true);
-  }, []);
-
-  // Bật tất cả các thông báo (không ảnh hưởng tới trạng thái cố định của thông báo bắt buộc)
-  const handleEnableAll = useCallback(() => {
-    setSettingsList((previousList: NotificationSettingItem[]) =>
-      previousList.map((settingItem: NotificationSettingItem) => ({
-        ...settingItem,
-        inAppEnabled: true,
-        emailEnabled: true,
-      }))
-    );
-    setHasUnsavedChanges(true);
-    toast.info('Đã bật tất cả kênh thông báo cho các sự kiện.');
-  }, []);
-
-  // Tắt tất cả các thông báo không bắt buộc
-  const handleDisableNonMandatory = useCallback(() => {
-    setSettingsList((previousList: NotificationSettingItem[]) =>
-      previousList.map((settingItem: NotificationSettingItem) => ({
-        ...settingItem,
-        inAppEnabled: settingItem.isMandatoryInApp ? true : false,
-        emailEnabled: settingItem.isMandatoryEmail ? true : false,
-      }))
-    );
-    setHasUnsavedChanges(true);
-    toast.info('Đã tắt các thông báo không bắt buộc.');
-  }, []);
-
-  // Lưu cấu hình tùy chọn nhận thông báo
+  // Xử lý lưu cấu hình
   const handleSaveSettings = async () => {
-    setIsSaving(true);
-    try {
-      const savedResult = await notificationSettingsService.saveNotificationSettings(settingsList);
-      setSettingsList(savedResult);
-      setHasUnsavedChanges(false);
-      toast.success('Đã lưu cấu hình tùy chọn nhận thông báo thành công.');
-    } catch (saveException) {
-      toast.error('Có lỗi xảy ra khi lưu cấu hình. Vui lòng thử lại sau.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // Khôi phục cấu hình về mặc định ban đầu
-  const handleResetDefaults = async () => {
-    setIsSaving(true);
-    try {
-      const defaultSettings = await notificationSettingsService.resetToDefaultSettings();
-      setSettingsList(defaultSettings);
-      setHasUnsavedChanges(false);
-      toast.info('Đã khôi phục cấu hình thông báo về trạng thái mặc định của hệ thống.');
-    } catch (resetException) {
-      toast.error('Không thể khôi phục cài đặt mặc định.');
-    } finally {
-      setIsSaving(false);
-    }
+    await updateNotificationSettings();
   };
 
   return (
@@ -172,8 +85,8 @@ export const NotificationSettingsPage: React.FC = () => {
             <button
               type="button"
               data-testid="btn-reset-defaults"
-              disabled={isSaving || isLoading}
-              onClick={handleResetDefaults}
+              disabled={isSavingPreferences || isLoadingPreferences}
+              onClick={resetToDefaultPreferences}
               className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3.5 py-2 text-xs font-bold text-gray-700 shadow-2xs transition-all hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 cursor-pointer"
             >
               <RotateCcw className="h-3.5 w-3.5" />
@@ -184,7 +97,7 @@ export const NotificationSettingsPage: React.FC = () => {
             <button
               type="button"
               data-testid="btn-save-settings"
-              disabled={isSaving || isLoading || !hasUnsavedChanges}
+              disabled={isSavingPreferences || isLoadingPreferences || !hasUnsavedChanges}
               onClick={handleSaveSettings}
               className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold text-white shadow-md transition-all cursor-pointer ${
                 hasUnsavedChanges
@@ -193,7 +106,7 @@ export const NotificationSettingsPage: React.FC = () => {
               }`}
             >
               <Save className="h-4 w-4" />
-              <span>{isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}</span>
+              <span>{isSavingPreferences ? 'Đang lưu...' : 'Lưu thay đổi'}</span>
             </button>
           </div>
         </div>
@@ -221,7 +134,46 @@ export const NotificationSettingsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 3. Thanh tìm kiếm và bộ lọc danh mục */}
+        {/* 3. Cảnh báo lỗi / Vi phạm bảo mật khi cố tình tắt thông báo bắt buộc (AC 3) */}
+        {securityViolationMessage && (
+          <div
+            data-testid="security-violation-alert"
+            className="flex items-start gap-3 rounded-2xl border border-rose-300 bg-rose-50/90 p-4 text-xs text-rose-950 shadow-2xs dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200 animate-fadeIn"
+          >
+            <AlertTriangle className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
+            <div className="space-y-1">
+              <h4 className="font-black text-rose-900 dark:text-rose-100">
+                Cảnh báo bảo mật hệ thống: Yêu cầu bị từ chối
+              </h4>
+              <p className="leading-relaxed">{securityViolationMessage}</p>
+              <p className="text-[11px] text-rose-700 dark:text-rose-300">
+                Hệ thống đã tự động hoàn nguyên cấu hình giao diện về trạng thái hợp lệ gần nhất.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {preferencesError && !securityViolationMessage && (
+          <div
+            data-testid="preferences-error-alert"
+            className="flex items-center justify-between rounded-2xl border border-red-200 bg-red-50 p-4 text-xs text-red-900 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200"
+          >
+            <div className="flex items-center gap-2.5">
+              <AlertCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+              <span>{preferencesError}</span>
+            </div>
+            <button
+              type="button"
+              data-testid="btn-retry-fetch"
+              onClick={() => fetchUserNotificationPreferences()}
+              className="font-bold underline hover:text-red-800 cursor-pointer"
+            >
+              Thử lại
+            </button>
+          </div>
+        )}
+
+        {/* 4. Thanh tìm kiếm và bộ lọc danh mục */}
         <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-2xs dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:items-center sm:justify-between">
           {/* Ô tìm kiếm sự kiện */}
           <div className="relative flex-1 max-w-md">
@@ -241,7 +193,7 @@ export const NotificationSettingsPage: React.FC = () => {
             <button
               type="button"
               data-testid="btn-enable-all"
-              onClick={handleEnableAll}
+              onClick={enableAllPreferences}
               className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 cursor-pointer"
             >
               Bật tất cả
@@ -249,7 +201,7 @@ export const NotificationSettingsPage: React.FC = () => {
             <button
               type="button"
               data-testid="btn-disable-optional"
-              onClick={handleDisableNonMandatory}
+              onClick={disableOptionalPreferences}
               className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 cursor-pointer"
             >
               Chỉ giữ bắt buộc
@@ -257,7 +209,7 @@ export const NotificationSettingsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 4. Tab lọc theo danh mục sự kiện */}
+        {/* 5. Tab lọc theo danh mục sự kiện */}
         <div className="flex flex-wrap items-center gap-1.5">
           {CATEGORY_TABS.map((categoryTab) => {
             const isTabActive = selectedCategory === categoryTab.id;
@@ -279,8 +231,8 @@ export const NotificationSettingsPage: React.FC = () => {
           })}
         </div>
 
-        {/* 5. Bảng cấu hình tùy chọn thông báo (AC 1 & AC 2) */}
-        {isLoading ? (
+        {/* 6. Bảng cấu hình tùy chọn thông báo (AC 1 & AC 2) */}
+        {isLoadingPreferences ? (
           <div
             data-testid="loading-state"
             className="flex h-64 items-center justify-center rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
@@ -292,7 +244,7 @@ export const NotificationSettingsPage: React.FC = () => {
           </div>
         ) : (
           <NotificationSettingsTable
-            settingsList={settingsList}
+            settingsList={preferencesList}
             onToggleInApp={handleToggleInApp}
             onToggleEmail={handleToggleEmail}
             searchQuery={searchQuery}
@@ -300,7 +252,7 @@ export const NotificationSettingsPage: React.FC = () => {
           />
         )}
 
-        {/* 6. Footer chỉ dẫn */}
+        {/* 7. Footer chỉ dẫn */}
         <div className="flex items-center justify-between rounded-xl border border-gray-200/60 bg-white/60 p-3 text-[11px] text-gray-500 dark:border-gray-800/60 dark:bg-gray-900/40 dark:text-gray-400">
           <div className="flex items-center gap-1.5">
             <Info className="h-3.5 w-3.5 text-gray-400" />
@@ -323,3 +275,4 @@ export const NotificationSettingsPage: React.FC = () => {
 };
 
 export default NotificationSettingsPage;
+

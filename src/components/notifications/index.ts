@@ -10,6 +10,7 @@ export * from './NotificationSettingsTable';
 export * from '../../constants/notificationRoutes';
 export * from '../../utils/notificationPermissionHelper';
 export * from '../../hooks/useNotificationRouting';
+export * from '../../hooks/useNotificationPreferences';
 export * from '../../services/notificationSettingsService';
 
 export const toast = {
