@@ -10,6 +10,7 @@ import type {
   ActiveOfferConflict,
   OfferApprovalDetails,
   OfferApprovalStep,
+  OfferApprovalHistoryItem,
 } from '../types/offer';
 import {
   evaluateSalaryAgainstRange,
@@ -385,6 +386,101 @@ export const offerService = {
   },
 
   /**
+   * Khởi tạo dòng thời gian lịch sử phê duyệt ban đầu (Approval History Timeline)
+   * Các bản ghi này là bất biến (Read-only) nhằm đảm bảo tính toàn vẹn kiểm toán
+   * Jira Subtask: TKNHTTDNB1-499 - Tích hợp nhận xét và lịch sử phê duyệt offer (Story TKNHTTDNB1-72)
+   */
+  createDefaultApprovalHistoryTimeline(
+    offerId: string,
+    isSalaryOutOfRange: boolean,
+    currentStatus: OfferRecord['status'] = 'PENDING_APPROVAL'
+  ): OfferApprovalHistoryItem[] {
+    const isApproved = currentStatus === 'APPROVED';
+    const isRejected = currentStatus === 'REJECTED';
+
+    const historyItems: OfferApprovalHistoryItem[] = [
+      {
+        historyId: `hist-sub-${offerId}`,
+        offerId,
+        action: 'SUBMIT',
+        actionLabel: 'Tạo & Gửi duyệt Offer',
+        actorName: 'Nguyễn Phương Anh',
+        actorRole: 'Chuyên viên Tuyển dụng (Recruiter)',
+        actorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
+        actorEmail: 'anh.nguyen@smartrecruit.vn',
+        comment: isSalaryOutOfRange
+          ? 'Đã hoàn tất soạn thảo offer và lập văn bản giải trình lý do mức lương đề xuất vượt dải chuẩn. Kính trình cấp Quản lý xem xét thẩm định.'
+          : 'Đã hoàn tất soạn thảo đề nghị tuyển dụng chính thức theo đúng định biên và dải lương chuẩn của phòng ban.',
+        timestamp: '2026-10-15T08:00:00Z',
+      },
+      {
+        historyId: `hist-app1-${offerId}`,
+        offerId,
+        action: 'APPROVE',
+        actionLabel: 'Phê duyệt Cấp 1 (Nhân sự)',
+        actorName: 'Bà Nguyễn Thị Minh Thảo',
+        actorRole: 'Trưởng phòng Nhân sự & Đào tạo',
+        actorAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&auto=format&fit=crop&q=80',
+        actorEmail: 'thao.nguyen@smartrecruit.vn',
+        comment: isSalaryOutOfRange
+          ? 'Đã đối soát dải chuẩn. Mức lương vượt khung đã có giải trình từ Recruiter. Hồ sơ năng lực ứng viên xuất sắc, phù hợp đề xuất đặc cách.'
+          : 'Hồ sơ tuyển dụng đầy đủ, mức lương nằm trong dải chuẩn được phê duyệt.',
+        timestamp: '2026-10-15T09:30:00Z',
+        stepOrder: 1,
+        stepName: 'Thẩm định Chuyên môn & Khung ngân sách',
+      },
+    ];
+
+    if (isApproved) {
+      historyItems.push({
+        historyId: `hist-app2-${offerId}`,
+        offerId,
+        action: 'APPROVE',
+        actionLabel: 'Phê duyệt Cấp 2 (Khối Chuyên môn)',
+        actorName: 'Ông Trần Hoàng Long',
+        actorRole: 'Giám đốc Khối Kỹ thuật & Công nghệ',
+        actorAvatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=120&auto=format&fit=crop&q=80',
+        actorEmail: 'long.tran@smartrecruit.vn',
+        comment: 'Đồng ý phê duyệt mức lương và các điều khoản đãi ngộ theo đề xuất.',
+        timestamp: '2026-10-16T14:15:00Z',
+        stepOrder: 2,
+        stepName: 'Phê duyệt Khối Chuyên môn & Định biên',
+      });
+      historyItems.push({
+        historyId: `hist-app3-${offerId}`,
+        offerId,
+        action: 'APPROVE',
+        actionLabel: 'Phê duyệt Điều hành (CEO)',
+        actorName: 'Ông Lê Quốc Khánh',
+        actorRole: 'Tổng Giám Đốc Điều Hành (CEO)',
+        actorAvatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=120&auto=format&fit=crop&q=80',
+        actorEmail: 'khanh.le@smartrecruit.vn',
+        comment: 'Ban Giám đốc đã thông qua đề xuất tuyển dụng chính thức.',
+        timestamp: '2026-10-16T17:00:00Z',
+        stepOrder: 3,
+        stepName: 'Phê duyệt Điều hành Cấp cao (BOD/CEO)',
+      });
+    } else if (isRejected) {
+      historyItems.push({
+        historyId: `hist-rej-${offerId}`,
+        offerId,
+        action: 'REJECT',
+        actionLabel: 'Từ chối phê duyệt',
+        actorName: 'Ông Trần Hoàng Long',
+        actorRole: 'Giám đốc Khối Kỹ thuật & Công nghệ',
+        actorAvatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=120&auto=format&fit=crop&q=80',
+        actorEmail: 'long.tran@smartrecruit.vn',
+        comment: 'Từ chối duyệt: Mức đãi ngộ chưa phù hợp với ngân sách hiện tại của bộ phận.',
+        timestamp: '2026-10-16T14:15:00Z',
+        stepOrder: 2,
+        stepName: 'Phê duyệt Khối Chuyên môn & Định biên',
+      });
+    }
+
+    return historyItems;
+  },
+
+  /**
    * Lấy chi tiết đề nghị tuyển dụng phục vụ màn hình phê duyệt của cấp quản lý
    */
   async getOfferApprovalDetails(offerId: string): Promise<OfferApprovalDetails> {
@@ -438,10 +534,17 @@ export const offerService = {
         baseOffer.status
       );
 
+      const historyTimeline = this.createDefaultApprovalHistoryTimeline(
+        baseOffer.offerId,
+        baseOffer.isSalaryOutOfRange,
+        baseOffer.status
+      );
+
       return {
         ...baseOffer,
         standardSalaryRange: matchingPosition.standardSalaryRange,
         approvalWorkflowChain: workflowChain,
+        approvalHistoryTimeline: historyTimeline,
         currentStepIndex: 1, // Bước 2 đang chờ xử lý
         recruiterNote: 'Đề xuất ký hợp đồng lao động chính thức 12 tháng sau 2 tháng thử việc hưởng 100% lương.',
         candidateSummary: {
@@ -456,6 +559,7 @@ export const offerService = {
 
   /**
    * Quản lý phê duyệt đề nghị tuyển dụng (Approve)
+   * Ghi nhận nhận xét và thêm node mới vào lịch sử phê duyệt bất biến (AC 2)
    */
   async approveOffer(
     offerId: string,
@@ -495,11 +599,49 @@ export const offerService = {
         }
       );
 
+      // Thêm bản ghi mới vào dòng thời gian lịch sử kiểm toán (Immutable Timeline - AC 2)
+      const newHistoryItem: OfferApprovalHistoryItem = {
+        historyId: `hist-app-${Date.now()}`,
+        offerId,
+        action: 'APPROVE',
+        actionLabel: 'Phê duyệt Cấp 2 (Khối Chuyên môn)',
+        actorName: 'Ông Trần Hoàng Long',
+        actorRole: 'Giám đốc Khối Kỹ thuật & Công nghệ',
+        actorAvatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=120&auto=format&fit=crop&q=80',
+        actorEmail: 'long.tran@smartrecruit.vn',
+        comment: approvalComment || 'Đồng ý phê duyệt mức lương và các chế độ đãi ngộ theo đề xuất.',
+        timestamp: currentTimestamp,
+        stepOrder: 2,
+        stepName: 'Phê duyệt Khối Chuyên môn & Định biên',
+      };
+
+      const ceoHistoryItem: OfferApprovalHistoryItem = {
+        historyId: `hist-ceo-${Date.now() + 1}`,
+        offerId,
+        action: 'APPROVE',
+        actionLabel: 'Phê duyệt Điều hành (CEO)',
+        actorName: 'Ông Lê Quốc Khánh',
+        actorRole: 'Tổng Giám Đốc Điều Hành (CEO)',
+        actorAvatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=120&auto=format&fit=crop&q=80',
+        actorEmail: 'khanh.le@smartrecruit.vn',
+        comment: 'Ban Giám đốc đã thông qua đề xuất phê duyệt.',
+        timestamp: currentTimestamp,
+        stepOrder: 3,
+        stepName: 'Phê duyệt Điều hành Cấp cao (BOD/CEO)',
+      };
+
+      const updatedHistoryTimeline = [
+        ...(approvalDetails.approvalHistoryTimeline || []),
+        newHistoryItem,
+        ceoHistoryItem,
+      ];
+
       const updatedDetails: OfferApprovalDetails = {
         ...approvalDetails,
         status: 'APPROVED',
         updatedAt: currentTimestamp,
         approvalWorkflowChain: updatedWorkflowChain,
+        approvalHistoryTimeline: updatedHistoryTimeline,
         currentStepIndex: 2,
       };
 
@@ -520,6 +662,7 @@ export const offerService = {
 
   /**
    * Quản lý từ chối đề nghị tuyển dụng (Reject)
+   * Bắt buộc có lý do từ chối và ghi nhận vào lịch sử kiểm toán bất biến (AC 1 & AC 2)
    */
   async rejectOffer(
     offerId: string,
@@ -557,11 +700,33 @@ export const offerService = {
         }
       );
 
+      // Thêm bản ghi từ chối vào dòng thời gian lịch sử kiểm toán (Immutable Timeline - AC 2)
+      const rejectionHistoryItem: OfferApprovalHistoryItem = {
+        historyId: `hist-rej-${Date.now()}`,
+        offerId,
+        action: 'REJECT',
+        actionLabel: 'Từ chối phê duyệt',
+        actorName: 'Ông Trần Hoàng Long',
+        actorRole: 'Giám đốc Khối Kỹ thuật & Công nghệ',
+        actorAvatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=120&auto=format&fit=crop&q=80',
+        actorEmail: 'long.tran@smartrecruit.vn',
+        comment: rejectionReason,
+        timestamp: currentTimestamp,
+        stepOrder: 2,
+        stepName: 'Phê duyệt Khối Chuyên môn & Định biên',
+      };
+
+      const updatedHistoryTimeline = [
+        ...(approvalDetails.approvalHistoryTimeline || []),
+        rejectionHistoryItem,
+      ];
+
       const updatedDetails: OfferApprovalDetails = {
         ...approvalDetails,
         status: 'REJECTED',
         updatedAt: currentTimestamp,
         approvalWorkflowChain: updatedWorkflowChain,
+        approvalHistoryTimeline: updatedHistoryTimeline,
       };
 
       const storedOffers = getStoredOffers();
@@ -580,6 +745,7 @@ export const offerService = {
 
   /**
    * Quản lý yêu cầu chỉnh sửa đề nghị tuyển dụng (Request Change)
+   * Bắt buộc có nội dung yêu cầu sửa và ghi nhận vào lịch sử kiểm toán bất biến (AC 1 & AC 2)
    */
   async requestChangeOffer(
     offerId: string,
@@ -611,15 +777,38 @@ export const offerService = {
         }
       );
 
+      // Thêm bản ghi yêu cầu sửa đổi vào dòng thời gian lịch sử kiểm toán (Immutable Timeline - AC 2)
+      const changeHistoryItem: OfferApprovalHistoryItem = {
+        historyId: `hist-req-${Date.now()}`,
+        offerId,
+        action: 'REQUEST_CHANGE',
+        actionLabel: 'Yêu cầu chỉnh sửa điều khoản',
+        actorName: 'Ông Trần Hoàng Long',
+        actorRole: 'Giám đốc Khối Kỹ thuật & Công nghệ',
+        actorAvatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=120&auto=format&fit=crop&q=80',
+        actorEmail: 'long.tran@smartrecruit.vn',
+        comment: changeRequestDetails,
+        timestamp: currentTimestamp,
+        stepOrder: 2,
+        stepName: 'Phê duyệt Khối Chuyên môn & Định biên',
+      };
+
+      const updatedHistoryTimeline = [
+        ...(approvalDetails.approvalHistoryTimeline || []),
+        changeHistoryItem,
+      ];
+
       const updatedDetails: OfferApprovalDetails = {
         ...approvalDetails,
         status: 'PENDING_APPROVAL',
         updatedAt: currentTimestamp,
         approvalWorkflowChain: updatedWorkflowChain,
+        approvalHistoryTimeline: updatedHistoryTimeline,
       };
 
       return updatedDetails;
     }
   },
 };
+
 

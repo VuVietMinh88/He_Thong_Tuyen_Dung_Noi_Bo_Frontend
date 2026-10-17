@@ -34,6 +34,7 @@ import {
 import { offerService } from '../../services/offerService';
 import { OfferApprovalModal } from './OfferApprovalModal';
 import { OfferPreviewModal } from './OfferPreviewModal';
+import { OfferApprovalHistoryTimeline } from './OfferApprovalHistoryTimeline';
 import { ToastContext } from '../notifications/ToastContext';
 
 /**
@@ -157,6 +158,24 @@ export const OfferApprovalScreen: React.FC<OfferApprovalScreenProps> = ({
       matchingPosition
     );
   }, [currentOfferData, matchingPosition]);
+
+  // Lấy dòng thời gian lịch sử phê duyệt, fallback khởi tạo nếu chưa có sẵn trong payload
+  const effectiveHistoryTimeline = useMemo(() => {
+    if (
+      currentOfferData?.approvalHistoryTimeline &&
+      currentOfferData.approvalHistoryTimeline.length > 0
+    ) {
+      return currentOfferData.approvalHistoryTimeline;
+    }
+    if (currentOfferData) {
+      return offerService.createDefaultApprovalHistoryTimeline(
+        currentOfferData.offerId,
+        currentOfferData.isSalaryOutOfRange,
+        currentOfferData.status
+      );
+    }
+    return [];
+  }, [currentOfferData]);
 
   // Xử lý mở Modal hành động
   const handleOpenActionModal = (selectedAction: OfferApprovalActionType) => {
@@ -872,7 +891,10 @@ export const OfferApprovalScreen: React.FC<OfferApprovalScreenProps> = ({
         )}
       </div>
 
-      {/* 5. KHU VỰC THAO TÁC CỦA NGƯỜI DUYỆT (ACTION AREA - AC 3) */}
+      {/* 5. LỊCH SỬ PHÊ DUYỆT & Ý KIẾN NHẬN XÉT (APPROVAL HISTORY TIMELINE - AC 2) */}
+      <OfferApprovalHistoryTimeline timelineItems={effectiveHistoryTimeline} />
+
+      {/* 6. KHU VỰC THAO TÁC CỦA NGƯỜI DUYỆT (ACTION AREA - AC 3) */}
       {!readOnly && isPendingApproval && (
         <div
           data-testid="approval-action-area"

@@ -241,12 +241,42 @@ export interface OfferApprovalStep {
 }
 
 /**
+ * Các loại hành động được ghi nhận trong dòng thời gian lịch sử phê duyệt
+ * Jira Subtask: TKNHTTDNB1-499 - Tích hợp nhận xét và lịch sử phê duyệt offer (Story TKNHTTDNB1-72)
+ */
+export type OfferApprovalHistoryAction =
+  | 'SUBMIT'
+  | 'APPROVE'
+  | 'REJECT'
+  | 'REQUEST_CHANGE';
+
+/**
+ * Cấu trúc một node bản ghi trong dòng thời gian lịch sử phê duyệt
+ * KHỐI DỮ LIỆU NÀY LÀ BẤT BIẾN (IMMUTABLE / READ-ONLY) để phục vụ kiểm toán nội bộ và lưu vết pháp lý
+ */
+export interface OfferApprovalHistoryItem {
+  historyId: string;
+  offerId: string;
+  action: OfferApprovalHistoryAction;
+  actionLabel: string;
+  actorName: string;
+  actorRole: string;
+  actorAvatar?: string;
+  actorEmail?: string;
+  comment: string;
+  timestamp: string;
+  stepOrder?: number;
+  stepName?: string;
+}
+
+/**
  * Dữ liệu chi tiết cho màn hình phê duyệt đề nghị tuyển dụng (Offer Approval Details)
- * Jira Subtask: TKNHTTDNB1-498 (Story TKNHTTDNB1-72)
+ * Jira Subtask: TKNHTTDNB1-498 & TKNHTTDNB1-499 (Story TKNHTTDNB1-72)
  */
 export interface OfferApprovalDetails extends OfferRecord {
   standardSalaryRange?: StandardSalaryRange;
   approvalWorkflowChain: OfferApprovalStep[];
+  approvalHistoryTimeline?: OfferApprovalHistoryItem[];
   currentStepIndex: number;
   recruiterNote?: string;
   candidateSummary?: {
