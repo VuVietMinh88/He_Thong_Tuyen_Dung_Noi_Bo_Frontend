@@ -47,6 +47,7 @@ import RecruitmentFunnelPage from "./pages/RecruitmentFunnel/RecruitmentFunnelPa
 import CandidateSourceReportPage from "./pages/CandidateSourceReport/CandidateSourceReportPage";
 import OfferApprovalPage from "./pages/Offer/OfferApprovalPage";
 import NotificationSettingsPage from "./pages/Settings/NotificationSettingsPage";
+import DashboardOverview from "./pages/Dashboard/DashboardOverview";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -139,7 +140,7 @@ function App() {
                 path="/dashboard"
                 element={
                   <MainLayout>
-                    <RecruitmentFunnelPage />
+                    <DashboardOverview />
                   </MainLayout>
                 }
               />
