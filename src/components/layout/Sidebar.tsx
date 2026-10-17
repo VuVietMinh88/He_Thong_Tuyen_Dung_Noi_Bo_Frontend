@@ -49,6 +49,13 @@ const menuItems: SidebarMenuItem[] = [
     permissions: ['REQUISITIONS_READ_ALL', 'REQUISITIONS_READ_SCOPED'],
   },
   {
+    label: 'Tiến độ vị trí phòng ban',
+    to: '/department/positions/progress',
+    icon: '📈',
+    roles: [ROLES.HIRING_MANAGER],
+    permissions: ['REQUISITIONS_READ_SCOPED'],
+  },
+  {
     label: 'Quản lý tin tuyển dụng',
     to: '/job-postings',
     icon: '📢',

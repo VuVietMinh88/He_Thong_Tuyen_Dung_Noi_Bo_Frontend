@@ -26,6 +26,7 @@ import { getHealth, type HealthResponse } from "./services/healthService";
 import { ROLES, type Role } from "./constants/roles";
 import JobTitlesPage from "./pages/JobTitle/JobTitlesPage";
 import DepartmentPage from "./pages/Department/DepartmentPage";
+import DepartmentPositionProgress from "./pages/Department/DepartmentPositionProgress";
 import MasterDataManagement from "./pages/MasterData/MasterDataManagement";
 import HeadcountBudgetManagement from "./pages/Headcount/HeadcountBudgetManagement";
 import JobPostingForm from "./components/JobPosting/JobPostingForm";
@@ -213,6 +214,23 @@ function App() {
                 element={
                   <MainLayout>
                     <ProfilePage />
+                  </MainLayout>
+                }
+              />
+            </Route>
+            <Route
+              element={
+                <ProtectedRoute
+                  allowedRoles={[ROLES.HIRING_MANAGER]}
+                  requiredPermissions={["REQUISITIONS_READ_SCOPED"]}
+                />
+              }
+            >
+              <Route
+                path="/department/positions/progress"
+                element={
+                  <MainLayout>
+                    <DepartmentPositionProgress />
                   </MainLayout>
                 }
               />
