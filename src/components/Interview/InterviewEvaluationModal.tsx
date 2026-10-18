@@ -118,7 +118,7 @@ export const InterviewEvaluationModal: React.FC<InterviewEvaluationModalProps> =
         </div>
       </div>
 
-      {/* Drawer câu hỏi phỏng vấn gợi ý (User Story S7-02 / TKNHTTDNB1-480) */}
+      {/* Drawer câu hỏi phỏng vấn gợi ý (User Story S7-02 / TKNHTTDNB1-480 & TKNHTTDNB1-481) */}
       <InterviewSuggestedQuestions
         isOpen={isQuestionsDrawerOpen}
         onClose={() => setIsQuestionsDrawerOpen(false)}
@@ -126,6 +126,7 @@ export const InterviewEvaluationModal: React.FC<InterviewEvaluationModalProps> =
         jobTitle={formProps.jobTitle}
         candidateName={formProps.candidateName}
         candidateId={formProps.candidateId}
+        interviewerId={formProps.currentUserId || formProps.interviewerIds?.[0]}
         currentRoundName={formProps.interviewRound}
         activeCriteria={formProps.criteria}
       />
