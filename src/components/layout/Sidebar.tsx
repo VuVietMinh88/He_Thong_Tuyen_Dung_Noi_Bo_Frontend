@@ -29,6 +29,12 @@ const menuItems: SidebarMenuItem[] = [
     roles: Object.values(ROLES),
   },
   {
+    label: 'Thời gian & chi phí tuyển dụng',
+    to: '/reports/time-cost',
+    icon: '⏱️',
+    roles: Object.values(ROLES),
+  },
+  {
     label: 'Giới thiệu ứng viên',
     to: '/referrals',
     icon: '🤝',

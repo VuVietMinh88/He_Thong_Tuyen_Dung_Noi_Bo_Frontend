@@ -52,6 +52,7 @@ import NotificationSettingsPage from "./pages/Settings/NotificationSettingsPage"
 import EmailTemplateManagementPage from "./pages/Settings/EmailTemplateManagementPage";
 import EmailAuditLogPage from "./pages/Candidate/EmailAuditLogPage";
 import DashboardOverview from "./pages/Dashboard/DashboardOverview";
+import RecruitmentTimeCostReportPage from "./pages/Reports/RecruitmentTimeCostReportPage";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -177,6 +178,30 @@ function App() {
                 element={
                   <MainLayout>
                     <CandidateSourceReportPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/reports/time-cost"
+                element={
+                  <MainLayout>
+                    <RecruitmentTimeCostReportPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/dashboard/time-cost"
+                element={
+                  <MainLayout>
+                    <RecruitmentTimeCostReportPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/recruitment-time-cost-report"
+                element={
+                  <MainLayout>
+                    <RecruitmentTimeCostReportPage />
                   </MainLayout>
                 }
               />
