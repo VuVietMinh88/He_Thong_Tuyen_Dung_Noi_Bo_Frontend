@@ -49,6 +49,7 @@ import RecruitmentFunnelPage from "./pages/RecruitmentFunnel/RecruitmentFunnelPa
 import CandidateSourceReportPage from "./pages/CandidateSourceReport/CandidateSourceReportPage";
 import OfferApprovalPage from "./pages/Offer/OfferApprovalPage";
 import NotificationSettingsPage from "./pages/Settings/NotificationSettingsPage";
+import EmailTemplateManagementPage from "./pages/Settings/EmailTemplateManagementPage";
 import DashboardOverview from "./pages/Dashboard/DashboardOverview";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
@@ -429,6 +430,14 @@ function App() {
                 element={
                   <MainLayout>
                     <SlaSettingsPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/settings/email-templates"
+                element={
+                  <MainLayout>
+                    <EmailTemplateManagementPage />
                   </MainLayout>
                 }
               />
