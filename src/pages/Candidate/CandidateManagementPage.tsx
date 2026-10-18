@@ -21,6 +21,7 @@ import {
   CalendarDays,
   Trophy,
   Award,
+  UserX,
 } from 'lucide-react';
 import type {
   CandidateProfile,
@@ -60,6 +61,7 @@ import { CandidateExportExcelButton } from '../../components/Candidate/Candidate
 import { BatchInterviewScheduleModal } from '../../components/Candidate/BatchInterviewScheduleModal';
 import { CandidateComparisonModal } from '../../components/Candidate/CandidateComparisonModal';
 import { CandidateEvaluationSummaryModal } from '../../components/Candidate/EvaluationSummary/CandidateEvaluationSummaryModal';
+import { BulkRejectionModal } from '../../components/Candidate/BulkRejectionModal';
 import { toast, ToastContext } from '../../components/notifications';
 
 type PendingStageAction = {
@@ -118,6 +120,9 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
   // Modal tổng hợp đánh giá ứng viên ra quyết định (Task Jira TKNHTTDNB1-485 / User Story S7-02)
   const [isEvaluationSummaryModalOpen, setIsEvaluationSummaryModalOpen] = useState<boolean>(false);
   const [selectedSummaryCandidateId, setSelectedSummaryCandidateId] = useState<string | undefined>(undefined);
+
+  // Modal gửi thư từ chối hàng loạt (Task Jira TKNHTTDNB1-524 / User Story S7-09)
+  const [isBulkRejectionModalOpen, setIsBulkRejectionModalOpen] = useState<boolean>(false);
 
   const fetchCandidates = useCallback(async () => {
     setIsLoading(true);
@@ -664,6 +669,17 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
               <FolderHeart className="h-4 w-4" />
               <span>Chuyển vào Kho tiềm năng</span>
             </button>
+            {/* Nút Gửi thư từ chối hàng loạt (Task Jira TKNHTTDNB1-524 / User Story S7-09) */}
+            <button
+              type="button"
+              data-testid="bulk-reject-candidates-btn"
+              onClick={() => setIsBulkRejectionModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 shadow-2xs hover:bg-rose-50 transition-colors dark:border-rose-700 dark:bg-gray-800 dark:text-rose-300 dark:hover:bg-rose-950/40"
+              title="Gửi thư từ chối lịch sự hàng loạt kèm xem trước nội dung cá nhân hóa"
+            >
+              <UserX className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+              <span>Thư từ chối ({selectedCandidateIds.length})</span>
+            </button>
           </div>
         </div>
       )}
@@ -1070,6 +1086,30 @@ export const CandidateManagementPage: React.FC<CandidateManagementPageProps> = (
         candidateId={selectedSummaryCandidateId}
         onClose={() => setIsEvaluationSummaryModalOpen(false)}
         onDecisionUpdated={(_decision) => {
+          fetchCandidates();
+        }}
+      />
+
+      {/* Modal gửi thư từ chối hàng loạt (Task Jira TKNHTTDNB1-524 / User Story S7-09) */}
+      <BulkRejectionModal
+        isOpen={isBulkRejectionModalOpen}
+        onClose={() => setIsBulkRejectionModalOpen(false)}
+        candidates={candidateList
+          .filter((c) => selectedCandidateIds.includes(c.id))
+          .map((c) => ({
+            id: c.id,
+            fullName: c.fullName,
+            email: c.email,
+            phone: c.phone,
+            appliedJobTitle: c.appliedJobTitle,
+            departmentName: c.departmentName,
+            currentStage: (c.status as CandidateStage) || 'SCREENING',
+            appliedAt: c.appliedAt,
+            hasReceivedRejectionEmail: !!c.rejectionReason,
+            previousRejectionReason: c.rejectionReason,
+          }))}
+        onSuccess={() => {
+          setSelectedCandidateIds([]);
           fetchCandidates();
         }}
       />
