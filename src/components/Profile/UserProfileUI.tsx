@@ -45,6 +45,7 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
 
   const [isLoading, setIsLoading] = useState<boolean>(!initialData);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isCheckingPhone, setIsCheckingPhone] = useState<boolean>(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
   const [showSuccessAlert, setShowSuccessAlert] = useState<boolean>(false);
@@ -154,6 +155,56 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
     };
   }, [initialData]);
 
+  // Real-time phone duplication check with debounce
+  useEffect(() => {
+    const trimmedPhone = phone.trim();
+    if (
+      !trimmedPhone ||
+      trimmedPhone === profileData.phone ||
+      !validatePhoneVN(trimmedPhone)
+    ) {
+      return;
+    }
+
+    let isCurrent = true;
+    const timer = setTimeout(async () => {
+      setIsCheckingPhone(true);
+      try {
+        const check = await profileService.checkPhoneAvailability(
+          trimmedPhone,
+          profileData.id,
+        );
+        if (isCurrent) {
+          if (!check.available) {
+            setErrors((prev) => ({
+              ...prev,
+              phone:
+                check.message ||
+                "Số điện thoại này đã được đăng ký bởi tài khoản khác trong hệ thống.",
+            }));
+          } else {
+            setErrors((prev) => {
+              if (prev.phone?.includes("đã được đăng ký")) {
+                const { phone: _, ...rest } = prev;
+                return rest;
+              }
+              return prev;
+            });
+          }
+        }
+      } catch {
+        // ignore network error during live typing
+      } finally {
+        if (isCurrent) setIsCheckingPhone(false);
+      }
+    }, 400);
+
+    return () => {
+      isCurrent = false;
+      clearTimeout(timer);
+    };
+  }, [phone, profileData.phone, profileData.id]);
+
   const validateForm = (nameValue: string, phoneValue: string): FormErrors => {
     const newErrors: FormErrors = {};
 
@@ -184,10 +235,19 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
   const handlePhoneChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
     setPhone(value);
-    if (errors.phone) {
-      const nextErrors = validateForm(fullName, value);
-      setErrors((prev) => ({ ...prev, phone: nextErrors.phone }));
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === profileData.phone) {
+      setErrors((prev) => {
+        if (prev.phone) {
+          const { phone: _, ...rest } = prev;
+          return rest;
+        }
+        return prev;
+      });
+      return;
     }
+    const nextErrors = validateForm(fullName, value);
+    setErrors((prev) => ({ ...prev, phone: nextErrors.phone }));
   };
 
   const handleDisplayTitleChange = (
@@ -214,6 +274,30 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
 
     if (Object.keys(formValidationErrors).length > 0) {
       return;
+    }
+
+    // Submit-time check for duplicate phone number
+    const trimmedPhone = phone.trim();
+    if (trimmedPhone && trimmedPhone !== profileData.phone) {
+      setIsCheckingPhone(true);
+      try {
+        const check = await profileService.checkPhoneAvailability(
+          trimmedPhone,
+          profileData.id,
+        );
+        if (!check.available) {
+          const duplicateMsg =
+            check.message ||
+            "Số điện thoại này đã được đăng ký bởi tài khoản khác trong hệ thống.";
+          setErrors((prev) => ({ ...prev, phone: duplicateMsg }));
+          setIsCheckingPhone(false);
+          return;
+        }
+      } catch {
+        // proceed if check cannot be verified
+      } finally {
+        setIsCheckingPhone(false);
+      }
     }
 
     setIsSaving(true);
@@ -265,6 +349,7 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
     !fullName.trim() ||
     Boolean(errors.fullName) ||
     Boolean(errors.phone) ||
+    isCheckingPhone ||
     isSaving;
 
   const getInitials = (name: string): string => {
@@ -296,7 +381,7 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
       {/* Khung tóm tắt định danh cá nhân và avatar */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-indigo-500 to-indigo-700 text-2xl font-bold text-white shadow-md">
+          <div className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-indigo-500 to-indigo-700 text-2xl font-bold text-white shadow-md">
             {profileData.avatarUrl ? (
               <img
                 alt={profileData.fullName}
@@ -306,6 +391,21 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
             ) : (
               <span>{getInitials(profileData.fullName)}</span>
             )}
+
+            {/* Nút icon máy ảnh ở góc bên phải dưới cùng của khung ảnh đại diện */}
+            <button
+              id="avatar-camera-btn"
+              type="button"
+              onClick={() => setShowAvatarUpload((prev) => !prev)}
+              className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-white shadow-md ring-2 ring-white hover:bg-indigo-700 transition focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              title={showAvatarUpload ? "Đóng tải ảnh" : "Đổi ảnh đại diện"}
+              aria-label={showAvatarUpload ? "Đóng tải ảnh" : "Đổi ảnh đại diện"}
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 flex-1 min-w-0">
@@ -589,14 +689,22 @@ export const UserProfileUI: React.FC<UserProfileUIProps> = ({
                 type="tel"
                 value={phone}
               />
+              {isCheckingPhone && (
+                <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-indigo-600">
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
+                  Đang kiểm tra số điện thoại trên hệ thống...
+                </p>
+              )}
               {errors.phone ? (
-                <p className="mt-1 text-xs font-medium text-rose-600">
+                <p className="mt-1 text-xs font-medium text-rose-600" id="profile-phone-error" role="alert">
                   {errors.phone}
                 </p>
               ) : (
-                <p className="mt-1 text-xs text-slate-400">
-                  Di động 10 số (03/05/07/08/09) hoặc bắt đầu bằng +84/84.
-                </p>
+                !isCheckingPhone && (
+                  <p className="mt-1 text-xs text-slate-400">
+                    Di động 10 số (03/05/07/08/09) hoặc bắt đầu bằng +84/84.
+                  </p>
+                )
               )}
             </div>
 

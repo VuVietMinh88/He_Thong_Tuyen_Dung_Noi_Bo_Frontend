@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type FC, type ReactNode } from 'react';
 import { CheckCircle2, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
 import { ToastContext } from './ToastContext';
-import type { ToastContextValue, ToastOptions, ToastType } from './ToastContext';
+import type { ToastContextValue, ToastOptions, ToastPosition, ToastType } from './ToastContext';
 
 export interface ToastItem {
   id: number;
   message: string;
   type: ToastType;
+  position?: ToastPosition;
 }
 
 export interface ToastProviderProps {
@@ -62,9 +63,14 @@ export const ToastProvider: FC<ToastProviderProps> = ({ children }) => {
   }, []);
 
   const notify = useCallback(
-    (message: string, type: ToastType = 'info', duration: number = DEFAULT_DURATION_MS) => {
+    (
+      message: string,
+      type: ToastType = 'info',
+      duration: number = DEFAULT_DURATION_MS,
+      position: ToastPosition = 'top-right',
+    ) => {
       const id = nextId.current++;
-      setToasts((current) => [...current, { id, message, type }]);
+      setToasts((current) => [...current, { id, message, type, position }]);
 
       if (duration > 0) {
         timers.current.set(
@@ -79,9 +85,14 @@ export const ToastProvider: FC<ToastProviderProps> = ({ children }) => {
   const addToast = useCallback(
     (options: ToastOptions | string) => {
       if (typeof options === 'string') {
-        notify(options, 'info', DEFAULT_DURATION_MS);
+        notify(options, 'info', DEFAULT_DURATION_MS, 'top-right');
       } else {
-        notify(options.message, options.type ?? 'info', options.duration ?? DEFAULT_DURATION_MS);
+        notify(
+          options.message,
+          options.type ?? 'info',
+          options.duration ?? DEFAULT_DURATION_MS,
+          options.position ?? 'top-right',
+        );
       }
     },
     [notify],
@@ -95,22 +106,26 @@ export const ToastProvider: FC<ToastProviderProps> = ({ children }) => {
   );
 
   const success = useCallback(
-    (message: string, duration?: number) => notify(message, 'success', duration),
+    (message: string, duration?: number, position?: ToastPosition) =>
+      notify(message, 'success', duration, position),
     [notify],
   );
 
   const error = useCallback(
-    (message: string, duration?: number) => notify(message, 'error', duration),
+    (message: string, duration?: number, position?: ToastPosition) =>
+      notify(message, 'error', duration, position),
     [notify],
   );
 
   const warning = useCallback(
-    (message: string, duration?: number) => notify(message, 'warning', duration),
+    (message: string, duration?: number, position?: ToastPosition) =>
+      notify(message, 'warning', duration, position),
     [notify],
   );
 
   const info = useCallback(
-    (message: string, duration?: number) => notify(message, 'info', duration),
+    (message: string, duration?: number, position?: ToastPosition) =>
+      notify(message, 'info', duration, position),
     [notify],
   );
 
@@ -146,47 +161,61 @@ export const ToastProvider: FC<ToastProviderProps> = ({ children }) => {
     info,
   };
 
+  const renderToastItem = (toast: ToastItem) => {
+    const style = TOAST_STYLES[toast.type] ?? TOAST_STYLES.info;
+
+    return (
+      <div
+        key={toast.id}
+        className={`pointer-events-auto flex items-start gap-3 rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xl shadow-slate-900/10 transition-all duration-300 animate-toast-slide-in ${style.borderClass}`}
+        role={toast.type === 'error' ? 'alert' : 'status'}
+        aria-live={toast.type === 'error' ? 'assertive' : 'polite'}
+      >
+        <div className="mt-0.5">{style.icon}</div>
+        <div className="flex-1 min-w-0 pr-1">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <span
+              className={`inline-block rounded px-1.5 py-0.2 text-[10px] font-bold uppercase tracking-wider ${style.badgeClass}`}
+            >
+              {style.label}
+            </span>
+          </div>
+          <p className="text-sm font-medium text-slate-800 leading-snug break-words">
+            {toast.message}
+          </p>
+        </div>
+        <button
+          type="button"
+          aria-label="Đóng thông báo"
+          onClick={() => dismiss(toast.id)}
+          className="rounded-lg p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors focus:outline-none"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  };
+
+  const topToasts = toasts.filter((t) => t.position !== 'bottom-right');
+  const bottomToasts = toasts.filter((t) => t.position === 'bottom-right');
+
   return (
     <ToastContext.Provider value={contextValue}>
       {children}
+      {/* Top right notification container */}
       <div
         aria-label="Thông báo hệ thống"
         className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none w-full max-w-sm sm:max-w-md"
       >
-        {toasts.map((toast) => {
-          const style = TOAST_STYLES[toast.type] ?? TOAST_STYLES.info;
+        {topToasts.map(renderToastItem)}
+      </div>
 
-          return (
-            <div
-              key={toast.id}
-              className={`pointer-events-auto flex items-start gap-3 rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xl shadow-slate-900/10 transition-all duration-300 animate-toast-slide-in ${style.borderClass}`}
-              role={toast.type === 'error' ? 'alert' : 'status'}
-              aria-live={toast.type === 'error' ? 'assertive' : 'polite'}
-            >
-              <div className="mt-0.5">{style.icon}</div>
-              <div className="flex-1 min-w-0 pr-1">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <span
-                    className={`inline-block rounded px-1.5 py-0.2 text-[10px] font-bold uppercase tracking-wider ${style.badgeClass}`}
-                  >
-                    {style.label}
-                  </span>
-                </div>
-                <p className="text-sm font-medium text-slate-800 leading-snug break-words">
-                  {toast.message}
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-label="Đóng thông báo"
-                onClick={() => dismiss(toast.id)}
-                className="rounded-lg p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors focus:outline-none"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          );
-        })}
+      {/* Bottom right notification container */}
+      <div
+        aria-label="Thông báo hệ thống góc dưới"
+        className="fixed bottom-4 right-4 z-[9999] flex flex-col-reverse gap-2 pointer-events-none w-full max-w-sm sm:max-w-md"
+      >
+        {bottomToasts.map(renderToastItem)}
       </div>
     </ToastContext.Provider>
   );

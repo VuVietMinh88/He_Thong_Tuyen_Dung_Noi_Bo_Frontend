@@ -3,8 +3,10 @@ import axios from 'axios';
 import DepartmentTreeView, { type Department } from '../../components/Organization/DepartmentTreeView';
 import DepartmentModal, { type DepartmentFormValues, type ManagerOption } from '../../components/Organization/DepartmentModal';
 import { departmentService, type DepartmentNode } from '../../services/department.service';
+import { useToast } from '../../components/notifications/useToast';
 
 export default function DepartmentPage() {
+  const { addToast } = useToast();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [managers, setManagers] = useState<ManagerOption[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -125,15 +127,15 @@ export default function DepartmentPage() {
 
       if (modalType === 'edit' && formInitialData.id) {
         await departmentService.updateDepartment(formInitialData.id, payload);
-        alert('Cập nhật phòng ban thành công!');
+        addToast({ message: 'Cập nhật phòng ban thành công!', type: 'success', position: 'bottom-right' });
       } else {
         await departmentService.createDepartment(payload);
-        alert('Tạo phòng ban thành công!');
+        addToast({ message: 'Tạo thành công', type: 'success', position: 'bottom-right' });
       }
       fetchDepartments();
       closeModal();
     } catch {
-      alert('Có lỗi xảy ra khi lưu phòng ban!');
+      addToast({ message: 'Có lỗi xảy ra khi lưu phòng ban!', type: 'error', position: 'bottom-right' });
     }
   };
 
@@ -143,19 +145,19 @@ export default function DepartmentPage() {
     try {
       if (modalType === 'delete') {
         await departmentService.deleteDepartment(selectedDeptId);
-        alert('Xóa phòng ban thành công!');
+        addToast({ message: 'Xóa phòng ban thành công!', type: 'success', position: 'bottom-right' });
       } else if (modalType === 'deactivate') {
         // Find existing data to update active = false
         // ... (This requires finding full info or partial update endpoint, mock for now)
-        alert('Đã ngừng áp dụng phòng ban!');
+        addToast({ message: 'Đã ngừng áp dụng phòng ban!', type: 'info', position: 'bottom-right' });
       }
       fetchDepartments();
       closeModal();
     } catch (error) {
       if (axios.isAxiosError(error) && (error.response?.status === 409 || error.response?.status === 400)) {
-        alert("Không thể xóa phòng ban đang có yêu cầu tuyển dụng mở. Vui lòng chuyển sang trạng thái Ngừng áp dụng.");
+        addToast({ message: "Không thể xóa phòng ban đang có yêu cầu tuyển dụng mở. Vui lòng chuyển sang trạng thái Ngừng áp dụng.", type: 'warning', position: 'bottom-right' });
       } else {
-        alert('Có lỗi xảy ra khi thực hiện thao tác!');
+        addToast({ message: 'Có lỗi xảy ra khi thực hiện thao tác!', type: 'error', position: 'bottom-right' });
       }
     }
     closeModal();

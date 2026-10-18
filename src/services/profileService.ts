@@ -72,10 +72,74 @@ const updateProfile = async (input: UpdateProfileInput): Promise<ProfileResponse
   return response.data;
 };
 
+export interface PhoneCheckResult {
+  available: boolean;
+  message?: string;
+}
+
+/**
+ * Kiểm tra xem số điện thoại đã tồn tại trong hệ thống hay chưa (ngoại trừ tài khoản hiện tại).
+ */
+const checkPhoneAvailability = async (
+  phone: string,
+  currentUserId?: string,
+): Promise<PhoneCheckResult> => {
+  const normalized = phone.trim().replace(/\s+/g, '');
+  if (!normalized) return { available: true };
+
+  // Thử kiểm tra qua API Backend /accounts
+  try {
+    const response = await axiosClient.get<{ items?: Array<{ id: string; phone?: string | null }> }>('/accounts', {
+      params: { q: normalized, limit: 10 },
+    });
+    const items = response.data?.items;
+    if (Array.isArray(items)) {
+      const match = items.find(
+        (u) =>
+          u.phone &&
+          u.phone.trim().replace(/\s+/g, '') === normalized &&
+          (!currentUserId || u.id !== currentUserId),
+      );
+      if (match) {
+        return {
+          available: false,
+          message: 'Số điện thoại này đã được đăng ký bởi tài khoản khác trong hệ thống.',
+        };
+      }
+    }
+  } catch {
+    // Nếu Backend chưa hỗ trợ hoặc môi trường mock/offline, dùng danh sách mẫu
+  }
+
+  // Danh sách mẫu số điện thoại đã được đăng ký bởi các tài khoản khác
+  const mockExistingPhones: Array<{ id: string; phone: string }> = [
+    { id: 'USR-002', phone: '0987654321' },
+    { id: 'USR-003', phone: '0901234567' },
+    { id: 'ACC-002', phone: '0912345679' },
+    { id: 'ACC-003', phone: '0988776655' },
+    { id: 'ACC-ADMIN', phone: '0909090909' },
+  ];
+
+  const duplicate = mockExistingPhones.find(
+    (item) => item.phone === normalized && (!currentUserId || item.id !== currentUserId),
+  );
+
+  if (duplicate) {
+    return {
+      available: false,
+      message: 'Số điện thoại này đã được đăng ký bởi tài khoản khác trong hệ thống.',
+    };
+  }
+
+  return { available: true };
+};
+
 export const profileService = {
   getProfile,
   updateProfile,
+  checkPhoneAvailability,
   getApiErrorMessage,
 };
 
 export default profileService;
+
