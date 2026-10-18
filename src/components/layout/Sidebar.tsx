@@ -142,6 +142,15 @@ const menuItems: SidebarMenuItem[] = [
     permissions: ['INTERVIEWS_READ_ALL', 'INTERVIEWS_READ_SCOPED'],
   },
   {
+    label: 'Lịch cá nhân phỏng vấn',
+    to: '/interviewer/calendar',
+    icon: '🗓️',
+    roles: [
+      ...Object.values(ROLES),
+    ],
+    permissions: ['INTERVIEWS_READ_ALL', 'INTERVIEWS_READ_SCOPED'],
+  },
+  {
     label: 'Hồ sơ cá nhân',
     to: '/profile',
     icon: '👤',

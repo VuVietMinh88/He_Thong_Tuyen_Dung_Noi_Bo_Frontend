@@ -42,6 +42,7 @@ import UnifiedCandidateProfilePage from "./pages/Candidate/UnifiedCandidateProfi
 import CandidateEvaluationSummaryPage from "./pages/Candidate/CandidateEvaluationSummaryPage";
 import SlaSettingsPage from "./pages/SLA/SlaSettingsPage";
 import PersonalInterviewSchedulePage from "./pages/Interview/PersonalInterviewSchedulePage";
+import InterviewerCalendarPage from "./pages/Interview/InterviewerCalendarPage";
 import OnboardingChecklistPage from "./pages/Onboarding/OnboardingChecklistPage";
 import OnboardingTrackingPage from "./pages/Onboarding/OnboardingTrackingPage";
 import RecruitmentFunnelPage from "./pages/RecruitmentFunnel/RecruitmentFunnelPage";
@@ -516,6 +517,22 @@ function App() {
                 element={
                   <MainLayout>
                     <PersonalInterviewSchedulePage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/interviews/calendar"
+                element={
+                  <MainLayout>
+                    <InterviewerCalendarPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/interviewer/calendar"
+                element={
+                  <MainLayout>
+                    <InterviewerCalendarPage />
                   </MainLayout>
                 }
               />
