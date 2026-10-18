@@ -298,43 +298,51 @@ export const AvatarUploadUI: React.FC<AvatarUploadUIProps> = ({
         className={`rounded-2xl border border-slate-200 bg-white p-6 shadow-xs ${className}`}
       >
         <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-start">
-          {/* Vùng hiển thị ảnh đại diện tròn có hiệu ứng hover đổi ảnh */}
-          <div
-            aria-label="Khu vực tải lên ảnh đại diện"
-            className={`group relative flex h-36 w-36 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border-4 border-white shadow-md ring-2 transition-all ${
-              isDragOver
-                ? "ring-indigo-500 scale-105"
-                : "ring-slate-200 hover:ring-indigo-300"
-            }`}
-            onClick={handleOpenFileDialog}
-            onDragLeave={handleDragLeave}
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                handleOpenFileDialog();
-              }
-            }}
-          >
-            {displayAvatarSrc ? (
-              <img
-                alt={`Ảnh đại diện của ${fullName}`}
-                className="h-full w-full rounded-full object-cover"
-                src={displayAvatarSrc}
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center rounded-full bg-linear-to-br from-indigo-500 to-indigo-700 text-3xl font-bold text-white">
-                <span>{getInitials(fullName)}</span>
-              </div>
-            )}
+          {/* Vùng hiển thị ảnh đại diện tròn kèm icon máy ảnh ở góc phải dưới */}
+          <div className="relative inline-block shrink-0">
+            <div
+              aria-label="Khu vực tải lên ảnh đại diện"
+              className={`group relative flex h-36 w-36 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border-4 border-white shadow-md ring-2 transition-all ${
+                isDragOver
+                  ? "ring-indigo-500 scale-105"
+                  : "ring-slate-200 hover:ring-indigo-300"
+              }`}
+              onClick={handleOpenFileDialog}
+              onDragLeave={handleDragLeave}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleOpenFileDialog();
+                }
+              }}
+            >
+              {displayAvatarSrc ? (
+                <img
+                  alt={`Ảnh đại diện của ${fullName}`}
+                  className="h-full w-full rounded-full object-cover"
+                  src={displayAvatarSrc}
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center rounded-full bg-linear-to-br from-indigo-500 to-indigo-700 text-3xl font-bold text-white">
+                  <span>{getInitials(fullName)}</span>
+                </div>
+              )}
+            </div>
 
-            {/* Lớp phủ mờ hiển thị icon camera khi rê chuột */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center rounded-full bg-slate-900/50 text-white opacity-0 backdrop-blur-2xs transition-opacity duration-200 group-hover:opacity-100">
+            {/* Icon máy ảnh ở góc bên phải dưới cùng của khung ảnh đại diện */}
+            <button
+              type="button"
+              onClick={handleOpenFileDialog}
+              title="Đổi ảnh đại diện"
+              aria-label="Đổi ảnh đại diện"
+              className="absolute bottom-1 right-1 flex h-9 w-9 items-center justify-center rounded-full bg-indigo-600 text-white shadow-md ring-2 ring-white transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
               <svg
-                className="h-7 w-7"
+                className="h-5 w-5"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
@@ -351,22 +359,18 @@ export const AvatarUploadUI: React.FC<AvatarUploadUIProps> = ({
                   strokeLinejoin="round"
                 />
               </svg>
-              <span className="mt-1 text-xs font-semibold">Đổi ảnh</span>
-            </div>
+            </button>
           </div>
 
           {/* Khu vực chi tiết, điều khiển và các nút thao tác */}
           <div className="flex-1 min-w-0 text-center sm:text-left">
-            <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-              <h3 className="text-base font-bold text-slate-900">
-                Ảnh đại diện cá nhân
-              </h3>
-              {previewUrl && (
+            {previewUrl && (
+              <div className="mb-1 flex items-center justify-center sm:justify-start">
                 <span className="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-200">
                   Đã cắt vuông 1:1
                 </span>
-              )}
-            </div>
+              </div>
+            )}
 
             <p className="mt-1 text-xs text-slate-500">
               Định dạng tệp được hỗ trợ: <strong className="text-slate-700">JPG, PNG</strong>. Dung lượng tối đa: <strong className="text-slate-700">2MB</strong>.

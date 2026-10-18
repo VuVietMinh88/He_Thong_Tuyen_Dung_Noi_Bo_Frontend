@@ -1,4 +1,5 @@
 import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   importService,
   validateImportFile,
@@ -8,13 +9,19 @@ import {
   type ImportReport,
 } from "../../services/import.service";
 import { useToast } from "../notifications/useToast";
+import {
+  type StatusFilterOption,
+  type ImportColumnFilters,
+  INITIAL_COLUMN_FILTERS,
+  isRowDuplicate,
+} from "./importExcelHelper";
 
 export interface ImportExcelUIProps {
   onSuccess?: (report: ImportReport) => void;
   onClose?: () => void;
 }
 
-type FilterTab = "all" | "valid" | "invalid";
+export type { StatusFilterOption, ImportColumnFilters };
 
 const formatStatusPill = (valid: boolean) => {
   if (valid) {
@@ -31,6 +38,7 @@ const formatStatusLabel = (valid: boolean) => {
 };
 
 export const ImportExcelUI = ({ onSuccess, onClose }: ImportExcelUIProps) => {
+  const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const { notify } = useToast();
 
@@ -44,17 +52,145 @@ export const ImportExcelUI = ({ onSuccess, onClose }: ImportExcelUIProps) => {
   const [isImporting, setIsImporting] = useState(false);
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [filterTab, setFilterTab] = useState<FilterTab>("all");
+
+  // Search, Status filter dropdown & column-level filters
+  const [searchKeyword, setSearchKeyword] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilterOption>("ALL");
+  const [columnFilters, setColumnFilters] =
+    useState<ImportColumnFilters>(INITIAL_COLUMN_FILTERS);
+
+  // Pagination for preview list (10, 20, 50, 100 rows/page)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(20);
 
   const totalRows = previewData?.totalRows ?? 0;
   const validCount = previewData?.validRows ?? 0;
   const invalidCount = previewData?.invalidRows ?? 0;
 
-  const filteredRows: PreviewRow[] = (previewData?.rows ?? []).filter((row) => {
-    if (filterTab === "valid") return row.valid;
-    if (filterTab === "invalid") return !row.valid;
+  const allRows = previewData?.rows ?? [];
+  const duplicateCount = allRows.filter((r) => isRowDuplicate(r, allRows)).length;
+
+  const filteredRows: PreviewRow[] = allRows.filter((row) => {
+    // 1. Status Filter dropdown
+    if (statusFilter === "VALID" && !row.valid) return false;
+    if (statusFilter === "INVALID" && row.valid) return false;
+    if (statusFilter === "DUPLICATE" && !isRowDuplicate(row, allRows)) return false;
+
+    // 2. Global search keyword
+    if (searchKeyword.trim()) {
+      const q = searchKeyword.trim().toLowerCase();
+      const matchSearch =
+        row.rowNumber.toString().includes(q) ||
+        (row.fullName && row.fullName.toLowerCase().includes(q)) ||
+        (row.email && row.email.toLowerCase().includes(q)) ||
+        (row.phone && row.phone.toLowerCase().includes(q)) ||
+        (row.departmentCode && row.departmentCode.toLowerCase().includes(q)) ||
+        (row.displayTitle && row.displayTitle.toLowerCase().includes(q)) ||
+        (row.roles && row.roles.some((r) => r.toLowerCase().includes(q))) ||
+        (row.errors &&
+          row.errors.some((err) => err.message.toLowerCase().includes(q)));
+      if (!matchSearch) return false;
+    }
+
+    // 3. Column-level filters
+    if (columnFilters.rowNumber.trim()) {
+      if (!row.rowNumber.toString().includes(columnFilters.rowNumber.trim())) {
+        return false;
+      }
+    }
+    if (columnFilters.fullName.trim()) {
+      if (
+        !row.fullName ||
+        !row.fullName
+          .toLowerCase()
+          .includes(columnFilters.fullName.trim().toLowerCase())
+      ) {
+        return false;
+      }
+    }
+    if (columnFilters.email.trim()) {
+      if (
+        !row.email ||
+        !row.email
+          .toLowerCase()
+          .includes(columnFilters.email.trim().toLowerCase())
+      ) {
+        return false;
+      }
+    }
+    if (columnFilters.phone.trim()) {
+      if (
+        !row.phone ||
+        !row.phone
+          .toLowerCase()
+          .includes(columnFilters.phone.trim().toLowerCase())
+      ) {
+        return false;
+      }
+    }
+    if (columnFilters.roles.trim()) {
+      const q = columnFilters.roles.trim().toLowerCase();
+      if (!row.roles || !row.roles.some((r) => r.toLowerCase().includes(q))) {
+        return false;
+      }
+    }
+    if (columnFilters.departmentCode.trim()) {
+      if (
+        !row.departmentCode ||
+        !row.departmentCode
+          .toLowerCase()
+          .includes(columnFilters.departmentCode.trim().toLowerCase())
+      ) {
+        return false;
+      }
+    }
+    if (columnFilters.displayTitle.trim()) {
+      if (
+        !row.displayTitle ||
+        !row.displayTitle
+          .toLowerCase()
+          .includes(columnFilters.displayTitle.trim().toLowerCase())
+      ) {
+        return false;
+      }
+    }
+    if (columnFilters.status === "VALID" && !row.valid) return false;
+    if (columnFilters.status === "INVALID" && row.valid) return false;
+    if (
+      columnFilters.status === "DUPLICATE" &&
+      !isRowDuplicate(row, allRows)
+    ) {
+      return false;
+    }
+
     return true;
   });
+
+  const totalFilteredCount = filteredRows.length;
+  const totalPages = Math.max(1, Math.ceil(totalFilteredCount / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const paginatedRows = filteredRows.slice(startIndex, startIndex + pageSize);
+
+  const hasActiveFilters = Boolean(
+    searchKeyword.trim() ||
+      statusFilter !== "ALL" ||
+      columnFilters.rowNumber.trim() ||
+      columnFilters.fullName.trim() ||
+      columnFilters.email.trim() ||
+      columnFilters.phone.trim() ||
+      columnFilters.roles.trim() ||
+      columnFilters.departmentCode.trim() ||
+      columnFilters.displayTitle.trim() ||
+      columnFilters.status !== "ALL",
+  );
+
+  const handleResetFilters = () => {
+    setSearchKeyword("");
+    setStatusFilter("ALL");
+    setColumnFilters(INITIAL_COLUMN_FILTERS);
+    setCurrentPage(1);
+  };
 
   const handleFileSelection = async (file?: File) => {
     if (!file) return;
@@ -189,7 +325,10 @@ export const ImportExcelUI = ({ onSuccess, onClose }: ImportExcelUIProps) => {
     setPreviewData(null);
     setImportReport(null);
     setErrorMessage(null);
-    setFilterTab("all");
+    setSearchKeyword("");
+    setStatusFilter("ALL");
+    setColumnFilters(INITIAL_COLUMN_FILTERS);
+    setCurrentPage(1);
     if (inputRef.current) {
       inputRef.current.value = "";
     }
@@ -197,7 +336,11 @@ export const ImportExcelUI = ({ onSuccess, onClose }: ImportExcelUIProps) => {
 
   const handleCancel = () => {
     handleReset();
-    onClose?.();
+    if (onClose) {
+      onClose();
+    } else {
+      navigate("/users");
+    }
   };
 
   const canConfirmImport = Boolean(
@@ -206,6 +349,36 @@ export const ImportExcelUI = ({ onSuccess, onClose }: ImportExcelUIProps) => {
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+      {/* Navigation Breadcrumb & Back button */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+        <nav className="flex items-center gap-2 text-xs font-medium text-slate-500">
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="hover:text-indigo-600 transition"
+          >
+            Quản trị hệ thống
+          </button>
+          <span>/</span>
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="hover:text-indigo-600 transition"
+          >
+            Quản lý tài khoản
+          </button>
+          <span>/</span>
+          <span className="font-semibold text-slate-800">Import Excel</span>
+        </nav>
+        <button
+          type="button"
+          onClick={handleCancel}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50"
+        >
+          ← Quay lại danh sách tài khoản
+        </button>
+      </div>
+
       {/* Header */}
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -426,91 +599,268 @@ export const ImportExcelUI = ({ onSuccess, onClose }: ImportExcelUIProps) => {
         </div>
       </div>
 
-      {/* Filter Tabs for Preview Table */}
+      {/* Search Input & Status Filter Dropdown (Replacing old 3 tabs) */}
       {previewData && totalRows > 0 && (
-        <div className="mt-6 flex items-center justify-between border-b border-slate-200 pb-2">
-          <div className="flex gap-2">
-            <button
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                filterTab === "all"
-                  ? "bg-slate-900 text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-              onClick={() => setFilterTab("all")}
-              type="button"
-            >
-              Tất cả ({totalRows})
-            </button>
-            <button
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                filterTab === "valid"
-                  ? "bg-emerald-600 text-white"
-                  : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-              }`}
-              onClick={() => setFilterTab("valid")}
-              type="button"
-            >
-              Hợp lệ ({validCount})
-            </button>
-            <button
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                filterTab === "invalid"
-                  ? "bg-rose-600 text-white"
-                  : "bg-rose-50 text-rose-700 hover:bg-rose-100"
-              }`}
-              onClick={() => setFilterTab("invalid")}
-              type="button"
-            >
-              Có lỗi ({invalidCount})
-            </button>
+        <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-1 flex-col gap-2.5 sm:flex-row sm:items-center">
+            {/* Input tìm kiếm kết hợp */}
+            <div className="relative flex-1 min-w-[240px]">
+              <input
+                type="text"
+                placeholder="Tìm kiếm nhanh (họ tên, email, SĐT, vai trò, phòng ban, chức danh...)"
+                value={searchKeyword}
+                onChange={(e) => {
+                  setSearchKeyword(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-8 text-xs font-medium text-slate-800 shadow-2xs placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+              />
+              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                🔍
+              </span>
+              {searchKeyword && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchKeyword("");
+                    setCurrentPage(1);
+                  }}
+                  className="absolute inset-y-0 right-2.5 flex items-center text-xs text-slate-400 hover:text-slate-600"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Dropdown lọc trạng thái: Tất cả, Hợp lệ, Có lỗi, Trùng thông tin */}
+            <div className="flex items-center gap-2">
+              <label
+                htmlFor="import-status-dropdown"
+                className="shrink-0 text-xs font-semibold text-slate-600"
+              >
+                Lọc trạng thái:
+              </label>
+              <select
+                id="import-status-dropdown"
+                aria-label="Lọc theo trạng thái hồ sơ"
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value as StatusFilterOption);
+                  setCurrentPage(1);
+                }}
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+              >
+                <option value="ALL">Tất cả ({totalRows})</option>
+                <option value="VALID">Hợp lệ ({validCount})</option>
+                <option value="INVALID">Có lỗi ({invalidCount})</option>
+                <option value="DUPLICATE">
+                  Trùng thông tin (email, họ tên, ...) ({duplicateCount})
+                </option>
+              </select>
+            </div>
           </div>
-          <p className="text-xs text-slate-500">
-            Hiển thị {filteredRows.length} dòng
-          </p>
+
+          <div className="flex items-center gap-3">
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="text-xs font-semibold text-indigo-600 underline hover:text-indigo-800"
+              >
+                Xóa lọc
+              </button>
+            )}
+            <p className="text-xs text-slate-500">
+              Hiển thị <strong>{filteredRows.length}</strong> / {totalRows} dòng
+            </p>
+          </div>
         </div>
       )}
 
-      {/* Table Preview */}
-      <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      {/* Table Preview with Independent Column Filters */}
+      <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xs">
         <div className="max-h-[520px] overflow-auto">
           <table className="min-w-full border-separate border-spacing-0 text-left">
             <thead className="sticky top-0 z-10 bg-slate-100 shadow-xs">
               <tr>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">
+                <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">
                   Dòng Excel
                 </th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">
+                <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">
                   Họ tên
                 </th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">
+                <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">
                   Email
                 </th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">
+                <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">
                   Số điện thoại
                 </th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">
+                <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">
                   Vai trò
                 </th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">
+                <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">
                   Phòng ban
                 </th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">
+                <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">
                   Chức danh
                 </th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">
+                <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">
                   Trạng thái
                 </th>
               </tr>
+
+              {/* Independent Column Filter Row */}
+              {previewData && totalRows > 0 && (
+                <tr className="border-t border-slate-200 bg-slate-50">
+                  <th className="p-2">
+                    <input
+                      type="text"
+                      placeholder="Lọc dòng..."
+                      value={columnFilters.rowNumber}
+                      onChange={(e) => {
+                        setColumnFilters((p) => ({
+                          ...p,
+                          rowNumber: e.target.value,
+                        }));
+                        setCurrentPage(1);
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none"
+                    />
+                  </th>
+                  <th className="p-2">
+                    <input
+                      type="text"
+                      placeholder="Lọc họ tên..."
+                      value={columnFilters.fullName}
+                      onChange={(e) => {
+                        setColumnFilters((p) => ({
+                          ...p,
+                          fullName: e.target.value,
+                        }));
+                        setCurrentPage(1);
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none"
+                    />
+                  </th>
+                  <th className="p-2">
+                    <input
+                      type="text"
+                      placeholder="Lọc email..."
+                      value={columnFilters.email}
+                      onChange={(e) => {
+                        setColumnFilters((p) => ({
+                          ...p,
+                          email: e.target.value,
+                        }));
+                        setCurrentPage(1);
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none"
+                    />
+                  </th>
+                  <th className="p-2">
+                    <input
+                      type="text"
+                      placeholder="Lọc SĐT..."
+                      value={columnFilters.phone}
+                      onChange={(e) => {
+                        setColumnFilters((p) => ({
+                          ...p,
+                          phone: e.target.value,
+                        }));
+                        setCurrentPage(1);
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none"
+                    />
+                  </th>
+                  <th className="p-2">
+                    <input
+                      type="text"
+                      placeholder="Lọc vai trò..."
+                      value={columnFilters.roles}
+                      onChange={(e) => {
+                        setColumnFilters((p) => ({
+                          ...p,
+                          roles: e.target.value,
+                        }));
+                        setCurrentPage(1);
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none"
+                    />
+                  </th>
+                  <th className="p-2">
+                    <input
+                      type="text"
+                      placeholder="Lọc phòng ban..."
+                      value={columnFilters.departmentCode}
+                      onChange={(e) => {
+                        setColumnFilters((p) => ({
+                          ...p,
+                          departmentCode: e.target.value,
+                        }));
+                        setCurrentPage(1);
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none"
+                    />
+                  </th>
+                  <th className="p-2">
+                    <input
+                      type="text"
+                      placeholder="Lọc chức danh..."
+                      value={columnFilters.displayTitle}
+                      onChange={(e) => {
+                        setColumnFilters((p) => ({
+                          ...p,
+                          displayTitle: e.target.value,
+                        }));
+                        setCurrentPage(1);
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none"
+                    />
+                  </th>
+                  <th className="p-2">
+                    <select
+                      aria-label="Lọc cột trạng thái"
+                      value={columnFilters.status}
+                      onChange={(e) => {
+                        setColumnFilters((p) => ({
+                          ...p,
+                          status: e.target.value as StatusFilterOption,
+                        }));
+                        setCurrentPage(1);
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none"
+                    >
+                      <option value="ALL">Tất cả</option>
+                      <option value="VALID">Hợp lệ</option>
+                      <option value="INVALID">Có lỗi</option>
+                      <option value="DUPLICATE">Trùng</option>
+                    </select>
+                  </th>
+                </tr>
+              )}
             </thead>
             <tbody>
-              {filteredRows.length > 0 ? (
-                filteredRows.map((row) => {
-                  const hasEmailError = row.errors?.some((e) => e.column === "email");
-                  const hasNameError = row.errors?.some((e) => e.column === "fullName");
-                  const hasPhoneError = row.errors?.some((e) => e.column === "phone");
-                  const hasRolesError = row.errors?.some((e) => e.column === "roles");
-                  const hasDeptError = row.errors?.some((e) => e.column === "departmentCode");
-                  const hasTitleError = row.errors?.some((e) => e.column === "displayTitle");
+              {paginatedRows.length > 0 ? (
+                paginatedRows.map((row) => {
+                  const hasEmailError = row.errors?.some(
+                    (e) => e.column === "email",
+                  );
+                  const hasNameError = row.errors?.some(
+                    (e) => e.column === "fullName",
+                  );
+                  const hasPhoneError = row.errors?.some(
+                    (e) => e.column === "phone",
+                  );
+                  const hasRolesError = row.errors?.some(
+                    (e) => e.column === "roles",
+                  );
+                  const hasDeptError = row.errors?.some(
+                    (e) => e.column === "departmentCode",
+                  );
+                  const hasTitleError = row.errors?.some(
+                    (e) => e.column === "displayTitle",
+                  );
+                  const isDuplicate = isRowDuplicate(row, allRows);
 
                   return (
                     <tr
@@ -532,7 +882,7 @@ export const ImportExcelUI = ({ onSuccess, onClose }: ImportExcelUIProps) => {
                         }`}
                       >
                         {row.fullName || (
-                          <span className="text-slate-400 italic">Trống</span>
+                          <span className="italic text-slate-400">Trống</span>
                         )}
                       </td>
                       <td
@@ -543,7 +893,7 @@ export const ImportExcelUI = ({ onSuccess, onClose }: ImportExcelUIProps) => {
                         }`}
                       >
                         {row.email || (
-                          <span className="text-slate-400 italic">Trống</span>
+                          <span className="italic text-slate-400">Trống</span>
                         )}
                       </td>
                       <td
@@ -576,7 +926,7 @@ export const ImportExcelUI = ({ onSuccess, onClose }: ImportExcelUIProps) => {
                             ))}
                           </div>
                         ) : (
-                          <span className="text-slate-400 italic">Chưa có</span>
+                          <span className="italic text-slate-400">Chưa có</span>
                         )}
                       </td>
                       <td
@@ -602,11 +952,18 @@ export const ImportExcelUI = ({ onSuccess, onClose }: ImportExcelUIProps) => {
                         )}
                       </td>
                       <td className="border-t border-slate-200 px-4 py-3 text-sm">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${formatStatusPill(row.valid)}`}
-                        >
-                          {formatStatusLabel(row.valid)}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${formatStatusPill(row.valid)}`}
+                          >
+                            {formatStatusLabel(row.valid)}
+                          </span>
+                          {isDuplicate && (
+                            <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 ring-1 ring-amber-300">
+                              Trùng lặp
+                            </span>
+                          )}
+                        </div>
                         {!row.valid && row.errors && row.errors.length > 0 && (
                           <div className="mt-1.5 space-y-1">
                             {row.errors.map((err, errIdx) => (
@@ -636,9 +993,20 @@ export const ImportExcelUI = ({ onSuccess, onClose }: ImportExcelUIProps) => {
                         Đang đọc và phân tích tệp Excel từ Backend...
                       </span>
                     ) : selectedFile ? (
-                      filterTab !== "all"
-                        ? "Không có dòng nào phù hợp với bộ lọc hiện tại."
-                        : "Tệp Excel không có dòng dữ liệu nhân sự nào."
+                      hasActiveFilters ? (
+                        <div>
+                          <p>Không có dòng nào phù hợp với bộ lọc hiện tại.</p>
+                          <button
+                            type="button"
+                            onClick={handleResetFilters}
+                            className="mt-2 text-xs font-semibold text-indigo-600 underline hover:text-indigo-800"
+                          >
+                            Xóa bộ lọc để xem lại toàn bộ {totalRows} dòng
+                          </button>
+                        </div>
+                      ) : (
+                        "Tệp Excel không có dòng dữ liệu nhân sự nào."
+                      )
                     ) : (
                       "Chưa có dữ liệu. Vui lòng kéo thả hoặc chọn tệp Excel (.xlsx) để xem trước."
                     )}
@@ -649,6 +1017,60 @@ export const ImportExcelUI = ({ onSuccess, onClose }: ImportExcelUIProps) => {
           </table>
         </div>
       </div>
+
+      {/* Pagination Bar for Preview List (10, 20, 50, 100 rows/page) */}
+      {previewData && totalRows > 0 && (
+        <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+            <span>Hiển thị:</span>
+            <select
+              aria-label="Số dòng mỗi trang"
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 shadow-2xs focus:border-indigo-500 focus:outline-none"
+            >
+              <option value={10}>10 dòng/trang</option>
+              <option value={20}>20 dòng/trang</option>
+              <option value={50}>50 dòng/trang</option>
+              <option value={100}>100 dòng/trang</option>
+            </select>
+            <span className="text-slate-500">
+              (Dòng {totalFilteredCount === 0 ? 0 : startIndex + 1} -{" "}
+              {Math.min(startIndex + pageSize, totalFilteredCount)} trong tổng số{" "}
+              <strong>{totalFilteredCount}</strong> dòng
+              {totalFilteredCount !== totalRows
+                ? ` đã lọc từ ${totalRows}`
+                : ""}
+              )
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <button
+              type="button"
+              disabled={safeCurrentPage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Trước
+            </button>
+            <span className="text-xs font-semibold text-slate-700">
+              Trang {safeCurrentPage} / {totalPages}
+            </span>
+            <button
+              type="button"
+              disabled={safeCurrentPage >= totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Sau
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Footer Actions */}
       <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
