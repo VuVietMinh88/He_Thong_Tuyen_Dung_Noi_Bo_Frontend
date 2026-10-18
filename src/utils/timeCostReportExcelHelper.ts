@@ -88,7 +88,12 @@ export const createTimeCostReportWorkbook = (
     ],
   ];
 
-  departments.forEach((dept, index) => {
+  const targetDepts =
+    filters?.departmentId && filters.departmentId !== 'ALL'
+      ? departments.filter((d) => d.departmentId === filters.departmentId)
+      : departments;
+
+  targetDepts.forEach((dept, index) => {
     const rate = dept.targetCount > 0 ? Math.round((dept.hiredCount / dept.targetCount) * 100) : 0;
     sheet2Data.push([
       index + 1,
@@ -128,7 +133,22 @@ export const createTimeCostReportWorkbook = (
     ],
   ];
 
-  positions.forEach((pos, index) => {
+  const targetPositions = positions.filter((pos) => {
+    if (filters?.departmentId && filters.departmentId !== 'ALL') {
+      const matchDept = departments.find((d) => d.departmentId === filters.departmentId);
+      if (matchDept && pos.departmentName !== matchDept.departmentName) {
+        return false;
+      }
+    }
+    if (filters?.jobTitleId && filters.jobTitleId !== 'ALL') {
+      if (pos.jobId !== filters.jobTitleId) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  targetPositions.forEach((pos, index) => {
     sheet3Data.push([
       index + 1,
       pos.jobTitle,
