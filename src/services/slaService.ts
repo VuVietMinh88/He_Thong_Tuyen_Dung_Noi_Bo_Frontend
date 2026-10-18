@@ -445,9 +445,12 @@ export const slaService = {
 
     const existingReminders = this.getStoredDailyReminders();
     const newlyCreatedReminders: SlaDailyReminder[] = [];
+    const referenceTimeMs = targetDateStr
+      ? new Date(`${targetDateStr}T23:59:59.999+07:00`).getTime()
+      : undefined;
 
     candidates.forEach((candidate) => {
-      const evaluation = this.calculateCandidateSla(candidate, activeSettings);
+      const evaluation = this.calculateCandidateSla(candidate, activeSettings, referenceTimeMs);
       if (!evaluation.isOverdue) return;
 
       const reminderKey = `${candidate.id}_${evaluation.stage}_${today}`;
