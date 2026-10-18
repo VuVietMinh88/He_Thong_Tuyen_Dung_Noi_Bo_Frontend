@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback, useId } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useId, useContext } from 'react';
 import {
   HelpCircle,
   Search,
@@ -22,6 +22,8 @@ import {
   CheckSquare,
   Square,
   Award,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import type { QuestionDifficulty } from '../../services/questionService';
 import {
@@ -30,6 +32,11 @@ import {
   type GoodAnswerCriteria,
   type AskedInPreviousRoundInfo,
 } from '../../data/suggestedQuestionsData';
+import {
+  interviewQuestionService,
+  handleInterviewQuestionError,
+} from '../../services/interviewQuestionService';
+import { ToastContext } from '../notifications/ToastContext';
 
 export type { SuggestedQuestionItem, GoodAnswerCriteria, AskedInPreviousRoundInfo };
 
@@ -46,8 +53,16 @@ export interface InterviewSuggestedQuestionsProps {
   candidateName?: string;
   /** ID ứng viên */
   candidateId?: string;
+  /** ID hồ sơ ứng tuyển */
+  applicationId?: string;
+  /** ID buổi / vòng phỏng vấn */
+  interviewRoundId?: string;
   /** Tên vòng phỏng vấn hiện tại */
   currentRoundName?: string;
+  /** ID người phỏng vấn */
+  interviewerId?: string;
+  /** Tên người phỏng vấn */
+  interviewerName?: string;
   /** Danh sách tiêu chí năng lực đang có trong phiếu đánh giá */
   activeCriteria?: Array<{ id: string; name: string }>;
   /** Danh sách ID các câu hỏi đã được hỏi ở các vòng trước */
@@ -86,7 +101,12 @@ export const InterviewSuggestedQuestions: React.FC<InterviewSuggestedQuestionsPr
   variant = 'drawer',
   jobTitle = '',
   candidateName = 'Ứng viên',
+  candidateId,
+  applicationId,
+  interviewRoundId,
   currentRoundName = 'Buổi phỏng vấn',
+  interviewerId,
+  interviewerName,
   activeCriteria = [],
   previouslyAskedQuestionIds = [],
   onSelectQuestion,
@@ -94,6 +114,17 @@ export const InterviewSuggestedQuestions: React.FC<InterviewSuggestedQuestionsPr
   initialQuestions,
   className = '',
 }) => {
+  const toastContext = useContext(ToastContext);
+  const addToast = useCallback(
+    (options: { message: string; type?: 'success' | 'error' | 'warning' | 'info'; duration?: number }) => {
+      if (toastContext?.addToast) {
+        return toastContext.addToast(options);
+      }
+      return '';
+    },
+    [toastContext],
+  );
+
   const searchInputId = useId();
   const positionFilterId = useId();
   const criterionFilterId = useId();
@@ -101,11 +132,15 @@ export const InterviewSuggestedQuestions: React.FC<InterviewSuggestedQuestionsPr
   const statusFilterId = useId();
 
   // Danh sách câu hỏi nguồn
-  const [questions] = useState<SuggestedQuestionItem[]>(() => {
+  const [questions, setQuestions] = useState<SuggestedQuestionItem[]>(() => {
     return Array.isArray(initialQuestions)
       ? initialQuestions
       : DEFAULT_SUGGESTED_QUESTIONS;
   });
+
+  // Loading và mutating state (AC 1 & AC 2)
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [mutatingQuestionIds, setMutatingQuestionIds] = useState<Record<string, boolean>>({});
 
   // State bộ lọc (AC 1)
   const [selectedPosition, setSelectedPosition] = useState<string>(() => resolveInitialPosition(jobTitle));
@@ -118,7 +153,21 @@ export const InterviewSuggestedQuestions: React.FC<InterviewSuggestedQuestionsPr
   const [expandedQuestionIds, setExpandedQuestionIds] = useState<Record<string, boolean>>({});
 
   // Quản lý câu hỏi đã được hỏi trong buổi này (AC 2 & AC 3)
-  const [currentSessionAskedIds, setCurrentSessionAskedIds] = useState<Record<string, boolean>>({});
+  const [currentSessionAskedIds, setCurrentSessionAskedIds] = useState<Record<string, boolean>>(() => {
+    const targetId = candidateId || applicationId;
+    if (!targetId) return {};
+    const initialMap: Record<string, boolean> = {};
+    const stored = interviewQuestionService.getStoredUsages();
+    stored.forEach((u) => {
+      const matchCandidate = u.candidateId === targetId || u.applicationId === targetId;
+      const matchRound =
+        u.roundName === currentRoundName || (interviewRoundId && u.interviewRoundId === interviewRoundId);
+      if (matchCandidate && matchRound) {
+        initialMap[u.questionId] = true;
+      }
+    });
+    return initialMap;
+  });
 
   // Trạng thái copy feedback
   const [copiedQuestionId, setCopiedQuestionId] = useState<string | null>(null);
@@ -133,6 +182,96 @@ export const InterviewSuggestedQuestions: React.FC<InterviewSuggestedQuestionsPr
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose, variant]);
+
+  // Tải danh sách câu hỏi gợi ý từ service (AC 1 & AC 2)
+  useEffect(() => {
+    if (Array.isArray(initialQuestions)) {
+      return;
+    }
+
+    let isMounted = true;
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        const items = await interviewQuestionService.getSuggestedQuestions({
+          candidateId,
+          applicationId,
+          jobTitle,
+          roundName: currentRoundName,
+          interviewRoundId,
+        });
+        if (isMounted) {
+          setQuestions(items);
+
+          // Đồng bộ các câu hỏi đã đánh dấu trong buổi hiện tại từ storage
+          const targetId = candidateId || applicationId;
+          if (targetId) {
+            const stored = interviewQuestionService.getStoredUsages();
+            const sessionMap: Record<string, boolean> = {};
+            stored.forEach((u) => {
+              const matchCandidate = u.candidateId === targetId || u.applicationId === targetId;
+              const matchRound =
+                u.roundName === currentRoundName || (interviewRoundId && u.interviewRoundId === interviewRoundId);
+              if (matchCandidate && matchRound) {
+                sessionMap[u.questionId] = true;
+              }
+            });
+            setCurrentSessionAskedIds((prev) => ({ ...prev, ...sessionMap }));
+          }
+        }
+      } catch (err: unknown) {
+        if (isMounted) {
+          const formatted = handleInterviewQuestionError(
+            err,
+            'Không thể tải ngân hàng câu hỏi gợi ý từ máy chủ.',
+          );
+          addToast({
+            type: 'error',
+            message: formatted.message,
+          });
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [candidateId, applicationId, jobTitle, currentRoundName, interviewRoundId, initialQuestions, addToast]);
+
+  const handleRefreshQuestions = async () => {
+    setIsLoading(true);
+    try {
+      const items = await interviewQuestionService.getSuggestedQuestions({
+        candidateId,
+        applicationId,
+        jobTitle,
+        roundName: currentRoundName,
+        interviewRoundId,
+      });
+      setQuestions(items);
+      addToast({
+        type: 'success',
+        message: 'Đã cập nhật danh sách câu hỏi gợi ý mới nhất.',
+      });
+    } catch (err: unknown) {
+      const formatted = handleInterviewQuestionError(
+        err,
+        'Không thể làm mới danh sách câu hỏi.',
+      );
+      addToast({
+        type: 'error',
+        message: formatted.message,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Danh sách vị trí tuyển dụng duy nhất trích xuất từ ngân hàng
   const availablePositions = useMemo(() => {
@@ -176,15 +315,69 @@ export const InterviewSuggestedQuestions: React.FC<InterviewSuggestedQuestionsPr
     setExpandedQuestionIds(newState);
   };
 
-  // Đánh dấu câu hỏi đã hỏi trong buổi phỏng vấn hiện tại
-  const handleToggleMarkCurrentSession = (questionId: string) => {
-    const nextState = !currentSessionAskedIds[questionId];
+  // Đánh dấu câu hỏi đã hỏi trong buổi phỏng vấn hiện tại (AC 1, AC 2 & Toast)
+  const handleToggleMarkCurrentSession = async (questionId: string) => {
+    if (mutatingQuestionIds[questionId]) return;
+
+    const previousState = !!currentSessionAskedIds[questionId];
+    const nextState = !previousState;
+
+    // 1. Cập nhật giao diện tức thì (Optimistic UI)
     setCurrentSessionAskedIds((prev) => ({
       ...prev,
       [questionId]: nextState,
     }));
-    if (onToggleMarkAsked) {
-      onToggleMarkAsked(questionId, nextState);
+    setMutatingQuestionIds((prev) => ({ ...prev, [questionId]: true }));
+
+    try {
+      if (nextState) {
+        await interviewQuestionService.markQuestionAsAsked({
+          questionId,
+          candidateId,
+          applicationId,
+          interviewRoundId,
+          roundName: currentRoundName,
+          interviewerId,
+          interviewerName,
+        });
+        addToast({
+          type: 'success',
+          message: 'Đã đánh dấu câu hỏi đã sử dụng trong buổi phỏng vấn.',
+        });
+      } else {
+        await interviewQuestionService.unmarkQuestionAsAsked({
+          questionId,
+          candidateId,
+          applicationId,
+          interviewRoundId,
+        });
+        addToast({
+          type: 'info',
+          message: 'Đã hoàn tác đánh dấu câu hỏi.',
+        });
+      }
+
+      if (onToggleMarkAsked) {
+        onToggleMarkAsked(questionId, nextState);
+      }
+    } catch (err: unknown) {
+      // 2. Rollback state nếu xảy ra lỗi
+      setCurrentSessionAskedIds((prev) => ({
+        ...prev,
+        [questionId]: previousState,
+      }));
+      const formattedErr = handleInterviewQuestionError(
+        err,
+        nextState
+          ? 'Không thể lưu trạng thái đánh dấu câu hỏi. Vui lòng thử lại.'
+          : 'Không thể bỏ đánh dấu câu hỏi. Vui lòng thử lại.',
+      );
+      addToast({
+        type: 'error',
+        message: formattedErr.message,
+      });
+    } finally {
+      setMutatingQuestionIds((prev) => ({ ...prev, [questionId]: false }));
     }
   };
 
@@ -334,7 +527,17 @@ export const InterviewSuggestedQuestions: React.FC<InterviewSuggestedQuestionsPr
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={handleRefreshQuestions}
+              disabled={isLoading}
+              title="Tải lại ngân hàng câu hỏi"
+              className="p-2 text-indigo-200 hover:text-white hover:bg-white/10 rounded-xl transition cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+
             {onClose && variant !== 'inline' && (
               <button
                 type="button"
@@ -521,7 +724,17 @@ export const InterviewSuggestedQuestions: React.FC<InterviewSuggestedQuestionsPr
 
       {/* 3. Questions List Cards (AC 2) */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5">
-        {filteredQuestions.length === 0 ? (
+        {isLoading ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 sm:p-12 text-center my-4 space-y-3 shadow-2xs">
+            <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
+            <h3 className="text-sm font-bold text-slate-800">
+              Đang tải danh sách câu hỏi gợi ý...
+            </h3>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              Hệ thống đang truy xuất ngân hàng câu hỏi và lịch sử phỏng vấn của ứng viên.
+            </p>
+          </div>
+        ) : filteredQuestions.length === 0 ? (
           <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 sm:p-12 text-center my-4">
             <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-500 flex items-center justify-center mx-auto mb-3">
               <HelpCircle className="w-6 h-6" />
@@ -631,15 +844,21 @@ export const InterviewSuggestedQuestions: React.FC<InterviewSuggestedQuestionsPr
                       {/* Nút Đánh dấu đã hỏi / Bỏ đánh dấu */}
                       <button
                         type="button"
+                        disabled={mutatingQuestionIds[q.id]}
                         onClick={() => handleToggleMarkCurrentSession(q.id)}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg transition cursor-pointer ${
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
                           isAskedInCurr
                             ? 'bg-emerald-600 text-white shadow-2xs hover:bg-emerald-700'
                             : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                         }`}
                         title="Đánh dấu câu hỏi này đã được hội đồng đưa ra trong buổi hôm nay"
                       >
-                        {isAskedInCurr ? (
+                        {mutatingQuestionIds[q.id] ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            Đang xử lý...
+                          </>
+                        ) : isAskedInCurr ? (
                           <>
                             <CheckSquare className="w-3.5 h-3.5" />
                             Đã hỏi
