@@ -119,6 +119,13 @@ const menuItems: SidebarMenuItem[] = [
     permissions: ['ORGANIZATION_READ_ALL'],
   },
   {
+    label: 'Lịch sử gửi email',
+    to: '/candidates/email-audit-logs',
+    icon: '📨',
+    roles: [ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER],
+    permissions: ['CANDIDATES_READ_ALL', 'CANDIDATES_READ_SCOPED'],
+  },
+  {
     label: 'Mẫu Checklist tiếp nhận',
     to: '/onboarding/checklist-templates',
     icon: '📋',

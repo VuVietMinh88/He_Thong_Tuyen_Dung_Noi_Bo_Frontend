@@ -50,6 +50,7 @@ import CandidateSourceReportPage from "./pages/CandidateSourceReport/CandidateSo
 import OfferApprovalPage from "./pages/Offer/OfferApprovalPage";
 import NotificationSettingsPage from "./pages/Settings/NotificationSettingsPage";
 import EmailTemplateManagementPage from "./pages/Settings/EmailTemplateManagementPage";
+import EmailAuditLogPage from "./pages/Candidate/EmailAuditLogPage";
 import DashboardOverview from "./pages/Dashboard/DashboardOverview";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
@@ -506,6 +507,22 @@ function App() {
                 element={
                   <MainLayout>
                     <CandidateEvaluationSummaryPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/candidates/email-audit-logs"
+                element={
+                  <MainLayout>
+                    <EmailAuditLogPage />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/email-audit-logs"
+                element={
+                  <MainLayout>
+                    <EmailAuditLogPage />
                   </MainLayout>
                 }
               />

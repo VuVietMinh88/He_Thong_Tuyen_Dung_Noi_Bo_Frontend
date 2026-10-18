@@ -54,6 +54,7 @@ import RejectCandidateModal from '../../components/Candidate/RejectCandidateModa
 import InterviewScheduleModal from '../../components/Candidate/InterviewScheduleModal';
 import CandidateInterviewsList from '../../components/Candidate/CandidateInterviewsList';
 import { interviewService } from '../../services/interviewService';
+import EmailAuditLogPage from './EmailAuditLogPage';
 import type { InterviewSchedulePayload } from '../../types/interview';
 import type {
   MoveCandidateStagePayload,
@@ -81,7 +82,7 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
   const [isCoverLetterExpanded, setIsCoverLetterExpanded] = useState<boolean>(false);
   const [hoverRating, setHoverRating] = useState<number | null>(null);
   const [mobileTab, setMobileTab] = useState<'profile' | 'cv'>('profile');
-  const [contentTab, setContentTab] = useState<'overview' | 'history' | 'notes' | 'timeline' | 'interviews'>('overview');
+  const [contentTab, setContentTab] = useState<'overview' | 'history' | 'notes' | 'timeline' | 'interviews' | 'emails'>('overview');
   const [candidateInterviews, setCandidateInterviews] = useState<InterviewSchedulePayload[]>([]);
   const [isLoadingInterviews, setIsLoadingInterviews] = useState<boolean>(false);
   const [isMoveStageModalOpen, setIsMoveStageModalOpen] = useState(false);
@@ -764,6 +765,18 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
               <Calendar className="w-4 h-4" />
               Lịch phỏng vấn ({candidateInterviews.length})
             </button>
+            <button
+              type="button"
+              onClick={() => setContentTab('emails')}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all ${
+                contentTab === 'emails'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              <Mail className="w-4 h-4" />
+              Nhật ký email
+            </button>
           </div>
 
           {/* Tab 1: Overview & Details */}
@@ -923,6 +936,16 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
                 await interviewService.updateInterviewStatus(interviewId, newStatus);
                 await loadCandidateInterviews();
               }}
+            />
+          )}
+
+          {/* Tab 6: Email Audit Log & Retry (S8-02) */}
+          {contentTab === 'emails' && (
+            <EmailAuditLogPage
+              candidateId={candidate.id}
+              candidateName={candidate.fullName}
+              candidateEmail={candidate.email}
+              isEmbedded
             />
           )}
         </div>
