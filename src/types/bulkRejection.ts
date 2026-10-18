@@ -1,6 +1,60 @@
 import type { CandidateStage } from './candidate';
 
 export const LOCAL_STORAGE_SENT_REJECTIONS_KEY = 'smart_recruitment_sent_rejections';
+export const LOCAL_STORAGE_BULK_HISTORY_KEY = 'smart_recruitment_bulk_rejection_history';
+
+export type BulkRejectionItemStatus = 'SUCCESS' | 'SKIPPED' | 'FAILED';
+
+export interface BulkRejectionItemResult {
+  candidateId: string;
+  applicationId?: string;
+  candidateName: string;
+  email: string;
+  jobTitle?: string;
+  departmentName?: string;
+  status: BulkRejectionItemStatus;
+  message: string;
+  sentAt?: string;
+  previousRejectionDate?: string;
+  errorDetails?: string;
+  emailSubject?: string;
+  emailBody?: string;
+}
+
+export interface BulkRejectionBatchResult {
+  batchId: string;
+  totalProcessed: number;
+  successCount: number;
+  skippedCount: number;
+  failedCount: number;
+  processedAt: string;
+  items: BulkRejectionItemResult[];
+}
+
+export interface SendBulkRejectionCandidateParam {
+  candidateId: string;
+  applicationId?: string;
+  candidateName: string;
+  email: string;
+  jobTitle?: string;
+  departmentName?: string;
+  customEmailSubject?: string;
+  customEmailBody?: string;
+  isDuplicate?: boolean;
+  previousSentAt?: string;
+}
+
+export interface SendBulkRejectionPayload {
+  batchTitle?: string;
+  templateId?: string;
+  reason: string;
+  customNote?: string;
+  allowDuplicateRejection?: boolean;
+  overrideReason?: string;
+  companyName?: string;
+  recruiterName?: string;
+  candidates: SendBulkRejectionCandidateParam[];
+}
 
 export interface StoredSentRejectionRecord {
   candidateId: string;
@@ -9,6 +63,8 @@ export interface StoredSentRejectionRecord {
   reason: string;
   sentAt: string;
   overrideReason?: string;
+  emailSubject?: string;
+  emailBody?: string;
 }
 
 export interface BulkRejectionCandidateItem {
@@ -222,4 +278,43 @@ export const renderPersonalizedTemplate = (
 
   return result;
 };
+
+/**
+ * Đọc lịch sử các đợt gửi thư từ chối hàng loạt từ LocalStorage
+ */
+export const getStoredBulkHistory = (): BulkRejectionBatchResult[] => {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_BULK_HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * Lưu một đợt gửi vào lịch sử trong LocalStorage
+ */
+export const saveBulkBatchToHistory = (batch: BulkRejectionBatchResult): void => {
+  try {
+    const current = getStoredBulkHistory();
+    const updated = [batch, ...current.filter((b) => b.batchId !== batch.batchId)];
+    localStorage.setItem(LOCAL_STORAGE_BULK_HISTORY_KEY, JSON.stringify(updated));
+  } catch {
+    // Bỏ qua
+  }
+};
+
+/**
+ * Xóa sạch lịch sử các đợt gửi thư từ chối (dùng trong test)
+ */
+export const clearStoredBulkHistory = (): void => {
+  try {
+    localStorage.removeItem(LOCAL_STORAGE_BULK_HISTORY_KEY);
+  } catch {
+    // Bỏ qua
+  }
+};
+
 
