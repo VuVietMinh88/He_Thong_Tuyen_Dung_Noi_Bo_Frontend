@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useId } from 'react';
+import React, { useState, useMemo, useId, useEffect } from 'react';
 import {
   Mail,
   RotateCcw,
@@ -19,13 +19,13 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useToast } from '../../components/notifications/useToast';
+import emailAuditService from '../../services/emailAuditService';
 import {
   type EmailAuditLogItem,
   type EmailAuditFilterStatus,
+  type EmailAuditDateRangePreset,
   formatVietnamDateTime,
   getStoredEmailAuditLogs,
-  saveStoredEmailAuditLogs,
-  resetStoredEmailAuditLogs,
 } from '../../types/emailAuditLog';
 
 export interface EmailAuditLogPageProps {
@@ -44,9 +44,65 @@ const TEMPLATE_TYPE_FILTERS: Array<{ id: string; label: string }> = [
   { id: 'OFFER_LETTER', label: 'Đề xuất việc (Offer)' },
 ];
 
+const DATE_RANGE_PRESETS: Array<{ id: EmailAuditDateRangePreset; label: string }> = [
+  { id: 'ALL', label: 'Tất cả thời gian' },
+  { id: 'TODAY', label: 'Hôm nay' },
+  { id: 'LAST_7_DAYS', label: '7 ngày qua' },
+  { id: 'LAST_30_DAYS', label: '30 ngày qua' },
+  { id: 'CUSTOM', label: 'Khoảng ngày tùy chỉnh' },
+];
+
+/**
+ * Kiểm tra xem ngày gửi có nằm trong khoảng thời gian đã chọn không
+ */
+const isDateMatchingPreset = (
+  dateStr: string,
+  preset: EmailAuditDateRangePreset,
+  startStr?: string,
+  endStr?: string,
+): boolean => {
+  if (preset === 'ALL') return true;
+  const logDate = new Date(dateStr);
+  const now = new Date();
+
+  if (preset === 'TODAY') {
+    return (
+      logDate.getFullYear() === now.getFullYear() &&
+      logDate.getMonth() === now.getMonth() &&
+      logDate.getDate() === now.getDate()
+    );
+  }
+
+  if (preset === 'LAST_7_DAYS') {
+    const diffDays = (now.getTime() - logDate.getTime()) / (1000 * 3600 * 24);
+    return diffDays >= 0 && diffDays <= 7;
+  }
+
+  if (preset === 'LAST_30_DAYS') {
+    const diffDays = (now.getTime() - logDate.getTime()) / (1000 * 3600 * 24);
+    return diffDays >= 0 && diffDays <= 30;
+  }
+
+  if (preset === 'CUSTOM') {
+    if (startStr) {
+      const start = new Date(startStr);
+      start.setHours(0, 0, 0, 0);
+      if (logDate < start) return false;
+    }
+    if (endStr) {
+      const end = new Date(endStr);
+      end.setHours(23, 59, 59, 999);
+      if (logDate > end) return false;
+    }
+    return true;
+  }
+
+  return true;
+};
+
 /**
  * Màn hình Lịch sử gửi email cho ứng viên (Email Audit Log & Retry)
- * Jira Task: TKNHTTDNB1-535 / TKNHTTDNB1-78 (User Story S8-02)
+ * Jira Task: TKNHTTDNB1-536 / TKNHTTDNB1-78 (User Story S8-02)
  */
 export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
   candidateId: initialCandidateId,
@@ -56,11 +112,14 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
   const { addToast } = useToast();
   const searchInputId = useId();
   const templateFilterSelectId = useId();
+  const datePresetSelectId = useId();
+  const startDateInputId = useId();
+  const endDateInputId = useId();
 
   // Danh sách các bản ghi nhật ký (khởi tạo từ LocalStorage hoặc dữ liệu mẫu)
   const [logs, setLogs] = useState<EmailAuditLogItem[]>(() => getStoredEmailAuditLogs());
 
-  // Bộ lọc
+  // Bộ lọc trạng thái & loại mẫu & từ khóa (AC 1 & AC 2)
   const [statusFilter, setStatusFilter] = useState<EmailAuditFilterStatus>('ALL');
   const [templateFilter, setTemplateFilter] = useState<string>('ALL');
   const [searchKeyword, setSearchKeyword] = useState<string>('');
@@ -68,26 +127,62 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
     initialCandidateId || null,
   );
 
+  // Bộ lọc khoảng thời gian (Date Range Filtering - AC 2)
+  const [dateRangePreset, setDateRangePreset] = useState<EmailAuditDateRangePreset>('ALL');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+
   // Chế độ xem: Bảng (TABLE) hoặc Dòng thời gian (TIMELINE)
   const [viewMode, setViewMode] = useState<'TABLE' | 'TIMELINE'>('TABLE');
 
-  // Trạng thái Retry bất đồng bộ (Queue-based async dispatch - AC 2)
+  // Trạng thái Retry bất đồng bộ (Queue-based async dispatch - AC 3)
   const [retryingLogIds, setRetryingLogIds] = useState<Set<string>>(new Set());
   const [isRetryingAll, setIsRetryingAll] = useState<boolean>(false);
 
   // Modal xem chi tiết nội dung email (Preview Modal)
   const [selectedLogForDetail, setSelectedLogForDetail] = useState<EmailAuditLogItem | null>(null);
 
+  // Tải dữ liệu ban đầu từ API qua emailAuditService
+  useEffect(() => {
+    let isCurrent = true;
+    const fetchAuditLogs = async () => {
+      try {
+        const data = await emailAuditService.getEmailAuditLogs({
+          candidateId: activeCandidateFilter || undefined,
+        });
+        if (isCurrent && Array.isArray(data)) {
+          setLogs(data);
+        }
+      } catch (err: unknown) {
+        if (isCurrent) {
+          addToast({
+            type: 'warning',
+            message:
+              err instanceof Error
+                ? err.message
+                : 'Đang hiển thị dữ liệu lịch sử email từ bộ nhớ cục bộ.',
+          });
+        }
+      }
+    };
+
+    void fetchAuditLogs();
+    return () => {
+      isCurrent = false;
+    };
+  }, [activeCandidateFilter, addToast]);
+
   // Thống kê nhanh (KPI Metrics)
   const metrics = useMemo(() => {
     const total = logs.length;
     const sentCount = logs.filter((l) => l.status === 'SENT').length;
     const failedCount = logs.filter((l) => l.status === 'FAILED').length;
+    const queuedCount = logs.filter((l) => l.status === 'QUEUED' || l.status === 'PENDING').length;
     const sentRate = total > 0 ? Math.round((sentCount / total) * 100) : 0;
-    return { total, sentCount, failedCount, sentRate };
+    return { total, sentCount, failedCount, queuedCount, sentRate };
   }, [logs]);
 
-  // Danh sách nhật ký sau khi áp dụng bộ lọc và tìm kiếm (AC 1 & AC 3)
+  // Danh sách nhật ký sau khi áp dụng bộ lọc và tìm kiếm (AC 1 & AC 2)
   const filteredLogs = useMemo(() => {
     return logs.filter((item) => {
       // 1. Lọc theo ứng viên cụ thể nếu có
@@ -95,9 +190,15 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
         return false;
       }
 
-      // 2. Lọc theo trạng thái gửi (AC 3)
-      if (statusFilter !== 'ALL' && item.status !== statusFilter) {
-        return false;
+      // 2. Lọc theo trạng thái gửi (AC 2)
+      if (statusFilter !== 'ALL') {
+        if (statusFilter === 'QUEUED') {
+          if (item.status !== 'QUEUED' && item.status !== 'PENDING') {
+            return false;
+          }
+        } else if (item.status !== statusFilter) {
+          return false;
+        }
       }
 
       // 3. Lọc theo loại mẫu email
@@ -113,21 +214,37 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
         const matchEmail = item.candidateEmail.toLowerCase().includes(kw);
         const matchSender = item.senderName.toLowerCase().includes(kw);
         const matchTemplate = item.templateName.toLowerCase().includes(kw);
-        return matchSubject || matchCandidate || matchEmail || matchSender || matchTemplate;
+        if (!matchSubject && !matchCandidate && !matchEmail && !matchSender && !matchTemplate) {
+          return false;
+        }
+      }
+
+      // 5. Lọc theo khoảng thời gian (Date Range Filtering - AC 2)
+      if (!isDateMatchingPreset(item.sentAt, dateRangePreset, startDate, endDate)) {
+        return false;
       }
 
       return true;
     });
-  }, [logs, activeCandidateFilter, statusFilter, templateFilter, searchKeyword]);
+  }, [
+    logs,
+    activeCandidateFilter,
+    statusFilter,
+    templateFilter,
+    searchKeyword,
+    dateRangePreset,
+    startDate,
+    endDate,
+  ]);
 
   /**
-   * Xử lý gửi lại một email lỗi cụ thể (Retry Failed Email - AC 2)
+   * Xử lý gửi lại một email lỗi cụ thể qua emailAuditService (Retry Failed Email - AC 1 & AC 3)
    * Kích hoạt xử lý ngầm (Queue-based async dispatch) không làm đơ giao diện
    */
-  const handleRetrySingle = (logItem: EmailAuditLogItem) => {
+  const handleRetrySingle = async (logItem: EmailAuditLogItem) => {
     if (retryingLogIds.has(logItem.id)) return;
 
-    // 1. Thêm vào tập hợp đang xử lý ngầm
+    // 1. Đưa vào tập hợp đang xử lý ngầm
     setRetryingLogIds((prev) => new Set(prev).add(logItem.id));
 
     // 2. Thông báo ngay cho người dùng qua Toast mà không chặn UI
@@ -136,63 +253,50 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
       message: `Đã đưa email tới ${logItem.candidateName} vào hàng đợi gửi lại ngầm...`,
     });
 
-    // 3. Mô phỏng xử lý bất đồng bộ ngầm (Async dispatch worker)
-    setTimeout(() => {
-      setLogs((prevLogs) => {
-        const nextLogs = prevLogs.map((item) => {
-          if (item.id === logItem.id) {
-            return {
-              ...item,
-              status: 'SENT' as const,
-              sentAt: new Date().toISOString(),
-              errorMessage: undefined,
-              errorCode: undefined,
-              retryCount: item.retryCount + 1,
-              lastRetryAt: new Date().toISOString(),
-            };
-          }
-          return item;
-        });
+    try {
+      // 3. Gọi service API thử gửi lại email qua hàng đợi bất đồng bộ
+      const response = await emailAuditService.retryFailedEmail(logItem.id);
+      const updatedItem = response.logItem;
 
-        saveStoredEmailAuditLogs(nextLogs);
-        return nextLogs;
+      setLogs((prevLogs) => {
+        return prevLogs.map((item) => (item.id === logItem.id ? updatedItem : item));
       });
 
       // Cập nhật lại modal nếu đang mở
       setSelectedLogForDetail((curr) => {
         if (curr && curr.id === logItem.id) {
-          return {
-            ...curr,
-            status: 'SENT' as const,
-            sentAt: new Date().toISOString(),
-            errorMessage: undefined,
-            errorCode: undefined,
-            retryCount: curr.retryCount + 1,
-            lastRetryAt: new Date().toISOString(),
-          };
+          return updatedItem;
         }
         return curr;
       });
 
-      // 4. Xóa khỏi danh sách retrying
+      // 4. Thông báo hoàn thành
+      addToast({
+        type: 'success',
+        message: `Gửi lại email thành công cho ứng viên ${logItem.candidateName}!`,
+      });
+    } catch (err: unknown) {
+      addToast({
+        type: 'error',
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Không thể gửi lại email. Vui lòng kiểm tra lại kết nối.',
+      });
+    } finally {
+      // 5. Xóa khỏi danh sách retrying
       setRetryingLogIds((prev) => {
         const next = new Set(prev);
         next.delete(logItem.id);
         return next;
       });
-
-      // 5. Thông báo hoàn thành
-      addToast({
-        type: 'success',
-        message: `Gửi lại email thành công cho ứng viên ${logItem.candidateName}!`,
-      });
-    }, 1200);
+    }
   };
 
   /**
    * Xử lý gửi lại toàn bộ email đang gặp lỗi (Retry All Failed)
    */
-  const handleRetryAllFailed = () => {
+  const handleRetryAllFailed = async () => {
     const failedItems = logs.filter((l) => l.status === 'FAILED');
     if (failedItems.length === 0 || isRetryingAll) return;
 
@@ -205,48 +309,52 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
       message: `Đang đưa ${failedItems.length} email lỗi vào hàng đợi gửi lại tự động...`,
     });
 
-    setTimeout(() => {
-      setLogs((prevLogs) => {
-        const nextLogs = prevLogs.map((item) => {
-          if (item.status === 'FAILED') {
-            return {
-              ...item,
-              status: 'SENT' as const,
-              sentAt: new Date().toISOString(),
-              errorMessage: undefined,
-              errorCode: undefined,
-              retryCount: item.retryCount + 1,
-              lastRetryAt: new Date().toISOString(),
-            };
-          }
-          return item;
-        });
+    try {
+      const result = await emailAuditService.retryAllFailedEmails(
+        activeCandidateFilter || undefined,
+      );
 
-        saveStoredEmailAuditLogs(nextLogs);
-        return nextLogs;
+      // Cập nhật danh sách mới
+      const refreshed = await emailAuditService.getEmailAuditLogs({
+        candidateId: activeCandidateFilter || undefined,
       });
-
-      setRetryingLogIds(new Set());
-      setIsRetryingAll(false);
+      setLogs(refreshed);
 
       addToast({
         type: 'success',
-        message: `Đã hoàn tất gửi lại thành công toàn bộ ${failedItems.length} email!`,
+        message:
+          result.message ||
+          `Đã hoàn tất gửi lại thành công toàn bộ ${failedItems.length} email lỗi!`,
       });
-    }, 1800);
+    } catch (err: unknown) {
+      addToast({
+        type: 'error',
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Gặp sự cố khi gửi lại danh sách email lỗi.',
+      });
+    } finally {
+      setRetryingLogIds(new Set());
+      setIsRetryingAll(false);
+    }
   };
 
   /**
    * Khôi phục dữ liệu nhật ký mẫu ban đầu
    */
-  const handleResetToSample = () => {
-    const sample = resetStoredEmailAuditLogs();
-    setLogs(sample);
-    setSelectedLogForDetail(null);
-    addToast({
-      type: 'info',
-      message: 'Đã khôi phục dữ liệu nhật ký gửi email ban đầu.',
-    });
+  const handleResetToSample = async () => {
+    try {
+      const sample = await emailAuditService.resetAuditLogs();
+      setLogs(sample);
+      setSelectedLogForDetail(null);
+      addToast({
+        type: 'info',
+        message: 'Đã khôi phục dữ liệu nhật ký gửi email ban đầu.',
+      });
+    } catch {
+      // Fallback
+    }
   };
 
   return (
@@ -330,8 +438,8 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
         </div>
       )}
 
-      {/* 2. Thẻ số liệu thống kê nhanh (KPI Summary Cards) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+      {/* 2. Thẻ số liệu thống kê nhanh (KPI Summary Cards - AC 2) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Tổng số email */}
         <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
           <div className="space-y-0.5">
@@ -370,10 +478,23 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
             <AlertCircle className="w-5 h-5" />
           </div>
         </div>
+
+        {/* Đang trong hàng đợi ngầm (Queued - AC 2) */}
+        <div className="p-4 bg-amber-50/70 rounded-2xl border border-amber-200 shadow-2xs flex items-center justify-between">
+          <div className="space-y-0.5">
+            <span className="text-xs font-semibold text-amber-800">Đang trong hàng đợi</span>
+            <div className="text-2xl font-black text-amber-700">{metrics.queuedCount}</div>
+            <p className="text-[11px] text-amber-600">Hệ thống xử lý ngầm (Queue)</p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600">
+            <Clock className="w-5 h-5" />
+          </div>
+        </div>
       </div>
 
-      {/* 3. Thanh công cụ tìm kiếm, bộ lọc trạng thái và chuyển đổi chế độ xem (AC 3) */}
+      {/* 3. Thanh công cụ tìm kiếm, bộ lọc trạng thái, thời gian và chuyển đổi chế độ xem (AC 2 & AC 3) */}
       <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
+        {/* Dòng 1: Tìm kiếm từ khóa & Chế độ xem */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
           {/* Ô tìm kiếm từ khóa */}
           <div className="relative flex-1">
@@ -402,47 +523,90 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
             )}
           </div>
 
-          {/* Nhóm bộ lọc & Nút chuyển đổi View */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            {/* Bộ lọc trạng thái (AC 3) */}
-            <div className="flex items-center gap-1.5 bg-slate-100/90 p-1 rounded-xl border border-slate-200/80">
-              <button
-                type="button"
-                onClick={() => setStatusFilter('ALL')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
-                  statusFilter === 'ALL'
-                    ? 'bg-white text-slate-900 shadow-2xs font-bold'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Tất cả ({metrics.total})
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatusFilter('SENT')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
-                  statusFilter === 'SENT'
-                    ? 'bg-emerald-600 text-white shadow-2xs font-bold'
-                    : 'text-emerald-700 hover:bg-emerald-100/60'
-                }`}
-              >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Thành công ({metrics.sentCount})</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatusFilter('FAILED')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
-                  statusFilter === 'FAILED'
-                    ? 'bg-rose-600 text-white shadow-2xs font-bold'
-                    : 'text-rose-700 hover:bg-rose-100/60'
-                }`}
-              >
-                <AlertCircle className="w-3.5 h-3.5" />
-                <span>Thất bại ({metrics.failedCount})</span>
-              </button>
-            </div>
+          {/* Nút chuyển đổi Bảng / Timeline */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 self-start lg:self-auto">
+            <button
+              type="button"
+              onClick={() => setViewMode('TABLE')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
+                viewMode === 'TABLE'
+                  ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+              title="Xem dạng Bảng"
+            >
+              Dạng Bảng
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('TIMELINE')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
+                viewMode === 'TIMELINE'
+                  ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+              title="Xem dạng Dòng thời gian"
+            >
+              Dòng thời gian
+            </button>
+          </div>
+        </div>
 
+        {/* Dòng 2: Bộ lọc trạng thái, loại mẫu và khoảng thời gian (AC 2) */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
+          {/* Bộ lọc trạng thái 4 nút (AC 2) */}
+          <div className="flex flex-wrap items-center gap-1.5 bg-slate-100/90 p-1 rounded-xl border border-slate-200/80">
+            <button
+              type="button"
+              onClick={() => setStatusFilter('ALL')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
+                statusFilter === 'ALL'
+                  ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Tất cả ({metrics.total})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('SENT')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                statusFilter === 'SENT'
+                  ? 'bg-emerald-600 text-white shadow-2xs font-bold'
+                  : 'text-emerald-700 hover:bg-emerald-100/60'
+              }`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Thành công ({metrics.sentCount})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('FAILED')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                statusFilter === 'FAILED'
+                  ? 'bg-rose-600 text-white shadow-2xs font-bold'
+                  : 'text-rose-700 hover:bg-rose-100/60'
+              }`}
+            >
+              <AlertCircle className="w-3.5 h-3.5" />
+              <span>Thất bại ({metrics.failedCount})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('QUEUED')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                statusFilter === 'QUEUED'
+                  ? 'bg-amber-600 text-white shadow-2xs font-bold'
+                  : 'text-amber-800 hover:bg-amber-100/60'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>Hàng đợi ({metrics.queuedCount})</span>
+            </button>
+          </div>
+
+          {/* Nhóm bộ lọc Loại mẫu & Thời gian (AC 2) */}
+          <div className="flex flex-wrap items-center gap-2.5">
             {/* Bộ lọc loại mẫu */}
             <div className="relative">
               <label htmlFor={templateFilterSelectId} className="sr-only">
@@ -462,43 +626,85 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
               </select>
             </div>
 
-            {/* Nút chuyển đổi Bảng / Timeline */}
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
-              <button
-                type="button"
-                onClick={() => setViewMode('TABLE')}
-                className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
-                  viewMode === 'TABLE'
-                    ? 'bg-white text-slate-900 shadow-2xs'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-                title="Xem dạng Bảng"
+            {/* Bộ lọc khoảng thời gian (AC 2) */}
+            <div className="relative">
+              <label htmlFor={datePresetSelectId} className="sr-only">
+                Lọc theo khoảng thời gian
+              </label>
+              <select
+                id={datePresetSelectId}
+                value={dateRangePreset}
+                onChange={(e) =>
+                  setDateRangePreset(e.target.value as EmailAuditDateRangePreset)
+                }
+                className="px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white text-slate-700 font-medium outline-none focus:border-indigo-500 cursor-pointer"
               >
-                Dạng Bảng
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('TIMELINE')}
-                className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
-                  viewMode === 'TIMELINE'
-                    ? 'bg-white text-slate-900 shadow-2xs'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-                title="Xem dạng Dòng thời gian"
-              >
-                Dòng thời gian
-              </button>
+                {DATE_RANGE_PRESETS.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
 
-        {/* 4. Danh sách Nhật ký: Hiển thị dạng Bảng hoặc Dòng thời gian (AC 1) */}
+        {/* Ô chọn ngày tùy chỉnh khi dateRangePreset === 'CUSTOM' (AC 2) */}
+        {dateRangePreset === 'CUSTOM' && (
+          <div className="p-3 bg-indigo-50/60 rounded-2xl border border-indigo-100 flex flex-wrap items-center gap-3 text-xs animate-in fade-in">
+            <span className="font-bold text-indigo-950 flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Khoảng ngày gửi:</span>
+            </span>
+
+            <div className="flex items-center gap-1.5">
+              <label htmlFor={startDateInputId} className="text-slate-600">
+                Từ ngày:
+              </label>
+              <input
+                id={startDateInputId}
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="px-2.5 py-1 text-xs rounded-lg border border-slate-300 bg-white text-slate-800 outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <label htmlFor={endDateInputId} className="text-slate-600">
+                Đến ngày:
+              </label>
+              <input
+                id={endDateInputId}
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="px-2.5 py-1 text-xs rounded-lg border border-slate-300 bg-white text-slate-800 outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            {(startDate || endDate) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setStartDate('');
+                  setEndDate('');
+                }}
+                className="text-rose-600 hover:text-rose-700 font-semibold cursor-pointer"
+              >
+                Xóa ngày lọc
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* 4. Danh sách Nhật ký: Hiển thị dạng Bảng hoặc Dòng thời gian (AC 1 & AC 2) */}
         {filteredLogs.length === 0 ? (
           <div className="p-12 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-2">
             <Mail className="w-10 h-10 text-slate-300 mx-auto" />
             <h3 className="text-sm font-bold text-slate-700">Không tìm thấy nhật ký gửi email</h3>
             <p className="text-xs text-slate-400">
-              Thử thay đổi bộ lọc trạng thái, loại mẫu hoặc xóa từ khóa tìm kiếm.
+              Thử thay đổi bộ lọc trạng thái, khoảng thời gian hoặc xóa từ khóa tìm kiếm.
             </p>
           </div>
         ) : viewMode === 'TABLE' ? (
@@ -578,7 +784,7 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
                         <div className="text-[10px] text-slate-400 font-mono">{log.senderEmail}</div>
                       </td>
 
-                      {/* Trạng thái gửi (Badge) (AC 1) */}
+                      {/* Trạng thái gửi (Badge trực quan) (AC 1 & AC 2) */}
                       <td className="py-3.5 px-3.5 whitespace-nowrap">
                         {isRetrying ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 animate-pulse border border-amber-200">
@@ -590,6 +796,18 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                             <span>Thành công (Sent)</span>
                           </span>
+                        ) : log.status === 'QUEUED' || log.status === 'PENDING' ? (
+                          <div className="space-y-0.5">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                              <Clock className="w-3.5 h-3.5 text-amber-600" />
+                              <span>Đang trong hàng đợi (Queued)</span>
+                            </span>
+                            {log.queueTrackingId && (
+                              <span className="text-[10px] text-amber-700 block font-mono">
+                                ID: {log.queueTrackingId}
+                              </span>
+                            )}
+                          </div>
                         ) : (
                           <div className="space-y-0.5">
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
@@ -605,7 +823,7 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
                         )}
                       </td>
 
-                      {/* Thao tác: Xem chi tiết & Nút Gửi lại (AC 2) */}
+                      {/* Thao tác: Xem chi tiết & Nút Gửi lại (AC 3) */}
                       <td
                         className="py-3.5 px-3.5 text-right whitespace-nowrap"
                         onClick={(e) => e.stopPropagation()}
@@ -614,7 +832,7 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
                           {log.status === 'FAILED' && (
                             <button
                               type="button"
-                              onClick={() => handleRetrySingle(log)}
+                              onClick={() => void handleRetrySingle(log)}
                               disabled={isRetrying}
                               className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow-2xs transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                               title="Gửi lại email này qua hàng đợi ngầm"
@@ -647,7 +865,7 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
           </div>
         ) : (
           /* ========================================================================= */
-          /* CHẾ ĐỘ 2: DÒNG THỜI GIAN (TIMELINE VIEW - AC 1)                           */
+          /* CHẾ ĐỘ 2: DÒNG THỜI GIAN (TIMELINE VIEW - AC 1 & AC 2)                    */
           /* ========================================================================= */
           <div className="relative pl-6 sm:pl-8 space-y-6 before:absolute before:inset-y-0 before:left-3 sm:before:left-4 before:w-0.5 before:bg-slate-200">
             {filteredLogs.map((log) => {
@@ -660,11 +878,15 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
                     className={`absolute -left-6 sm:-left-8 top-1.5 w-6 h-6 rounded-full border-2 flex items-center justify-center transition ${
                       log.status === 'SENT'
                         ? 'bg-emerald-50 border-emerald-500 text-emerald-600'
+                        : log.status === 'QUEUED' || log.status === 'PENDING'
+                        ? 'bg-amber-50 border-amber-500 text-amber-600'
                         : 'bg-rose-50 border-rose-500 text-rose-600'
                     }`}
                   >
                     {log.status === 'SENT' ? (
                       <Check className="w-3.5 h-3.5" />
+                    ) : log.status === 'QUEUED' || log.status === 'PENDING' ? (
+                      <Clock className="w-3.5 h-3.5" />
                     ) : (
                       <AlertCircle className="w-3.5 h-3.5" />
                     )}
@@ -698,6 +920,11 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                           <span>Thành công (Sent)</span>
+                        </span>
+                      ) : log.status === 'QUEUED' || log.status === 'PENDING' ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                          <Clock className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Đang trong hàng đợi (Queued)</span>
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
@@ -746,7 +973,7 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
                       {log.status === 'FAILED' && (
                         <button
                           type="button"
-                          onClick={() => handleRetrySingle(log)}
+                          onClick={() => void handleRetrySingle(log)}
                           disabled={isRetrying}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow-2xs transition cursor-pointer disabled:opacity-50"
                         >
@@ -813,6 +1040,11 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                       <span>Thành công (Sent)</span>
+                    </span>
+                  ) : selectedLogForDetail.status === 'QUEUED' || selectedLogForDetail.status === 'PENDING' ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                      <Clock className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Đang trong hàng đợi (Queued)</span>
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
@@ -921,7 +1153,7 @@ export const EmailAuditLogPage: React.FC<EmailAuditLogPageProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      handleRetrySingle(selectedLogForDetail);
+                      void handleRetrySingle(selectedLogForDetail);
                     }}
                     disabled={retryingLogIds.has(selectedLogForDetail.id)}
                     className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow-sm shadow-rose-600/30 transition cursor-pointer disabled:opacity-50"
