@@ -1,11 +1,30 @@
 /**
  * Kiểu dữ liệu và hằng số cho Nhật ký gửi email (Email Audit Log)
- * Jira Task: TKNHTTDNB1-535 / TKNHTTDNB1-78 (User Story S8-02)
+ * Jira Task: TKNHTTDNB1-535 / TKNHTTDNB1-536 (User Story S8-02)
  */
 
-export type EmailAuditStatus = 'SENT' | 'FAILED' | 'PENDING';
+export type EmailAuditStatus = 'SENT' | 'FAILED' | 'QUEUED' | 'PENDING';
 
-export type EmailAuditFilterStatus = 'ALL' | 'SENT' | 'FAILED';
+export type EmailAuditFilterStatus = 'ALL' | 'SENT' | 'FAILED' | 'QUEUED';
+
+export type EmailAuditDateRangePreset = 'ALL' | 'TODAY' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'CUSTOM';
+
+export interface EmailAuditFilterParams {
+  candidateId?: string;
+  status?: EmailAuditFilterStatus;
+  templateType?: string;
+  searchKeyword?: string;
+  dateRangePreset?: EmailAuditDateRangePreset;
+  startDate?: string; // YYYY-MM-DD
+  endDate?: string;   // YYYY-MM-DD
+}
+
+export interface RetryEmailResponse {
+  success: boolean;
+  message: string;
+  logItem: EmailAuditLogItem;
+  queueTrackingId?: string;
+}
 
 export interface EmailAuditLogItem {
   id: string;
@@ -26,6 +45,7 @@ export interface EmailAuditLogItem {
   errorCode?: string;
   retryCount: number;
   lastRetryAt?: string;
+  queueTrackingId?: string;
   attachments?: Array<{
     name: string;
     size: string;
@@ -181,6 +201,24 @@ export const INITIAL_EMAIL_AUDIT_LOGS: EmailAuditLogItem[] = [
     ],
     retryCount: 0,
   },
+  {
+    id: 'log-07',
+    candidateId: 'sample-02',
+    candidateName: 'Trần Thị Mai',
+    candidateEmail: 'mai.tran@example.com',
+    jobTitle: 'Product Manager (B2B SaaS)',
+    templateId: 'tpl-interview-invitation',
+    templateType: 'INTERVIEW_INVITATION',
+    templateName: 'Thư mời tham gia phỏng vấn',
+    subject: '[Hệ thống Tuyển Dụng Thông Minh] Thư mời tham gia Vòng 3: Phỏng vấn Giám đốc Sản phẩm - Trần Thị Mai',
+    body: `Chào bạn Trần Thị Mai,\n\nThư mời phỏng vấn đang được hệ thống gửi qua hàng đợi xử lý ngầm (Queue Worker).\n\nTrân trọng,\nBan Tuyển dụng`,
+    senderName: 'Nguyễn Văn Hùng',
+    senderEmail: 'hung.nguyen@smart-recruitment.vn',
+    status: 'QUEUED',
+    sentAt: '2026-10-18T13:40:00Z',
+    queueTrackingId: 'q-trk-8821',
+    retryCount: 0,
+  },
 ];
 
 /**
@@ -219,4 +257,3 @@ export const resetStoredEmailAuditLogs = (): EmailAuditLogItem[] => {
   }
   return INITIAL_EMAIL_AUDIT_LOGS;
 };
-
