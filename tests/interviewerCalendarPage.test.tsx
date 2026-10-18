@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import React from 'react';
 import { renderToString } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { InterviewerCalendarPage } from '../src/pages/Interview/InterviewerCalendarPage';
-import { interviewService, calculateEndTime } from '../src/services/interviewService';
+import { calculateEndTime } from '../src/services/interviewService';
 import { tokenService } from '../src/services/token.service';
 
 const storage = new Map<string, string>();

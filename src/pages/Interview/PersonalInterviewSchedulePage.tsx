@@ -15,14 +15,31 @@ import {
   ChevronRight,
   Filter,
   Award,
+  FileText,
+  AlertCircle,
 } from 'lucide-react';
 import { tokenService } from '../../services/token.service';
 import { interviewService } from '../../services/interviewService';
+import { interviewerCalendarService } from '../../services/interviewerCalendarService';
 import { useToast } from '../../components/notifications/useToast';
-import type { InterviewSchedulePayload } from '../../types/interview';
+import type {
+  InterviewSchedulePayload,
+  AssignedCandidateProfileResult,
+} from '../../types/interview';
+import { InterviewerAccessForbiddenError } from '../../types/interview';
 import CandidateResponseStatus from '../../components/Candidate/CandidateResponseStatus';
 import { InterviewEvaluationModal } from '../../components/Interview/InterviewEvaluationModal';
+import { AssignedCandidateCvViewerModal } from '../../components/Interview/AssignedCandidateCvViewerModal';
 import { resolveEvaluationCriteriaForJob } from '../../utils/interviewEvaluationHelper';
+
+const getTodayDateStringVN = () => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+};
 
 export const PersonalInterviewSchedulePage: React.FC = () => {
   const navigate = useNavigate();
@@ -32,29 +49,28 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
   const [interviews, setInterviews] = useState<InterviewSchedulePayload[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'UPCOMING' | 'TODAY' | 'COMPLETED'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'UPCOMING' | 'TODAY' | 'COMPLETED' | 'PENDING_EVALUATION'>('ALL');
   const [formatFilter, setFormatFilter] = useState<'ALL' | 'ONLINE' | 'OFFLINE'>('ALL');
   const [dateFilter, setDateFilter] = useState<string>('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [evaluatingInterview, setEvaluatingInterview] = useState<InterviewSchedulePayload | null>(null);
 
+  // CV & Profile secure viewing state (S7-01 / TKNHTTDNB1-476)
+  const [selectedCvProfile, setSelectedCvProfile] = useState<AssignedCandidateProfileResult | null>(null);
+  const [isCvModalOpen, setIsCvModalOpen] = useState<boolean>(false);
+  const [isCvLoading, setIsCvLoading] = useState<boolean>(false);
+  const [loadingCvId, setLoadingCvId] = useState<string | null>(null);
+
   const currentUser = tokenService.getUserData();
 
   // Ngày hôm nay theo múi giờ Việt Nam YYYY-MM-DD
-  const todayVN = useMemo(() => {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Ho_Chi_Minh',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(new Date());
-  }, []);
+  const [todayVN] = useState<string>(() => getTodayDateStringVN());
 
   // Tải danh sách lịch phỏng vấn cá nhân (AC 1)
   const loadSchedule = useCallback(async () => {
     try {
       setIsLoading(true);
-      const data = await interviewService.getPersonalInterviewSchedule({
+      const data = await interviewerCalendarService.getInterviewerSchedule({
         userId: currentUser?.id,
       });
       setInterviews(data);
@@ -69,8 +85,35 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
   }, [currentUser?.id, addToast]);
 
   useEffect(() => {
-    loadSchedule();
-  }, [loadSchedule]);
+    let isCurrent = true;
+    const fetchSchedule = async () => {
+      try {
+        setIsLoading(true);
+        const data = await interviewerCalendarService.getInterviewerSchedule({
+          userId: currentUser?.id,
+        });
+        if (isCurrent) {
+          setInterviews(data);
+        }
+      } catch {
+        if (isCurrent) {
+          addToast({
+            message: 'Không thể tải lịch phỏng vấn cá nhân, vui lòng thử lại.',
+            type: 'error',
+          });
+        }
+      } finally {
+        if (isCurrent) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void fetchSchedule();
+    return () => {
+      isCurrent = false;
+    };
+  }, [currentUser?.id, addToast]);
 
   // Copy link
   const handleCopyLink = (id: string, link: string) => {
@@ -104,7 +147,41 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
     }
   };
 
-  // Thống kê nhanh
+  // Xử lý mở xem tệp CV và chi tiết hồ sơ ứng viên an toàn theo phân quyền (AC 2)
+  const handleViewCandidateCv = async (interview: InterviewSchedulePayload) => {
+    try {
+      setLoadingCvId(interview.id || null);
+      setIsCvLoading(true);
+      setIsCvModalOpen(true);
+      const profile = await interviewerCalendarService.getAssignedCandidateProfile(
+        interview.applicationId || interview.candidateId,
+        interview.id,
+      );
+      setSelectedCvProfile(profile);
+    } catch (err: unknown) {
+      setIsCvModalOpen(false);
+      if (err instanceof InterviewerAccessForbiddenError) {
+        addToast({
+          message: err.message,
+          type: 'error',
+        });
+      } else {
+        const message =
+          err instanceof Error
+            ? err.message
+            : 'Không thể tải thông tin hồ sơ ứng viên, vui lòng thử lại.';
+        addToast({
+          message,
+          type: 'error',
+        });
+      }
+    } finally {
+      setIsCvLoading(false);
+      setLoadingCvId(null);
+    }
+  };
+
+  // Thống kê nhanh (AC 3)
   const stats = useMemo(() => {
     const total = interviews.length;
     const today = interviews.filter((i) => i.interviewDate === todayVN && i.status !== 'CANCELLED').length;
@@ -112,7 +189,14 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
       (i) => i.interviewDate >= todayVN && i.status === 'SCHEDULED',
     ).length;
     const completed = interviews.filter((i) => i.status === 'COMPLETED').length;
-    return { total, today, upcoming, completed };
+    const pendingEvaluation = interviews.filter((i) => {
+      const isPast =
+        interviewerCalendarService.isInterviewPast(i.interviewDate, i.interviewTime) ||
+        i.status === 'COMPLETED';
+      return isPast && !i.isEvaluationSubmitted && i.status !== 'CANCELLED';
+    }).length;
+
+    return { total, today, upcoming, completed, pendingEvaluation };
   }, [interviews, todayVN]);
 
   // Bộ lọc danh sách
@@ -123,6 +207,12 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
       if (statusFilter === 'UPCOMING' && (item.interviewDate < todayVN || item.status !== 'SCHEDULED'))
         return false;
       if (statusFilter === 'COMPLETED' && item.status !== 'COMPLETED') return false;
+      if (statusFilter === 'PENDING_EVALUATION') {
+        const isPast =
+          interviewerCalendarService.isInterviewPast(item.interviewDate, item.interviewTime) ||
+          item.status === 'COMPLETED';
+        if (!isPast || item.isEvaluationSubmitted || item.status === 'CANCELLED') return false;
+      }
 
       // 2. Lọc theo hình thức
       if (formatFilter !== 'ALL' && item.format !== formatFilter) return false;
@@ -178,7 +268,7 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
       </div>
 
       {/* Summary Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
           <span className="text-xs font-medium text-slate-500">Tổng số buổi phỏng vấn</span>
           <div className="text-2xl font-bold text-slate-900 mt-1">{stats.total}</div>
@@ -207,6 +297,14 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
           </span>
           <div className="text-2xl font-bold text-emerald-800 mt-1">{stats.completed}</div>
         </div>
+
+        <div className="bg-white p-4 rounded-xl border border-rose-200 bg-rose-50/25 shadow-xs">
+          <span className="text-xs font-semibold text-rose-700 flex items-center gap-1">
+            <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+            Chưa nộp đánh giá
+          </span>
+          <div className="text-2xl font-bold text-rose-800 mt-1">{stats.pendingEvaluation}</div>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -218,6 +316,7 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
               { id: 'ALL', label: 'Tất cả' },
               { id: 'TODAY', label: `Hôm nay (${stats.today})` },
               { id: 'UPCOMING', label: `Sắp diễn ra (${stats.upcoming})` },
+              { id: 'PENDING_EVALUATION', label: `Chưa nộp đánh giá (${stats.pendingEvaluation})` },
               { id: 'COMPLETED', label: `Đã hoàn thành (${stats.completed})` },
             ].map((tab) => (
               <button
@@ -226,7 +325,9 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
                 onClick={() => setStatusFilter(tab.id as typeof statusFilter)}
                 className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                   statusFilter === tab.id
-                    ? 'bg-indigo-600 text-white shadow-xs'
+                    ? tab.id === 'PENDING_EVALUATION'
+                      ? 'bg-rose-600 text-white shadow-xs'
+                      : 'bg-indigo-600 text-white shadow-xs'
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
@@ -309,12 +410,18 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
             const isToday = item.interviewDate === todayVN;
             const isCompleted = item.status === 'COMPLETED';
             const isCancelled = item.status === 'CANCELLED';
+            const isPast =
+              interviewerCalendarService.isInterviewPast(item.interviewDate, item.interviewTime) ||
+              isCompleted;
+            const needsEvaluation = isPast && !item.isEvaluationSubmitted && !isCancelled;
 
             return (
               <div
                 key={item.id}
                 className={`bg-white rounded-2xl border p-5 transition-all shadow-xs ${
-                  isToday
+                  needsEvaluation
+                    ? 'border-rose-300 ring-2 ring-rose-100 bg-gradient-to-r from-white to-rose-50/15'
+                    : isToday
                     ? 'border-indigo-300 ring-2 ring-indigo-100 bg-gradient-to-r from-white to-indigo-50/20'
                     : isCompleted
                     ? 'border-emerald-200 bg-emerald-50/15'
@@ -354,6 +461,22 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
                           </span>
                         )}
                         <CandidateResponseStatus response={item.candidateResponse} />
+
+                        {/* Badge Trạng thái đánh giá năng lực (AC 1 & AC 3) */}
+                        {item.isEvaluationSubmitted ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            Đã nộp phiếu đánh giá
+                            {typeof item.evaluationScore === 'number' && (
+                              <span className="ml-0.5 font-bold">({item.evaluationScore}/5.0)</span>
+                            )}
+                          </span>
+                        ) : needsEvaluation ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-full bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
+                            <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                            Chưa nộp phiếu đánh giá
+                          </span>
+                        ) : null}
                       </div>
 
                       <p className="text-xs sm:text-sm text-slate-600 font-medium">
@@ -413,13 +536,34 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
                   {/* Right Column: Actions */}
                   <div className="flex flex-wrap lg:flex-col items-end justify-between gap-2 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100 shrink-0">
                     <div className="flex flex-wrap items-center gap-2">
+                      {/* Nút Xem CV & Hồ sơ ứng viên (AC 1 & AC 2) */}
+                      <button
+                        type="button"
+                        onClick={() => handleViewCandidateCv(item)}
+                        disabled={loadingCvId === item.id}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition cursor-pointer disabled:opacity-50"
+                        title="Xem hồ sơ ứng viên và tệp CV theo phân quyền người phỏng vấn"
+                      >
+                        {loadingCvId === item.id ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                        ) : (
+                          <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                        )}
+                        Xem CV & Hồ sơ
+                      </button>
+
+                      {/* Nút Đánh giá năng lực */}
                       <button
                         type="button"
                         onClick={() => setEvaluatingInterview(item)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition cursor-pointer shadow-2xs"
+                        className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer shadow-2xs ${
+                          needsEvaluation
+                            ? 'bg-rose-600 hover:bg-rose-700 text-white ring-2 ring-rose-200'
+                            : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200'
+                        }`}
                       >
-                        <Award className="w-3.5 h-3.5 text-indigo-600" />
-                        Đánh giá năng lực
+                        <Award className={`w-3.5 h-3.5 ${needsEvaluation ? 'text-white' : 'text-indigo-600'}`} />
+                        {item.isEvaluationSubmitted ? 'Xem lại đánh giá' : 'Đánh giá năng lực'}
                       </button>
 
                       {item.candidateId && (
@@ -428,7 +572,7 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
                           onClick={() => navigate(`/candidates/${item.candidateId}`)}
                           className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 transition cursor-pointer"
                         >
-                          Hồ sơ ứng viên <ChevronRight className="w-3 h-3" />
+                          Hồ sơ chi tiết <ChevronRight className="w-3 h-3" />
                         </button>
                       )}
 
@@ -507,14 +651,42 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
           frameworkCode="CF-STD-2026"
           frameworkVersion="v1.0"
           criteria={resolveEvaluationCriteriaForJob(evaluatingInterview.jobTitle)}
-          onSubmit={(evaluationData) => {
-            addToast({
-              message: `Đã hoàn tất đánh giá và nộp phiếu cho ứng viên ${evaluatingInterview.candidateName}${
-                evaluationData.calculatedTotalScore !== null ? ` (Điểm: ${evaluationData.calculatedTotalScore}/5.0)` : ''
-              }.`,
-              type: 'success',
-            });
-            setEvaluatingInterview(null);
+          onSubmit={async (evaluationData) => {
+            try {
+              if (evaluatingInterview?.id) {
+                await interviewerCalendarService.submitInterviewerEvaluation(
+                  evaluatingInterview.id,
+                  evaluationData,
+                  currentUser?.id,
+                );
+                // Cập nhật state interviews ngay lập tức không reload trang (no reload) (AC 3)
+                setInterviews((prev) =>
+                  prev.map((inv) =>
+                    inv.id === evaluatingInterview.id
+                      ? {
+                          ...inv,
+                          isEvaluationSubmitted: true,
+                          evaluationScore: evaluationData.calculatedTotalScore ?? undefined,
+                          status: inv.status === 'SCHEDULED' ? 'COMPLETED' : inv.status,
+                        }
+                      : inv,
+                  ),
+                );
+              }
+              addToast({
+                message: `Đã hoàn tất đánh giá và nộp phiếu cho ứng viên ${evaluatingInterview.candidateName}${
+                  evaluationData.calculatedTotalScore !== null ? ` (Điểm: ${evaluationData.calculatedTotalScore}/5.0)` : ''
+                }. Trạng thái lịch đã cập nhật tự động!`,
+                type: 'success',
+              });
+            } catch {
+              addToast({
+                message: 'Có lỗi xảy ra khi lưu kết quả đánh giá, vui lòng thử lại.',
+                type: 'error',
+              });
+            } finally {
+              setEvaluatingInterview(null);
+            }
           }}
           onSaveDraft={() => {
             addToast({
@@ -525,6 +697,17 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
           }}
         />
       )}
+
+      {/* Modal Xem tệp CV và Hồ sơ ứng viên được phân công an toàn (S7-01 / TKNHTTDNB1-476) */}
+      <AssignedCandidateCvViewerModal
+        isOpen={isCvModalOpen}
+        onClose={() => {
+          setIsCvModalOpen(false);
+          setSelectedCvProfile(null);
+        }}
+        profile={selectedCvProfile}
+        isLoading={isCvLoading}
+      />
     </div>
   );
 };

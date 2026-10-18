@@ -271,6 +271,64 @@ export class InterviewConflictValidationError extends Error {
 }
 
 /**
+ * Lỗi khi người dùng không có quyền truy cập hồ sơ hoặc CV của buổi phỏng vấn (403 Forbidden - TKNHTTDNB1-476 / S7-01)
+ */
+export class InterviewerAccessForbiddenError extends Error {
+  code = 'FORBIDDEN';
+  statusCode = 403;
+
+  constructor(
+    message = 'Bạn không có quyền truy cập hồ sơ hoặc tệp CV của ứng viên này do không thuộc hội đồng phỏng vấn được phân công.',
+  ) {
+    super(message);
+    this.name = 'InterviewerAccessForbiddenError';
+    Object.setPrototypeOf(this, InterviewerAccessForbiddenError.prototype);
+  }
+}
+
+/**
+ * Thông tin chi tiết hồ sơ ứng viên và tệp CV được giao cho người phỏng vấn (AC 1 & AC 2 - S7-01)
+ */
+export interface AssignedCandidateProfileResult {
+  candidateId: string;
+  applicationId?: string;
+  interviewId?: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  appliedJobTitle: string;
+  departmentName?: string;
+  experienceYears?: number;
+  skills?: string[];
+  educationLevel?: string;
+  currentCompany?: string;
+  cvUrl?: string;
+  cvFileName?: string;
+  cvFileType?: 'pdf' | 'docx' | 'doc';
+  coverLetter?: string;
+  summary?: string;
+  appliedAt?: string;
+  interviewRound?: string;
+  interviewDate?: string;
+  interviewTime?: string;
+  interviewFormat?: InterviewFormat;
+  interviewLocationOrLink?: string;
+  isEvaluationSubmitted?: boolean;
+}
+
+/**
+ * Kết quả kiểm tra trạng thái nộp phiếu đánh giá (AC 1 & AC 3 - S7-01)
+ */
+export interface EvaluationSubmittedStatusResult {
+  interviewId: string;
+  interviewerId: string;
+  hasSubmitted: boolean;
+  submittedAt?: string;
+  score?: number;
+  conclusion?: string;
+}
+
+/**
  * Payload cho API ghi đè lịch phỏng vấn khi có xung đột (User Story S6-04 / TKNHTTDNB1-440)
  */
 export interface OverrideInterviewPayload {
