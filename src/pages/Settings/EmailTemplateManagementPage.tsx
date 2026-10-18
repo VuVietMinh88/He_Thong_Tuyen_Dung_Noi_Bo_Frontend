@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useId } from 'react';
+import React, { useState, useMemo, useRef, useId, useEffect } from 'react';
 import {
   Mail,
   Save,
@@ -17,8 +17,10 @@ import {
   Sliders,
   Layers,
   HelpCircle,
+  Loader2,
 } from 'lucide-react';
 import { useToast } from '../../components/notifications/useToast';
+import emailTemplateService from '../../services/emailTemplateService';
 import {
   type EmailTemplateItem,
   type EmailTemplateStage,
@@ -30,7 +32,6 @@ import {
   renderEmailTemplateWithData,
   getStoredEmailTemplates,
   saveStoredEmailTemplates,
-  resetStoredEmailTemplates,
 } from '../../types/emailTemplate';
 
 const STAGE_FILTERS: Array<{ id: EmailTemplateStage | 'ALL'; label: string }> = [
@@ -88,6 +89,7 @@ export const EmailTemplateManagementPage: React.FC = () => {
   // Trạng thái theo dõi thay đổi chưa lưu & loading
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isPreviewLoading, setIsPreviewLoading] = useState<boolean>(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
 
   // Hiệu ứng copy biến
@@ -109,6 +111,87 @@ export const EmailTemplateManagementPage: React.FC = () => {
       SAMPLE_CANDIDATES.find((c) => c.id === selectedSampleId) || SAMPLE_CANDIDATES[0]
     );
   }, [selectedSampleId]);
+
+  // Dữ liệu nội dung xem trước thời gian thực (Live Preview - AC 2)
+  const [previewData, setPreviewData] = useState<{
+    renderedSubject: string;
+    renderedBody: string;
+  }>(() => ({
+    renderedSubject: currentTemplate ? renderEmailTemplateWithData(currentTemplate.subject, currentSampleCandidate) : '',
+    renderedBody: currentTemplate ? renderEmailTemplateWithData(currentTemplate.body, currentSampleCandidate) : '',
+  }));
+
+  // 1. Tải danh sách mẫu email từ API Backend (AC 1)
+  useEffect(() => {
+    let isMounted = true;
+    const fetchTemplates = async () => {
+      try {
+        const data = await emailTemplateService.getEmailTemplates();
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          setTemplates(data);
+          setSelectedTemplateId((curr) =>
+            data.some((t) => t.id === curr) ? curr : data[0].id,
+          );
+        }
+      } catch (err: unknown) {
+        if (isMounted) {
+          addToast({
+            type: 'error',
+            message:
+              err instanceof Error
+                ? err.message
+                : 'Không thể tải danh sách mẫu email từ máy chủ. Đang sử dụng dữ liệu cục bộ.',
+          });
+        }
+      }
+    };
+
+    fetchTemplates();
+    return () => {
+      isMounted = false;
+    };
+  }, [addToast]);
+
+  // 2. Cập nhật xem trước thời gian thực qua service khi thay đổi mẫu/nội dung/ứng viên (AC 2)
+  useEffect(() => {
+    let isCurrent = true;
+    const fetchPreview = async () => {
+      setIsPreviewLoading(true);
+      try {
+        const res = await emailTemplateService.previewEmailTemplate({
+          templateId: currentTemplate.id,
+          subject: currentTemplate.subject,
+          body: currentTemplate.body,
+          sampleCandidateId: selectedSampleId,
+          sampleData: currentSampleCandidate,
+        });
+
+        if (isCurrent) {
+          setPreviewData({
+            renderedSubject: res.renderedSubject,
+            renderedBody: res.renderedBody,
+          });
+        }
+      } catch {
+        if (isCurrent) {
+          setPreviewData({
+            renderedSubject: renderEmailTemplateWithData(currentTemplate.subject, currentSampleCandidate),
+            renderedBody: renderEmailTemplateWithData(currentTemplate.body, currentSampleCandidate),
+          });
+        }
+      } finally {
+        if (isCurrent) {
+          setIsPreviewLoading(false);
+        }
+      }
+    };
+
+    const timer = setTimeout(fetchPreview, 120);
+    return () => {
+      isCurrent = false;
+      clearTimeout(timer);
+    };
+  }, [currentTemplate.id, currentTemplate.subject, currentTemplate.body, selectedSampleId, currentSampleCandidate]);
 
   // Lọc danh sách mẫu thư theo giai đoạn và từ khóa
   const filteredTemplates = useMemo(() => {
@@ -141,7 +224,7 @@ export const EmailTemplateManagementPage: React.FC = () => {
     return { total, autoCount, manualCount };
   }, [templates]);
 
-  // 1. Chỉnh sửa tiêu đề email
+  // Chỉnh sửa tiêu đề email
   const handleSubjectChange = (val: string) => {
     setTemplates((prev) =>
       prev.map((t) => (t.id === currentTemplate.id ? { ...t, subject: val } : t)),
@@ -149,7 +232,7 @@ export const EmailTemplateManagementPage: React.FC = () => {
     setHasUnsavedChanges(true);
   };
 
-  // 2. Chỉnh sửa nội dung email
+  // Chỉnh sửa nội dung email
   const handleBodyChange = (val: string) => {
     setTemplates((prev) =>
       prev.map((t) => (t.id === currentTemplate.id ? { ...t, body: val } : t)),
@@ -157,7 +240,7 @@ export const EmailTemplateManagementPage: React.FC = () => {
     setHasUnsavedChanges(true);
   };
 
-  // 3. Chỉnh sửa tên mẫu thư
+  // Chỉnh sửa tên mẫu thư
   const handleNameChange = (val: string) => {
     setTemplates((prev) =>
       prev.map((t) => (t.id === currentTemplate.id ? { ...t, name: val } : t)),
@@ -165,27 +248,42 @@ export const EmailTemplateManagementPage: React.FC = () => {
     setHasUnsavedChanges(true);
   };
 
-  // 4. Bật / Tắt tính năng gửi tự động cho từng mẫu thư (AC 3)
-  const handleToggleAutoSend = (templateId: string) => {
+  // 3. Bật / Tắt tính năng gửi tự động cho từng mẫu thư và đồng bộ lên server (AC 2 & AC 3)
+  const handleToggleAutoSend = async (templateId: string) => {
+    const target = templates.find((t) => t.id === templateId);
+    if (!target) return;
+    const nextState = !target.isAutoSend;
+
+    // Cập nhật giao diện tức thời (Optimistic UI)
     setTemplates((prev) =>
-      prev.map((t) => {
-        if (t.id === templateId) {
-          const nextState = !t.isAutoSend;
-          addToast({
-            type: 'info',
-            message: `Mẫu "${t.name}" đã chuyển sang chế độ: ${
-              nextState ? 'Tự động gửi khi vào giai đoạn' : 'Gửi thủ công (Cần HR xác nhận)'
-            }`,
-          });
-          return { ...t, isAutoSend: nextState };
-        }
-        return t;
-      }),
+      prev.map((t) => (t.id === templateId ? { ...t, isAutoSend: nextState } : t)),
     );
     setHasUnsavedChanges(true);
+
+    try {
+      await emailTemplateService.updateTemplateAutoSend(templateId, nextState);
+      addToast({
+        type: nextState ? 'success' : 'info',
+        message: nextState
+          ? `Đã kích hoạt gửi tự động cho mẫu "${target.name}". Hệ thống sẽ tự động gửi khi ứng viên vào giai đoạn tương ứng.`
+          : `Đã chuyển mẫu "${target.name}" sang chế độ gửi thủ công (cần nhân viên nhân sự duyệt trước).`,
+      });
+    } catch (err: unknown) {
+      // Hoàn tác nếu gặp lỗi
+      setTemplates((prev) =>
+        prev.map((t) => (t.id === templateId ? { ...t, isAutoSend: !nextState } : t)),
+      );
+      addToast({
+        type: 'error',
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Không thể cập nhật cấu hình gửi tự động. Vui lòng thử lại.',
+      });
+    }
   };
 
-  // 5. Chèn biến động vào vị trí con trỏ (AC 2)
+  // 4. Chèn biến động vào vị trí con trỏ (AC 2)
   const handleInsertVariable = (variable: EmailVariable) => {
     if (lastFocusedField === 'subject' && subjectInputRef.current) {
       const input = subjectInputRef.current;
@@ -196,13 +294,11 @@ export const EmailTemplateManagementPage: React.FC = () => {
 
       handleSubjectChange(newVal);
 
-      // Cập nhật lại vị trí con trỏ sau khi chèn
       setTimeout(() => {
         input.focus();
         input.setSelectionRange(start + variable.key.length, start + variable.key.length);
       }, 0);
     } else {
-      // Mặc định chèn vào body
       const textarea = bodyTextareaRef.current;
       if (textarea) {
         const start = textarea.selectionStart || 0;
@@ -221,68 +317,76 @@ export const EmailTemplateManagementPage: React.FC = () => {
       }
     }
 
-    // Hiệu ứng copy clipboard
     setCopiedVarKey(variable.key);
     setTimeout(() => setCopiedVarKey(null), 1500);
 
     addToast({
       type: 'success',
-      message: `Đã chèn biến ${variable.key} vào nội dung thư`,
+      message: `Đã chèn biến ${variable.key} vào ${lastFocusedField === 'subject' ? 'tiêu đề' : 'nội dung'}`,
     });
   };
 
-  // 6. Lưu toàn bộ cấu hình mẫu email vào LocalStorage
-  const handleSaveTemplates = () => {
+  // 5. Lưu toàn bộ cấu hình mẫu email vào hệ thống qua API Service (AC 1 & AC 3)
+  const handleSaveTemplates = async () => {
     setIsSaving(true);
     try {
-      const nowIso = new Date().toISOString();
-      const updated = templates.map((t) => ({
-        ...t,
-        updatedAt: nowIso,
-        updatedBy: 'Trưởng phòng Nhân sự / Quản trị viên',
-      }));
+      // Gửi request cập nhật mẫu đang chọn lên Backend API
+      await emailTemplateService.updateEmailTemplate(currentTemplate.id, {
+        name: currentTemplate.name,
+        subject: currentTemplate.subject,
+        body: currentTemplate.body,
+        isAutoSend: currentTemplate.isAutoSend,
+        isAutoSendEnabled: currentTemplate.isAutoSend,
+      });
 
-      saveStoredEmailTemplates(updated);
-      setTemplates(updated);
+      // Lưu đồng bộ vào LocalStorage
+      saveStoredEmailTemplates(templates);
       setHasUnsavedChanges(false);
 
       addToast({
         type: 'success',
-        message: 'Đã lưu toàn bộ cấu hình mẫu email tuyển dụng thành công.',
+        message: `Đã lưu thành công cấu hình mẫu email "${currentTemplate.name}".`,
       });
-    } catch {
+    } catch (err: unknown) {
       addToast({
         type: 'error',
-        message: 'Không thể lưu cấu hình mẫu email. Vui lòng thử lại.',
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Không thể lưu cấu hình mẫu email. Vui lòng thử lại.',
       });
     } finally {
       setIsSaving(false);
     }
   };
 
-  // 7. Khôi phục lại mẫu mặc định
-  const handleConfirmReset = () => {
-    const defaults = resetStoredEmailTemplates();
-    setTemplates(defaults);
-    setSelectedTemplateId(defaults[0].id);
-    setHasUnsavedChanges(false);
-    setIsResetModalOpen(false);
+  // 6. Khôi phục lại mẫu mặc định qua API Service
+  const handleConfirmReset = async () => {
+    try {
+      const defaults = await emailTemplateService.resetEmailTemplates();
+      setTemplates(defaults);
+      setSelectedTemplateId(defaults[0].id);
+      setHasUnsavedChanges(false);
+      setIsResetModalOpen(false);
 
-    addToast({
-      type: 'info',
-      message: 'Đã khôi phục toàn bộ mẫu email về thiết lập mặc định của hệ thống.',
-    });
+      addToast({
+        type: 'info',
+        message: 'Đã khôi phục toàn bộ mẫu email về thiết lập mặc định của hệ thống.',
+      });
+    } catch (err: unknown) {
+      addToast({
+        type: 'error',
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Không thể khôi phục thiết lập mặc định. Vui lòng thử lại.',
+      });
+    }
   };
 
-  // 8. Tính toán nội dung xem trước thời gian thực (Live Preview - AC 2)
-  const renderedSubjectPreview = renderEmailTemplateWithData(
-    currentTemplate.subject,
-    currentSampleCandidate,
-  );
-  const renderedBodyPreview = renderEmailTemplateWithData(
-    currentTemplate.body,
-    currentSampleCandidate,
-  );
+  // 7. Nội dung xem trước thời gian thực (Live Preview - AC 2)
+  const renderedSubjectPreview = previewData.renderedSubject;
+  const renderedBodyPreview = previewData.renderedBody;
 
   return (
     <div
@@ -325,7 +429,11 @@ export const EmailTemplateManagementPage: React.FC = () => {
             disabled={isSaving || !hasUnsavedChanges}
             className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow-sm shadow-rose-600/30 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Save className="w-4 h-4" />
+            {isSaving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
             <span>{isSaving ? 'Đang lưu cấu hình...' : 'Lưu thay đổi'}</span>
             {hasUnsavedChanges && (
               <span className="w-2 h-2 rounded-full bg-amber-300 animate-pulse" />
@@ -733,8 +841,15 @@ export const EmailTemplateManagementPage: React.FC = () => {
                       </strong>{' '}
                       &lt;{currentSampleCandidate.recruiterEmail}&gt;
                     </span>
-                    <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-semibold text-[10px]">
-                      Xem trước thực tế
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-semibold text-[10px]">
+                      {isPreviewLoading ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin text-rose-600" />
+                          <span>Đang cập nhật bản nháp...</span>
+                        </>
+                      ) : (
+                        <span>Xem trước thực tế</span>
+                      )}
                     </span>
                   </div>
 
