@@ -22,6 +22,7 @@ export interface EmailTemplateItem {
   subject: string;
   body: string;
   isAutoSend: boolean; // Công tắc bật/tắt gửi tự động (AC 3)
+  isAutoSendEnabled?: boolean; // Tùy chọn tương thích API backend
   applicableRoles: string[];
   updatedAt: string;
   updatedBy?: string;
@@ -63,6 +64,28 @@ export interface SampleCandidateData {
   recruiterName: string;
   recruiterEmail: string;
   recruiterPhone: string;
+}
+
+export interface UpdateEmailTemplatePayload {
+  name?: string;
+  subject?: string;
+  body?: string;
+  isAutoSend?: boolean;
+  isAutoSendEnabled?: boolean;
+}
+
+export interface EmailTemplatePreviewRequest {
+  templateId?: string;
+  subject?: string;
+  body?: string;
+  sampleCandidateId?: string;
+  sampleData?: SampleCandidateData;
+}
+
+export interface EmailTemplatePreviewResponse {
+  renderedSubject: string;
+  renderedBody: string;
+  sampleCandidate: SampleCandidateData;
 }
 
 export const LOCAL_STORAGE_EMAIL_TEMPLATES_KEY = 'smart_recruitment_email_templates';
