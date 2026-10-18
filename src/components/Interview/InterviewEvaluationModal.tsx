@@ -1,9 +1,10 @@
-import React, { useEffect } from 'react';
-import { X, Award, Lock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Award, Lock, HelpCircle } from 'lucide-react';
 import {
   InterviewEvaluationForm,
   type InterviewEvaluationFormProps,
 } from './InterviewEvaluationForm';
+import { InterviewSuggestedQuestions } from './InterviewSuggestedQuestions';
 
 export interface InterviewEvaluationModalProps extends InterviewEvaluationFormProps {
   isOpen: boolean;
@@ -19,11 +20,17 @@ export const InterviewEvaluationModal: React.FC<InterviewEvaluationModalProps> =
   onClose,
   ...formProps
 }) => {
+  const [isQuestionsDrawerOpen, setIsQuestionsDrawerOpen] = useState(false);
+
   // Lắng nghe sự kiện bàn phím ESC để đóng modal
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && isOpen) {
-        onClose();
+        if (isQuestionsDrawerOpen) {
+          setIsQuestionsDrawerOpen(false);
+        } else {
+          onClose();
+        }
       }
     };
 
@@ -31,7 +38,7 @@ export const InterviewEvaluationModal: React.FC<InterviewEvaluationModalProps> =
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, isQuestionsDrawerOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -80,14 +87,26 @@ export const InterviewEvaluationModal: React.FC<InterviewEvaluationModalProps> =
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Đóng cửa sổ"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition cursor-pointer"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsQuestionsDrawerOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold border border-indigo-200 transition cursor-pointer shadow-2xs"
+              title="Tra cứu ngân hàng câu hỏi gợi ý và khung đáp án chuẩn theo khung năng lực"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-indigo-600" />
+              <span className="hidden sm:inline">Câu hỏi gợi ý</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Đóng cửa sổ"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition cursor-pointer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* Nội dung form */}
@@ -98,6 +117,18 @@ export const InterviewEvaluationModal: React.FC<InterviewEvaluationModalProps> =
           />
         </div>
       </div>
+
+      {/* Drawer câu hỏi phỏng vấn gợi ý (User Story S7-02 / TKNHTTDNB1-480) */}
+      <InterviewSuggestedQuestions
+        isOpen={isQuestionsDrawerOpen}
+        onClose={() => setIsQuestionsDrawerOpen(false)}
+        variant="drawer"
+        jobTitle={formProps.jobTitle}
+        candidateName={formProps.candidateName}
+        candidateId={formProps.candidateId}
+        currentRoundName={formProps.interviewRound}
+        activeCriteria={formProps.criteria}
+      />
     </div>
   );
 };
