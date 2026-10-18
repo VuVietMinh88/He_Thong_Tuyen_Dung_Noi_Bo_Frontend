@@ -52,6 +52,13 @@ export interface InterviewSchedulePayload {
   notes?: string;
   status?: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED';
   candidateResponse?: CandidateInterviewResponse;
+  departmentName?: string;
+  department?: string;
+  cvUrl?: string;
+  cvFileName?: string;
+  isEvaluationSubmitted?: boolean;
+  evaluationSubmittedAt?: string;
+  evaluationScore?: number;
   isOverride?: boolean;
   overrideReason?: string;
   createdAt?: string;
