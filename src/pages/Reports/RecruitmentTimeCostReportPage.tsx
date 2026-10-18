@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useId } from 'react';
+import React, { useState, useMemo, useId, useEffect } from 'react';
 import {
   Clock,
   DollarSign,
@@ -22,7 +22,11 @@ import {
   MOCK_TIME_COST_REPORT_DATA,
   formatCurrencyVND,
 } from '../../types/timeCostReport';
-import { exportTimeCostReportToExcel } from '../../utils/timeCostReportExcelHelper';
+import {
+  recruitmentReportService,
+  handleRecruitmentReportError,
+} from '../../services/recruitmentReportService';
+import { RecruitmentCostInputModal } from '../../components/Reports/RecruitmentCostInputModal';
 
 const DEFAULT_FILTERS: TimeCostReportFilterState = {
   datePreset: 'THIS_YEAR',
@@ -60,7 +64,7 @@ export const RecruitmentTimeCostReportPage: React.FC = () => {
   const positionSelectId = useId();
 
   // Dữ liệu báo cáo
-  const [reportData] = useState<TimeCostReportData>(MOCK_TIME_COST_REPORT_DATA);
+  const [reportData, setReportData] = useState<TimeCostReportData>(MOCK_TIME_COST_REPORT_DATA);
   const [filters, setFilters] = useState<TimeCostReportFilterState>(DEFAULT_FILTERS);
 
   // Tab chuyển đổi so sánh: Theo Phòng ban / Theo Chức danh / Bảng chi tiết
@@ -72,8 +76,49 @@ export const RecruitmentTimeCostReportPage: React.FC = () => {
   // Từ khóa tìm kiếm trong bảng dữ liệu
   const [tableSearchKeyword, setTableSearchKeyword] = useState<string>('');
 
-  // Trạng thái đang xuất file Excel
+  // Trạng thái đang tải dữ liệu và xuất file Excel
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isExporting, setIsExporting] = useState<boolean>(false);
+
+  // Trạng thái Modal Nhập chi phí (AC 2)
+  const [isCostModalOpen, setIsCostModalOpen] = useState<boolean>(false);
+  const [selectedPositionForCost, setSelectedPositionForCost] = useState<string | undefined>();
+  const [selectedDepartmentForCost, setSelectedDepartmentForCost] = useState<string | undefined>();
+
+  // Tải dữ liệu báo cáo từ API khi thay đổi bộ lọc (AC 1)
+  useEffect(() => {
+    let isCurrent = true;
+    const fetchReport = async () => {
+      try {
+        setIsLoading(true);
+        const data = await recruitmentReportService.getRecruitmentReportData(filters);
+        if (isCurrent) {
+          setReportData(data);
+        }
+      } catch (err: unknown) {
+        if (isCurrent) {
+          const apiErr = handleRecruitmentReportError(
+            err,
+            'Không thể tải dữ liệu báo cáo tuyển dụng.',
+          );
+          addToast({
+            type: 'error',
+            message: apiErr.message,
+          });
+        }
+      } finally {
+        if (isCurrent) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchReport();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [filters, addToast]);
 
   // Lọc dữ liệu phòng ban theo bộ lọc
   const filteredDepartments = useMemo(() => {
@@ -111,20 +156,24 @@ export const RecruitmentTimeCostReportPage: React.FC = () => {
   }, [reportData.positions, reportData.departments, filters.departmentId, filters.jobTitleId, tableSearchKeyword]);
 
   /**
-   * Xử lý xuất báo cáo ra file Excel (.xlsx) (AC 2)
+   * Xử lý xuất báo cáo ra file Excel (.xlsx) tuân thủ bộ lọc hiện tại (AC 1 & 3)
    */
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     try {
       setIsExporting(true);
-      exportTimeCostReportToExcel(reportData, filters);
+      const result = await recruitmentReportService.exportRecruitmentReportExcel(filters, reportData);
       addToast({
         type: 'success',
-        message: 'Xuất file báo cáo Excel (Bao_cao_thoi_gian_chi_phi_tuyen_dung.xlsx) thành công!',
+        message: `Xuất file báo cáo Excel (${result.filename}) thành công!`,
       });
     } catch (err: unknown) {
+      const apiErr = handleRecruitmentReportError(
+        err,
+        'Không thể xuất file Excel. Vui lòng thử lại.',
+      );
       addToast({
         type: 'error',
-        message: err instanceof Error ? err.message : 'Không thể xuất file Excel. Vui lòng thử lại.',
+        message: apiErr.message,
       });
     } finally {
       setIsExporting(false);
@@ -166,8 +215,13 @@ export const RecruitmentTimeCostReportPage: React.FC = () => {
               <BarChart3 className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
-                Báo cáo Thời gian & Chi phí tuyển dụng
+              <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                <span>Báo cáo Thời gian &amp; Chi phí tuyển dụng</span>
+                {isLoading && (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 animate-pulse">
+                    Đang đồng bộ...
+                  </span>
+                )}
               </h1>
               <p className="text-xs sm:text-sm text-slate-500">
                 Phân tích chỉ số Time-to-hire, Cost-per-hire và so sánh hiệu quả đa chiều giữa các phòng ban, chức danh
@@ -178,6 +232,22 @@ export const RecruitmentTimeCostReportPage: React.FC = () => {
 
         {/* Nút hành động */}
         <div className="flex flex-wrap items-center gap-2.5 pt-2 md:pt-0">
+          {/* Nút Nhập chi phí (AC 2) */}
+          <button
+            type="button"
+            data-testid="btn-open-cost-modal"
+            onClick={() => {
+              setSelectedPositionForCost(undefined);
+              setSelectedDepartmentForCost(filters.departmentId !== 'ALL' ? filters.departmentId : undefined);
+              setIsCostModalOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm shadow-indigo-600/30 transition cursor-pointer"
+            title="Nhập hoặc cập nhật chi phí quảng cáo tin và thưởng giới thiệu nhân sự"
+          >
+            <DollarSign className="w-4 h-4" />
+            <span>Nhập chi phí</span>
+          </button>
+
           <button
             type="button"
             onClick={handleResetFilters}
@@ -190,6 +260,7 @@ export const RecruitmentTimeCostReportPage: React.FC = () => {
           {/* Nút Xuất Excel (AC 2) */}
           <button
             type="button"
+            data-testid="btn-export-excel"
             onClick={handleExportExcel}
             disabled={isExporting}
             className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/30 transition cursor-pointer disabled:opacity-50"
@@ -774,6 +845,7 @@ export const RecruitmentTimeCostReportPage: React.FC = () => {
                     <th className="py-3 px-3.5 text-right">Thưởng giới thiệu</th>
                     <th className="py-3 px-3.5 text-right">Cost-per-hire</th>
                     <th className="py-3 px-3.5 text-center">Độ phức tạp</th>
+                    <th className="py-3 px-3.5 text-center">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
@@ -801,6 +873,20 @@ export const RecruitmentTimeCostReportPage: React.FC = () => {
                           {pos.difficultyLevel}
                         </span>
                       </td>
+                      <td className="py-3.5 px-3.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedPositionForCost(pos.jobId);
+                            setIsCostModalOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition cursor-pointer"
+                          title="Cập nhật chi phí cho chức danh này"
+                        >
+                          <DollarSign className="w-3.5 h-3.5" />
+                          <span>Sửa chi phí</span>
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -809,6 +895,19 @@ export const RecruitmentTimeCostReportPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Modal Nhập & Cập nhật chi phí tuyển dụng (AC 2) */}
+      <RecruitmentCostInputModal
+        isOpen={isCostModalOpen}
+        onClose={() => setIsCostModalOpen(false)}
+        onSuccess={(updatedData) => {
+          setReportData(updatedData);
+        }}
+        departments={reportData.departments}
+        positions={reportData.positions}
+        initialPositionId={selectedPositionForCost}
+        initialDepartmentId={selectedDepartmentForCost}
+      />
     </div>
   );
 };

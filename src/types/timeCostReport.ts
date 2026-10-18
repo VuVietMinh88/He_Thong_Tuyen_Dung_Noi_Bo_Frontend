@@ -79,6 +79,29 @@ export interface TimeCostReportData {
   generatedAt: string;
 }
 
+export interface UpdateRecruitmentCostPayload {
+  positionId?: string;
+  departmentId?: string;
+  period?: string;
+  postingFees: number; // Phí đăng tin & quảng cáo tuyển dụng (VNĐ)
+  referralBonuses: number; // Tiền thưởng giới thiệu nhân sự nội bộ (VNĐ)
+  notes?: string;
+}
+
+export interface RecruitmentCostItem {
+  id: string;
+  positionId?: string;
+  jobTitle?: string;
+  departmentId?: string;
+  departmentName?: string;
+  period: string;
+  postingFees: number;
+  referralBonuses: number;
+  totalCost: number;
+  notes?: string;
+  updatedAt: string;
+}
+
 /**
  * Định dạng tiền tệ VND chuẩn mực
  */
