@@ -261,7 +261,7 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
       setIsOverriding(true);
       setOverrideError(null);
       const payload: OverrideInterviewPayload = {
-        applicationId: applicationId || 'app-current',
+        applicationId: applicationId || '',
         candidateId,
         candidateName,
         candidateEmail,
@@ -343,7 +343,7 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
     try {
       setIsSubmitting(true);
       const payload: CreateInterviewSchedulePayload = {
-        applicationId: applicationId || 'app-current',
+        applicationId: applicationId || '',
         candidateId,
         candidateName,
         candidateEmail,
@@ -390,6 +390,7 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
         } else {
           try {
             const checkRes = await interviewService.checkInterviewConflict({
+              applicationId,
               candidateName,
               jobTitle,
               roundName: effectiveRoundName,

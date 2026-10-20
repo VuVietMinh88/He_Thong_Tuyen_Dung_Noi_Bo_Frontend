@@ -1,3 +1,4 @@
+import { evaluationApi, evaluationError } from './evaluationApi';
 import axios from 'axios';
 import axiosClient from '../utils/axiosClient';
 import type { CandidateStage } from '../types/candidate';
@@ -149,22 +150,15 @@ export const interviewEvaluationService = {
    * Yêu cầu mở lại phiếu đánh giá đã nộp dành cho Recruiter trong thời hạn 24 giờ (AC 1 - TKNHTTDNB1-465)
    */
   async reopenEvaluation(
-    candidateId: string,
-    payload: { evaluationId?: string; reason?: string } = {},
+    interviewId: string,
+    payload: { evaluationId?: string; reason?: string; expectedVersion?: number } = {},
   ): Promise<{ success: boolean; reopenedAt: string }> {
-    if (!candidateId.trim()) {
-      throw new Error('Thiếu mã ứng viên để mở lại phiếu đánh giá.');
+    if (!payload.evaluationId || payload.expectedVersion === undefined || !payload.reason?.trim()) {
+      throw new Error('Cần interviewId, formId, expectedVersion và lý do để mở lại phiếu.');
     }
-
     try {
-      const response = await axiosClient.post<{ success: boolean; reopenedAt: string }>(
-        `/recruitment/candidates/${encodeURIComponent(candidateId)}/interviews/reopen-evaluation`,
-        payload,
-      );
-      return response.data;
-    } catch (error: unknown) {
-      throw getRequestError(error, 'Không thể mở lại phiếu đánh giá phỏng vấn.');
-    }
+      const result = await evaluationApi.reopen(interviewId, payload.evaluationId, payload.expectedVersion, payload.reason);
+      return { success: result.status === 'DRAFT', reopenedAt: result.updatedAt };
+    } catch (cause) { throw new Error(evaluationError(cause)); }
   },
 };
-

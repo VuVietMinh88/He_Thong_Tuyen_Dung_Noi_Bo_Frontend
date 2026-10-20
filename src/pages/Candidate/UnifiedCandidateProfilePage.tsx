@@ -156,17 +156,20 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
 
   // Tải danh sách lịch phỏng vấn của ứng viên (AC 1 & AC 3)
   const loadCandidateInterviews = useCallback(async () => {
-    if (!id) return;
+    if (!id || !activeAppId) { setCandidateInterviews([]); return; }
     try {
       setIsLoadingInterviews(true);
       const data = await interviewService.getCandidateInterviews(activeAppId || '', id);
-      setCandidateInterviews(data);
-    } catch {
-      // Ignored
+      setCandidateInterviews(data.map(item => ({ ...item, candidateId: candidate?.id || '',
+        candidateName: candidate?.fullName || '', candidateEmail: candidate?.email,
+        jobTitle: candidate?.applications.find(app => app.id === activeAppId)?.jobTitle })));
+    } catch (cause) {
+      setCandidateInterviews([]);
+      addToast({ type: 'error', message: cause instanceof Error ? cause.message : 'Không tải được lịch phỏng vấn.' });
     } finally {
       setIsLoadingInterviews(false);
     }
-  }, [id, activeAppId]);
+  }, [id, activeAppId, candidate, addToast]);
 
   useEffect(() => {
     loadCandidateInterviews();
@@ -933,8 +936,16 @@ export const UnifiedCandidateProfilePage: React.FC = () => {
               isLoading={isLoadingInterviews}
               onScheduleNew={() => setIsInterviewModalOpen(true)}
               onStatusChange={async (interviewId, newStatus) => {
-                await interviewService.updateInterviewStatus(interviewId, newStatus);
-                await loadCandidateInterviews();
+                try {
+                  const current = candidateInterviews.find(item => item.id === interviewId);
+                  if (newStatus !== 'CANCELLED' || current?.version === undefined) throw new Error('Cần tải lại lịch trước khi hủy.');
+                  const reason = window.prompt('Nhập lý do hủy lịch:');
+                  if (reason === null) return;
+                  await interviewService.updateInterviewStatus(interviewId, newStatus, { expectedVersion: current.version, reason });
+                  await loadCandidateInterviews();
+                } catch (cause) {
+                  addToast({ type: 'error', message: cause instanceof Error ? cause.message : 'Không thể hủy lịch. Tải lại nếu lịch đã thay đổi.' });
+                }
               }}
             />
           )}

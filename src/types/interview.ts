@@ -30,6 +30,7 @@ export interface CandidateInterviewResponse {
 }
 
 export interface InterviewSchedulePayload {
+  version?: number;
   id?: string;
   candidateId: string;
   candidateName: string;
@@ -69,6 +70,7 @@ export interface InterviewSchedulePayload {
  * Payload chuẩn cho API tạo lịch phỏng vấn theo User Story S6-02 (AC 1)
  */
 export interface CreateInterviewSchedulePayload {
+  expectedVersion?: number;
   id?: string;
   applicationId: string;
   candidateId?: string;
@@ -172,6 +174,7 @@ export interface InterviewConflictCheckResult {
 }
 
 export interface CheckInterviewConflictPayload {
+  applicationId?: string;
   id?: string;
   candidateName?: string;
   jobTitle?: string;

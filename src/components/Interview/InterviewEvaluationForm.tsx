@@ -52,11 +52,13 @@ import {
   checkIsRecruiterRole,
   isPeerReviewVisible,
 } from '../../utils/interviewEvaluationHelper';
-import { interviewEvaluationService } from '../../services/interviewEvaluationService';
 
 export interface InterviewEvaluationFormProps {
   // 1. Thông tin ứng viên & buổi phỏng vấn (AC 1)
   candidateId?: string;
+  interviewId?: string;
+  generalNotesSupported?: boolean;
+  serverTotalScore?: number | null;
   candidateName: string;
   candidateEmail?: string;
   jobTitle: string;
@@ -115,7 +117,7 @@ export interface InterviewEvaluationFormProps {
     calculatedTotalScore: number | null;
     generalNotes: string;
     conclusion?: InterviewConclusion | null;
-  }) => void;
+  }) => void | Promise<void>;
   onReopen?: (reason?: string) => Promise<void> | void;
   onCancel?: () => void;
   readOnly?: boolean;
@@ -552,7 +554,6 @@ export const InterviewEvaluationReopenModal: React.FC<{
  * (TKNHTTDNB1-457, TKNHTTDNB1-458, TKNHTTDNB1-464, TKNHTTDNB1-465)
  */
 export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = ({
-  candidateId,
   candidateName,
   candidateEmail,
   jobTitle,
@@ -576,6 +577,8 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
   criteria = [],
   initialEvaluations = {},
   initialGeneralNotes = '',
+  generalNotesSupported = true,
+  serverTotalScore,
   initialConclusion = null,
   isLocked = false,
   submittedAt = null,
@@ -638,8 +641,8 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
 
   // Quản lý trạng thái khóa phiếu đánh giá (AC 3 - TKNHTTDNB1-464 & TKNHTTDNB1-465)
   const [isFormLocked, setIsFormLocked] = useState<boolean>(() => Boolean(isLocked));
-  const [submittedAtState, setSubmittedAtState] = useState<string | null>(() => {
-    return submittedAt || (isLocked ? '2026-10-15T10:00:00.000Z' : null);
+  const [submittedAtState] = useState<string | null>(() => {
+    return submittedAt || null;
   });
 
   const isFormLockedState = Boolean(isLocked || isFormLocked);
@@ -674,53 +677,11 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
   }, [hasSubmittedOwnEvaluation, isFormLockedState]);
 
   // Chuẩn bị danh sách đánh giá chéo từ hội đồng (AC 2)
-  const defaultPeerEvaluations = useMemo<PeerInterviewerEvaluation[]>(() => {
-    if (peerEvaluations && peerEvaluations.length > 0) {
-      return peerEvaluations;
-    }
-
-    if (interviewers && interviewers.length > 0) {
-      const activeUserId = currentUserId;
-      const activeUserEmail = (currentUserEmail || '').toLowerCase();
-
-      return interviewers
-        .filter((interviewerItem) => {
-          const isCurrentSelf =
-            (activeUserId && interviewerItem.id === activeUserId) ||
-            (activeUserEmail &&
-              interviewerItem.email &&
-              interviewerItem.email.toLowerCase() === activeUserEmail);
-          return !isCurrentSelf;
-        })
-        .map((interviewerItem, peerIndex) => ({
-          interviewerId: interviewerItem.id || `peer-${peerIndex}`,
-          interviewerName: interviewerItem.name || `Người phỏng vấn ${peerIndex + 1}`,
-          interviewerRole: 'Hội đồng phỏng vấn',
-          interviewerEmail: interviewerItem.email,
-          isSubmitted: true,
-          submittedAt: '2026-10-15T08:00:00.000Z',
-          calculatedTotalScore: 4.2,
-          conclusion: 'RECOMMENDED' as const,
-          generalNotes:
-            'Ứng viên nắm chắc chuyên môn kỹ thuật, giao tiếp rõ ràng và có tư duy logic tốt.',
-        }));
-    }
-
-    if (interviewerNames && interviewerNames.length > 1) {
-      return interviewerNames.slice(1).map((peerName, peerIndex) => ({
-        interviewerId: `peer-${peerIndex}`,
-        interviewerName: peerName,
-        interviewerRole: 'Người phỏng vấn',
-        isSubmitted: true,
-        submittedAt: '2026-10-15T07:30:00.000Z',
-        calculatedTotalScore: 4.0,
-        conclusion: 'RECOMMENDED' as const,
-        generalNotes: 'Ứng viên có tiềm năng phát triển và thích ứng văn hóa tốt.',
-      }));
-    }
-
-    return [];
-  }, [peerEvaluations, interviewers, interviewerNames, currentUserId, currentUserEmail]);
+  const defaultPeerEvaluations = useMemo<PeerInterviewerEvaluation[]>(
+    () => peerEvaluations ?? [], [peerEvaluations],
+  );
+  const [isSaving, setIsSaving] = useState(false);
+  const [operationError, setOperationError] = useState<string | null>(null);
 
   // Quản lý thông báo lỗi validation theo thời gian thực (AC 2)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -799,6 +760,7 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
 
   // 1. Tự động tính lại điểm tổng theo trọng số ngay mỗi khi có thay đổi điểm ở bất kỳ tiêu chí nào (AC 1)
   const calculatedTotalScore = useMemo<number | null>(() => {
+    if (isFormLockedState && serverTotalScore !== undefined) return serverTotalScore;
     try {
       return calculateWeightedScore(criteria, evaluationsState);
     } catch (errorObject: unknown) {
@@ -811,7 +773,7 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
       }
       return null;
     }
-  }, [criteria, evaluationsState]);
+  }, [criteria, evaluationsState, isFormLockedState, serverTotalScore]);
 
   // Đếm số lượng tiêu chí đã chấm điểm
   const scoredCriteriaCount = useMemo(() => {
@@ -823,7 +785,7 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
   // Tiền kiểm tra trước khi mở Confirm Modal (AC 2 - TKNHTTDNB1-464)
   const handlePreSubmitCheck = (formEvent: React.FormEvent) => {
     formEvent.preventDefault();
-    if (isEffectiveLocked) return;
+    if (isEffectiveLocked || isSaving) return;
 
     setHasAttemptedSubmit(true);
 
@@ -865,23 +827,19 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
   };
 
   // Xác nhận nộp phiếu từ Confirm Modal (AC 2 & AC 3)
-  const handleConfirmSubmit = () => {
-    setIsConfirmModalOpen(false);
-    // Chuyển toàn bộ phiếu sang trạng thái đã khóa chỉ xem (AC 3)
-    setIsFormLocked(true);
-    const submissionTimestamp = new Date().toISOString();
-    setSubmittedAtState(submissionTimestamp);
-
-    if (onSubmit && interviewConclusion) {
-      onSubmit({
-        criteriaEvaluations: evaluationsState,
-        calculatedTotalScore,
-        generalNotes: generalNotesState,
-        conclusion: interviewConclusion,
-        isLocked: true,
-        submittedAt: submissionTimestamp,
-      });
-    }
+  const handleConfirmSubmit = async () => {
+    if (isSaving || isEffectiveLocked || !onSubmit || !interviewConclusion) return;
+    setIsSaving(true); setOperationError(null);
+    try {
+      await onSubmit({ criteriaEvaluations: evaluationsState, calculatedTotalScore,
+        generalNotes: generalNotesState, conclusion: interviewConclusion,
+        isLocked: true, submittedAt: '' });
+      // The container supplies server-confirmed status and timestamps after persistence.
+      setIsConfirmModalOpen(false);
+    } catch (cause) {
+      setIsConfirmModalOpen(false);
+      setOperationError(cause instanceof Error ? cause.message : 'Không thể nộp phiếu.');
+    } finally { setIsSaving(false); }
   };
 
   // Xử lý mở lại phiếu đánh giá (AC 1 - TKNHTTDNB1-465)
@@ -893,11 +851,8 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
       // Nếu có prop onReopen tùy biến thì ưu tiên gọi
       if (onReopen) {
         await onReopen(reopenReason);
-      } else if (candidateId) {
-        // Gọi API mở lại phiếu
-        await interviewEvaluationService.reopenEvaluation(candidateId, {
-          reason: reopenReason,
-        });
+      } else {
+        throw new Error('Chưa có contract mở lại phiếu cho lịch này.');
       }
 
       // Mở khóa phiếu đánh giá thành công
@@ -916,17 +871,14 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
   };
 
   // Xử lý lưu nháp
-  const handleSaveDraftClick = () => {
-    if (isEffectiveLocked) return;
-
-    if (onSaveDraft) {
-      onSaveDraft({
-        criteriaEvaluations: evaluationsState,
-        calculatedTotalScore,
-        generalNotes: generalNotesState,
-        conclusion: interviewConclusion,
-      });
-    }
+  const handleSaveDraftClick = async () => {
+    if (isEffectiveLocked || isSaving || !onSaveDraft) return;
+    setIsSaving(true); setOperationError(null);
+    try {
+      await onSaveDraft({ criteriaEvaluations: evaluationsState, calculatedTotalScore,
+        generalNotes: generalNotesState, conclusion: interviewConclusion });
+    } catch (cause) { setOperationError(cause instanceof Error ? cause.message : 'Không thể lưu nháp.'); }
+    finally { setIsSaving(false); }
   };
 
   // 1. Kiểm tra phân quyền truy cập (AC 1)
@@ -1064,7 +1016,7 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
                     data-testid="framework-version-tag"
                     className="inline-flex items-center rounded-md bg-indigo-600 px-2 py-0.5 text-[11px] font-bold text-white tracking-wide shadow-2xs"
                   >
-                    {frameworkVersion || DEFAULT_FRAMEWORK_VERSION}
+                    {frameworkVersion}
                   </span>
                 </div>
                 {frameworkCode && (
@@ -1325,7 +1277,7 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
                               type="button"
                               role="radio"
                               aria-checked={isSelected}
-                              disabled={isEffectiveLocked}
+                              disabled={isEffectiveLocked || isSaving}
                               data-testid={`score-button-${criterionItem.id}-${scoreOptionValue}`}
                               onClick={() =>
                                 handleScoreChange(criterionItem.id, scoreOptionValue)
@@ -1377,7 +1329,7 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
                         id={`comment-${criterionItem.id}`}
                         data-testid={`criterion-comment-input-${criterionItem.id}`}
                         rows={3}
-                        disabled={isEffectiveLocked}
+                        disabled={isEffectiveLocked || isSaving}
                         value={currentComment}
                         onChange={(changeEvent) =>
                           handleCommentChange(criterionItem.id, changeEvent.target.value)
@@ -1503,10 +1455,10 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
               id="general-evaluation-notes"
               data-testid="general-evaluation-notes-input"
               rows={3}
-              disabled={isEffectiveLocked}
               value={generalNotesState}
               onChange={(changeEvent) => setGeneralNotesState(changeEvent.target.value)}
-              placeholder="Ghi nhận đánh giá tổng quát về thái độ, tiềm năng phát triển, văn hóa doanh nghiệp hoặc các đề xuất đặc biệt dành cho Hội đồng tuyển dụng..."
+              disabled={!generalNotesSupported || isEffectiveLocked || isSaving}
+              placeholder={generalNotesSupported ? "Nhận xét chung" : "Backend hiện hỗ trợ nhận xét theo từng tiêu chí."}
               className="w-full rounded-xl border border-slate-300 bg-white p-3 text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-100 disabled:text-slate-600 transition resize-y"
             />
           </div>
@@ -1560,7 +1512,7 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
                     type="button"
                     role="radio"
                     aria-checked={isSelected}
-                    disabled={isEffectiveLocked}
+                    disabled={isEffectiveLocked || isSaving}
                     data-testid={`conclusion-button-${conclusionOptionKey}`}
                     onClick={() => handleSelectConclusion(conclusionOptionKey)}
                     className={`flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all ${
@@ -1725,7 +1677,7 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
                     <button
                       type="button"
                       onClick={handleSaveDraftClick}
-                      disabled={isEffectiveLocked}
+                      disabled={isEffectiveLocked || isSaving}
                       data-testid="save-draft-button"
                       className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-xs sm:text-sm font-semibold text-indigo-700 hover:bg-indigo-100 transition cursor-pointer disabled:opacity-50"
                     >
@@ -1737,7 +1689,7 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
                   {onSubmit && (
                     <button
                       type="submit"
-                      disabled={isEffectiveLocked}
+                      disabled={isEffectiveLocked || isSaving}
                       data-testid="submit-evaluation-button"
                       className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-5 py-2.5 text-xs sm:text-sm font-semibold text-white hover:bg-indigo-700 shadow-xs transition cursor-pointer disabled:bg-indigo-400"
                     >
@@ -1918,6 +1870,7 @@ export const InterviewEvaluationForm: React.FC<InterviewEvaluationFormProps> = (
       </form>
 
       {/* Hộp thoại xác nhận nộp phiếu đánh giá (Confirm Modal - AC 2) */}
+      {operationError && <p role="alert">{operationError}</p>}
       <InterviewEvaluationConfirmModal
         isOpen={isConfirmModalOpen}
         candidateName={candidateName}

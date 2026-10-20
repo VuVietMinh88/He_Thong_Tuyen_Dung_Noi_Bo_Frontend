@@ -261,7 +261,7 @@ export const CandidateInterviewsList: React.FC<CandidateInterviewsListProps> = (
                     </button>
                     <button
                       type="button"
-                      onClick={() => onStatusChange(item.id || '', 'COMPLETED')}
+                      disabled title="Backend chưa hỗ trợ hoàn thành lịch thủ công"
                       className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition cursor-pointer"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
@@ -278,6 +278,7 @@ export const CandidateInterviewsList: React.FC<CandidateInterviewsListProps> = (
       {/* Modal Đánh giá năng lực phỏng vấn */}
       {evaluatingInterview && (
         <InterviewEvaluationModal
+          interviewId={evaluatingInterview.id}
           isOpen={true}
           onClose={() => setEvaluatingInterview(null)}
           candidateName={evaluatingInterview.candidateName}

@@ -128,20 +128,21 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
     newStatus: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED',
   ) => {
     try {
-      const updated = await interviewService.updateInterviewStatus(id, newStatus);
+      const current = interviews.find(item => item.id === id);
+      if (newStatus !== 'CANCELLED' || current?.version === undefined) throw new Error('Cần tải lại lịch; Backend không hỗ trợ hoàn thành lịch thủ công.');
+      const reason = window.prompt('Nhập lý do hủy lịch:');
+      if (reason === null) return;
+      const updated = await interviewService.updateInterviewStatus(id, newStatus, { expectedVersion: current.version, reason });
       if (updated) {
         setInterviews((prev) => prev.map((item) => (item.id === id ? updated : item)));
         addToast({
-          message:
-            newStatus === 'COMPLETED'
-              ? 'Đã đánh dấu hoàn thành buổi phỏng vấn.'
-              : 'Đã hủy buổi phỏng vấn thành công.',
+          message: 'Đã hủy buổi phỏng vấn thành công.',
           type: 'success',
         });
       }
-    } catch {
+    } catch (cause) {
       addToast({
-        message: 'Không thể cập nhật trạng thái lịch hẹn.',
+        message: cause instanceof Error ? cause.message : 'Không thể cập nhật lịch. Tải lại nếu lịch đã thay đổi.',
         type: 'error',
       });
     }
@@ -600,7 +601,7 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleUpdateStatus(item.id || '', 'COMPLETED')}
+                          disabled title="Backend chưa hỗ trợ hoàn thành lịch thủ công"
                           className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-1 rounded-md transition cursor-pointer"
                         >
                           <CheckCircle2 className="w-3 h-3" />
@@ -626,6 +627,7 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
       {/* Modal Phiếu đánh giá năng lực phỏng vấn (TKNHTTDNB1-457) */}
       {evaluatingInterview && (
         <InterviewEvaluationModal
+          interviewId={evaluatingInterview.id}
           isOpen={true}
           onClose={() => setEvaluatingInterview(null)}
           candidateId={evaluatingInterview.candidateId}
@@ -654,11 +656,6 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
           onSubmit={async (evaluationData) => {
             try {
               if (evaluatingInterview?.id) {
-                await interviewerCalendarService.submitInterviewerEvaluation(
-                  evaluatingInterview.id,
-                  evaluationData,
-                  currentUser?.id,
-                );
                 // Cập nhật state interviews ngay lập tức không reload trang (no reload) (AC 3)
                 setInterviews((prev) =>
                   prev.map((inv) =>
@@ -667,7 +664,6 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
                           ...inv,
                           isEvaluationSubmitted: true,
                           evaluationScore: evaluationData.calculatedTotalScore ?? undefined,
-                          status: inv.status === 'SCHEDULED' ? 'COMPLETED' : inv.status,
                         }
                       : inv,
                   ),
