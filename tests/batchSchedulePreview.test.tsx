@@ -253,33 +253,12 @@ describe('Task Jira TKNHTTDNB1-434: Hiển thị xem trước và xác nhận l�
       expect(html).toContain('data-testid="btn-confirm-create-batch-schedule"');
     });
 
-    it('gọi API backend khi nhấn nút xác nhận và truyền cờ sendCalendarInvite', async () => {
-      const mockResult = {
-        totalScheduled: 2,
-        scheduledInterviews: [],
-        message: 'Thành công',
-        calendarInviteSent: true,
-      };
-
-      const postSpy = vi.spyOn(axiosClient, 'post').mockResolvedValueOnce({
-        data: mockResult,
-      });
-
+    it('không báo đã gửi Calendar Invite khi batch chưa có contract', async () => {
+      const post = vi.spyOn(axiosClient, 'post');
       const { interviewService } = await import('../src/services/interviewService');
-
-      const result = await interviewService.batchCreateInterviewSchedules({
-        settings: mockSettings,
-        slots: mockSlots,
-        sendCalendarInvite: true,
-      });
-
-      expect(postSpy).toHaveBeenCalledWith('/recruitment/interviews/batch-schedule', {
-        settings: mockSettings,
-        slots: mockSlots,
-        sendCalendarInvite: true,
-      });
-      expect(result.totalScheduled).toBe(2);
-      expect(result.calendarInviteSent).toBe(true);
+      await expect(interviewService.batchCreateInterviewSchedules({ settings: mockSettings, slots: mockSlots, sendCalendarInvite: true }))
+        .rejects.toMatchObject({ statusCode: 501 });
+      expect(post).not.toHaveBeenCalled();
     });
   });
 

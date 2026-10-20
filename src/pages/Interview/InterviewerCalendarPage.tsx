@@ -73,11 +73,7 @@ export const InterviewerCalendarPage: React.FC = () => {
     }).format(new Date());
   }, []);
 
-  /**
-   * Khởi tạo dữ liệu mẫu phong phú gán cho Interviewer hiện tại
-   * nếu hệ thống chưa có dữ liệu hoặc dùng offline
-   */
-  // State chính - khởi tạo sẵn danh sách phỏng vấn cá nhân hóa (AC 1 & AC 3)
+  // Only verified API results populate the calendar.
   const [interviews, setInterviews] = useState<InterviewSchedulePayload[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<CalendarViewMode>('CARDS');
@@ -840,9 +836,9 @@ export const InterviewerCalendarPage: React.FC = () => {
                       {/* LIÊN KẾT MỞ XEM TRƯỚC CV ỨNG VIÊN (AC 2) */}
                       <button
                         type="button"
-                        onClick={() => setPreviewCvInterview(item)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 text-indigo-700 transition cursor-pointer shadow-2xs"
-                        title="Xem trước tệp CV của ứng viên ngay trong hệ thống"
+                        disabled
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-indigo-200 bg-indigo-50/60 text-indigo-700 opacity-60 cursor-not-allowed shadow-2xs"
+                        title="Chức năng xem CV theo phân công hiện chưa khả dụng"
                       >
                         <FileText className="w-3.5 h-3.5 text-indigo-600" />
                         Xem trước CV

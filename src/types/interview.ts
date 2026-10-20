@@ -265,7 +265,7 @@ export class InterviewConflictValidationError extends Error {
   statusCode = 400;
 
   constructor(
-    message = 'Lý do ghi đè lịch phỏng vấn là bắt buộc và phải có tối thiểu 5 ký tự.',
+    message = 'Lý do ghi đè lịch phỏng vấn không được để trống.',
   ) {
     super(message);
     this.name = 'InterviewConflictValidationError';

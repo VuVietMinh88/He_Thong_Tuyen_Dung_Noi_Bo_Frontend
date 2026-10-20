@@ -1,3 +1,4 @@
+import { interview, httpError } from './fixtures/interviewContract';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import axios from 'axios';
@@ -28,6 +29,7 @@ describe('TKNHTTDNB1-439 / S6-04: Hiển thị chi tiết xung đột lịch ph�
       clear: () => storage.clear(),
     });
     vi.restoreAllMocks();
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-10-20T00:00:00Z').getTime());
   });
 
   afterEach(() => {
@@ -133,6 +135,7 @@ describe('TKNHTTDNB1-439 / S6-04: Hiển thị chi tiết xung đột lịch ph�
 
     it('trả về hasConflict = false khi không có trùng lặp về người hay phòng', async () => {
       const checkPayload: CheckInterviewConflictPayload = {
+        applicationId: 'app-1',
         interviewDate: existingDate,
         startTime: '14:00',
         durationMinutes: 60,
@@ -141,13 +144,22 @@ describe('TKNHTTDNB1-439 / S6-04: Hiển thị chi tiết xung đột lịch ph�
         interviewerIds: ['usr-002'],
       };
 
+      const resources = checkPayload.startTime === '14:00' ? [] : [
+        ...(checkPayload.interviewerIds.includes('usr-001') ? [{ interviewId: existingInterview.id, startsAt: existingInterview.startTime,
+          endsAt: `${existingDate}T10:00:00+07:00`, resourceType: 'PARTICIPANT', participantId: 'usr-001', room: null }] : []),
+        ...(checkPayload.format === 'OFFLINE' ? [{ interviewId: existingInterview.id, startsAt: existingInterview.startTime,
+          endsAt: `${existingDate}T10:00:00+07:00`, resourceType: 'ROOM', participantId: null, room: existingInterview.locationOrLink }] : []),
+      ];
+      const post = vi.spyOn(axiosClient, 'post').mockResolvedValue({ data: resources });
       const result = await interviewService.checkInterviewConflict(checkPayload);
+      expect(post).toHaveBeenCalledWith('/interviews/conflicts', expect.objectContaining({ applicationId: 'app-1' }));
       expect(result.hasConflict).toBe(false);
       expect(result.conflicts).toHaveLength(0);
     });
 
     it('phát hiện xung đột INTERVIEWER_CONFLICT khi trùng người phỏng vấn trong cùng khung giờ', async () => {
       const checkPayload: CheckInterviewConflictPayload = {
+        applicationId: 'app-1',
         candidateName: 'Lê Thuỳ Dung',
         jobTitle: 'Fullstack Developer',
         roundName: 'Vòng Kỹ thuật',
@@ -159,18 +171,27 @@ describe('TKNHTTDNB1-439 / S6-04: Hiển thị chi tiết xung đột lịch ph�
         interviewerIds: ['usr-001'], // Trùng với Nguyễn Văn Hải
       };
 
+      const resources = checkPayload.startTime === '14:00' ? [] : [
+        ...(checkPayload.interviewerIds.includes('usr-001') ? [{ interviewId: existingInterview.id, startsAt: existingInterview.startTime,
+          endsAt: `${existingDate}T10:00:00+07:00`, resourceType: 'PARTICIPANT', participantId: 'usr-001', room: null }] : []),
+        ...(checkPayload.format === 'OFFLINE' ? [{ interviewId: existingInterview.id, startsAt: existingInterview.startTime,
+          endsAt: `${existingDate}T10:00:00+07:00`, resourceType: 'ROOM', participantId: null, room: existingInterview.locationOrLink }] : []),
+      ];
+      const post = vi.spyOn(axiosClient, 'post').mockResolvedValue({ data: resources });
       const result = await interviewService.checkInterviewConflict(checkPayload);
+      expect(post).toHaveBeenCalledWith('/interviews/conflicts', expect.objectContaining({ applicationId: 'app-1' }));
       expect(result.hasConflict).toBe(true);
       expect(result.conflictType).toBe('INTERVIEWER_CONFLICT');
       expect(result.conflicts.length).toBeGreaterThanOrEqual(1);
       expect(result.conflicts[0].type).toBe('INTERVIEWER');
       expect(result.conflicts[0].entityId).toBe('usr-001');
-      expect(result.conflicts[0].conflictingInterview.candidateName).toBe('Trần Minh Quang');
-      expect(result.proposedInterview?.candidateName).toBe('Lê Thuỳ Dung');
+      expect(result.conflicts[0].conflictingInterview.candidateName).toBe('');
+      expect(JSON.stringify(result.conflicts)).not.toContain('Trần Minh Quang');
     });
 
     it('phát hiện xung đột ROOM_CONFLICT khi trùng phòng họp trực tiếp OFFLINE trong cùng khung giờ', async () => {
       const checkPayload: CheckInterviewConflictPayload = {
+        applicationId: 'app-1',
         candidateName: 'Hoàng Quốc Việt',
         jobTitle: 'DevOps Engineer',
         roundName: 'Vòng Chuyên môn',
@@ -182,7 +203,15 @@ describe('TKNHTTDNB1-439 / S6-04: Hiển thị chi tiết xung đột lịch ph�
         interviewerIds: ['usr-003'], // Người phỏng vấn khác
       };
 
+      const resources = checkPayload.startTime === '14:00' ? [] : [
+        ...(checkPayload.interviewerIds.includes('usr-001') ? [{ interviewId: existingInterview.id, startsAt: existingInterview.startTime,
+          endsAt: `${existingDate}T10:00:00+07:00`, resourceType: 'PARTICIPANT', participantId: 'usr-001', room: null }] : []),
+        ...(checkPayload.format === 'OFFLINE' ? [{ interviewId: existingInterview.id, startsAt: existingInterview.startTime,
+          endsAt: `${existingDate}T10:00:00+07:00`, resourceType: 'ROOM', participantId: null, room: existingInterview.locationOrLink }] : []),
+      ];
+      const post = vi.spyOn(axiosClient, 'post').mockResolvedValue({ data: resources });
       const result = await interviewService.checkInterviewConflict(checkPayload);
+      expect(post).toHaveBeenCalledWith('/interviews/conflicts', expect.objectContaining({ applicationId: 'app-1' }));
       expect(result.hasConflict).toBe(true);
       expect(result.conflictType).toBe('ROOM_CONFLICT');
       expect(result.conflicts[0].type).toBe('ROOM');
@@ -191,6 +220,7 @@ describe('TKNHTTDNB1-439 / S6-04: Hiển thị chi tiết xung đột lịch ph�
 
     it('phát hiện xung đột BOTH khi trùng cả người phỏng vấn và phòng họp', async () => {
       const checkPayload: CheckInterviewConflictPayload = {
+        applicationId: 'app-1',
         candidateName: 'Đặng Tuấn Anh',
         jobTitle: 'Software Architect',
         roundName: 'Vòng Giám đốc',
@@ -202,7 +232,15 @@ describe('TKNHTTDNB1-439 / S6-04: Hiển thị chi tiết xung đột lịch ph�
         interviewerIds: ['usr-001'],
       };
 
+      const resources = checkPayload.startTime === '14:00' ? [] : [
+        ...(checkPayload.interviewerIds.includes('usr-001') ? [{ interviewId: existingInterview.id, startsAt: existingInterview.startTime,
+          endsAt: `${existingDate}T10:00:00+07:00`, resourceType: 'PARTICIPANT', participantId: 'usr-001', room: null }] : []),
+        ...(checkPayload.format === 'OFFLINE' ? [{ interviewId: existingInterview.id, startsAt: existingInterview.startTime,
+          endsAt: `${existingDate}T10:00:00+07:00`, resourceType: 'ROOM', participantId: null, room: existingInterview.locationOrLink }] : []),
+      ];
+      const post = vi.spyOn(axiosClient, 'post').mockResolvedValue({ data: resources });
       const result = await interviewService.checkInterviewConflict(checkPayload);
+      expect(post).toHaveBeenCalledWith('/interviews/conflicts', expect.objectContaining({ applicationId: 'app-1' }));
       expect(result.hasConflict).toBe(true);
       expect(result.conflictType).toBe('BOTH');
       expect(result.conflicts.length).toBe(2);
@@ -257,6 +295,7 @@ describe('TKNHTTDNB1-439 / S6-04: Hiển thị chi tiết xung đột lịch ph�
         interviewerIds: ['usr-002'], // Trùng Thu Thảo
       };
 
+      vi.spyOn(axiosClient, 'post').mockRejectedValue(httpError(409, 'INTERVIEW_CONFLICT'));
       await expect(
         interviewService.createInterviewSchedule(conflictingPayload),
       ).rejects.toThrow(InterviewerConflictError);
@@ -266,12 +305,12 @@ describe('TKNHTTDNB1-439 / S6-04: Hiển thị chi tiết xung đột lịch ph�
       } catch (err: unknown) {
         expect(err).toBeInstanceOf(InterviewerConflictError);
         const conflictErr = err as InterviewerConflictError;
-        expect(conflictErr.conflictResult?.hasConflict).toBe(true);
-        expect(conflictErr.conflictResult?.conflictType).toBe('INTERVIEWER_CONFLICT');
+        expect(conflictErr.statusCode).toBe(409);
+        expect(conflictErr.conflictResult).toBeUndefined(); // Backend does not disclose other candidates.
       }
     });
 
-    it('ném InterviewApiError khi isOverride = true nhưng thiếu lý do ghi đè hoặc lý do dưới 5 ký tự', async () => {
+    it('ném InterviewApiError khi isOverride = true nhưng lý do ghi đè chỉ chứa khoảng trắng', async () => {
       const payloadMissingReason: CreateInterviewSchedulePayload = {
         applicationId: 'app-new-002',
         candidateId: 'can-new-002',
@@ -285,7 +324,7 @@ describe('TKNHTTDNB1-439 / S6-04: Hiển thị chi tiết xung đột lịch ph�
         locationOrLink: 'https://meet.google.com/room2',
         interviewerIds: ['usr-002'],
         isOverride: true,
-        overrideReason: 'ok', // Dưới 5 ký tự
+        overrideReason: '   ', // Backend requires nonblank, no five-character minimum
       };
 
       await expect(
@@ -310,19 +349,17 @@ describe('TKNHTTDNB1-439 / S6-04: Hiển thị chi tiết xung đột lịch ph�
         overrideReason: 'Đã trao đổi thống nhất hoán đổi ca phỏng vấn với hội đồng',
       };
 
+      const post = vi.spyOn(axiosClient, 'post').mockResolvedValue({ data: interview() });
       const result = await interviewService.createInterviewSchedule(validOverridePayload);
 
       expect(result).toBeDefined();
-      expect(result.isOverride).toBe(true);
-      expect(result.overrideReason).toBe(
-        'Đã trao đổi thống nhất hoán đổi ca phỏng vấn với hội đồng',
-      );
+      expect(result.status).toBe('SCHEDULED');
+      expect(post).toHaveBeenCalledWith('/applications/app-new-003/interviews', expect.objectContaining({ overrideConflicts: true, overrideReason: validOverridePayload.overrideReason }));
 
       // Kiểm tra đã được lưu vào Storage
       const stored = interviewService.getStoredInterviews();
       const savedItem = stored.find((item) => item.candidateName === 'Vũ Quốc Bảo');
-      expect(savedItem).toBeDefined();
-      expect(savedItem?.isOverride).toBe(true);
+      expect(savedItem).toBeUndefined(); // No client-side audit masquerading as server history.
     });
 
     it('xử lý phản hồi lỗi 409 từ backend và ném InterviewerConflictError', async () => {
@@ -331,7 +368,7 @@ describe('TKNHTTDNB1-439 / S6-04: Hiển thị chi tiết xung đột lịch ph�
         status: 409,
         statusText: 'Conflict',
         data: {
-          code: 'INTERVIEWER_CONFLICT',
+          code: 'INTERVIEW_CONFLICT',
           message: 'Người phỏng vấn đã bận lịch phỏng vấn khác trên máy chủ.',
         },
         headers: {},

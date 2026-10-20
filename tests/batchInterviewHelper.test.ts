@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   calculateCandidateTimeSlots,
   calculateTotalBatchDurationMinutes,
@@ -18,6 +18,8 @@ import type {
 } from '../src/types/interview';
 
 describe('Task Jira TKNHTTDNB1-433: batchInterviewHelper Unit Tests (User Story S6-01)', () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-19T00:00:00Z')); });
+  afterEach(() => vi.useRealTimers());
   const mockCandidates: BatchCandidateScheduleItem[] = [
     {
       candidateId: 'cand-01',

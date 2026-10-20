@@ -358,7 +358,11 @@ class InterviewService {
       ...fields, applicationId: payload.applicationId, interviewId: payload.id ?? null,
     });
     if (!Array.isArray(data)) throw new InterviewApiError('Response kiểm tra trùng lịch không hợp lệ.');
-    return { hasConflict: data.length > 0, conflicts: data.map(item => ({
+    const hasRoom = data.some(item => item.resourceType === 'ROOM');
+    const hasParticipant = data.some(item => item.resourceType !== 'ROOM');
+    return { hasConflict: data.length > 0,
+      conflictType: hasRoom && hasParticipant ? 'BOTH' : hasRoom ? 'ROOM_CONFLICT' : hasParticipant ? 'INTERVIEWER_CONFLICT' : undefined,
+      conflicts: data.map(item => ({
       type: item.resourceType === 'ROOM' ? 'ROOM' : 'INTERVIEWER',
       entityId: item.participantId ?? undefined, entityName: item.room || item.participantId || '',
       reason: 'Tài nguyên đã có lịch trong khung giờ này.',
@@ -371,10 +375,14 @@ class InterviewService {
 
 
   async createInterviewSchedule(payload: CreateInterviewSchedulePayload): Promise<InterviewSchedulePayload> {
+    if (!payload.applicationId?.trim()) throw new InterviewApiError('Thiếu mã hồ sơ ứng tuyển (applicationId).', 400);
+    if (!(payload.roundName || payload.interviewRound)?.trim()) throw new InterviewApiError('Thiếu vòng phỏng vấn.', 400);
+    if (!payload.interviewerIds?.length) throw new InterviewApiError('Cần chọn người phỏng vấn.', 400);
+    if (!payload.locationOrLink?.trim()) throw new InterviewApiError('Cần địa điểm hoặc liên kết họp.', 400);
+    if (payload.isOverride && !payload.overrideReason?.trim()) throw new InterviewApiError('Lý do ghi đè không được để trống.', 400);
     const time = payload.startTime || payload.scheduledDateTimeISO || '';
     const validation = validateIsoStartTime(time);
     if (!validation.isValid) throw new InterviewPastTimeError(validation.error);
-    if (!payload.applicationId) throw new InterviewApiError('Thiếu mã hồ sơ ứng tuyển.', 400);
     try {
       const saved = await interviewApi.create({ ...payload, startTime: time });
       return { ...saved, candidateId: payload.candidateId || '', candidateName: payload.candidateName || '',
@@ -382,6 +390,10 @@ class InterviewService {
     } catch (cause) {
       if (axios.isAxiosError(cause) && cause.response?.status === 409 && cause.response.data?.code === 'INTERVIEW_CONFLICT') {
         throw new InterviewerConflictError(cause.response.data.message);
+      }
+      if (axios.isAxiosError(cause)) {
+        const data = cause.response?.data;
+        throw new InterviewApiError(data?.message || cause.message, cause.response?.status, data?.code);
       }
       throw cause;
     }

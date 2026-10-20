@@ -153,7 +153,7 @@ export const interviewEvaluationService = {
     interviewId: string,
     payload: { evaluationId?: string; reason?: string; expectedVersion?: number } = {},
   ): Promise<{ success: boolean; reopenedAt: string }> {
-    if (!payload.evaluationId || payload.expectedVersion === undefined || !payload.reason?.trim()) {
+    if (!interviewId.trim() || !payload.evaluationId || payload.expectedVersion === undefined || !payload.reason?.trim()) {
       throw new Error('Cần interviewId, formId, expectedVersion và lý do để mở lại phiếu.');
     }
     try {

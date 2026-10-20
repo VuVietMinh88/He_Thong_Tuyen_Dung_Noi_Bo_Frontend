@@ -1,10 +1,10 @@
+import { interview, page, evaluation, answers, httpError } from './fixtures/interviewContract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import axios from 'axios';
 import axiosClient from '../src/utils/axiosClient';
 import { tokenService } from '../src/services/token.service';
 import { interviewerCalendarService } from '../src/services/interviewerCalendarService';
 import { LOCAL_STORAGE_INTERVIEWS_KEY } from '../src/services/interviewService';
-import { InterviewerAccessForbiddenError } from '../src/types/interview';
+
 import type { InterviewSchedulePayload } from '../src/types/interview';
 
 describe('interviewerCalendarService (S7-01 / TKNHTTDNB1-476)', () => {
@@ -44,6 +44,7 @@ describe('interviewerCalendarService (S7-01 / TKNHTTDNB1-476)', () => {
   };
 
   beforeEach(() => {
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-10-20T00:00:00Z').getTime());
     storage.clear();
     vi.stubGlobal('localStorage', {
       getItem: (key: string) => storage.get(key) ?? null,
@@ -60,201 +61,70 @@ describe('interviewerCalendarService (S7-01 / TKNHTTDNB1-476)', () => {
   });
 
   describe('getInterviewerSchedule', () => {
-    it('calls /my-schedule endpoint and enriches with evaluation status', async () => {
-      const getSpy = vi.spyOn(axiosClient, 'get').mockResolvedValueOnce({
-        data: [sampleInterview],
-      });
-
-      const result = await interviewerCalendarService.getInterviewerSchedule({
-        userId: 'user-interviewer-01',
-      });
-
-      expect(getSpy).toHaveBeenCalledWith(
-        '/recruitment/interviews/my-schedule',
-        expect.objectContaining({
-          params: expect.objectContaining({
-            userId: 'user-interviewer-01',
-          }),
-        }),
-      );
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('itv-test-101');
-      expect(result[0].candidateName).toBe('Nguyễn Văn Ứng Viên');
+    it('calls authenticated me endpoint and enriches with server evaluation status', async () => {
+      const get = vi.spyOn(axiosClient, 'get').mockResolvedValueOnce({ data: page([interview({ id: 'itv-test-101' })]) })
+        .mockResolvedValueOnce({ data: evaluation() });
+      const result = await interviewerCalendarService.getInterviewerSchedule({ userId: 'user-interviewer-01' });
+      expect(get).toHaveBeenNthCalledWith(1, '/interviews/me', { params: { page: 0, size: 100 } });
+      expect(get).toHaveBeenNthCalledWith(2, '/interviews/itv-test-101/evaluations/me');
+      expect(result).toHaveLength(1); expect(result[0].id).toBe('itv-test-101');
+      expect(result[0].candidateName).toBe('');
       expect(result[0].isEvaluationSubmitted).toBe(false);
     });
 
-    it('falls back to local storage and filters by user ID if API fails', async () => {
+    it('rejects offline reads instead of trusting cached authorization', async () => {
       vi.spyOn(axiosClient, 'get').mockRejectedValue(new Error('Network error'));
-
-      const storedList: InterviewSchedulePayload[] = [
-        sampleInterview,
-        {
-          ...sampleInterview,
-          id: 'itv-other-user',
-          interviewerIds: ['other-user-99'],
-          interviewers: [{ id: 'other-user-99', name: 'Người khác', role: 'INTERVIEWER', email: 'other99@smartrecruitment.vn' }],
-        },
-      ];
-      storage.set(LOCAL_STORAGE_INTERVIEWS_KEY, JSON.stringify(storedList));
-
-      const result = await interviewerCalendarService.getInterviewerSchedule({
-        userId: 'user-interviewer-01',
-      });
-
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('itv-test-101');
+      storage.set(LOCAL_STORAGE_INTERVIEWS_KEY, JSON.stringify([sampleInterview]));
+      await expect(interviewerCalendarService.getInterviewerSchedule({ userId: 'user-interviewer-01' })).rejects.toThrow('Network error');
     });
 
     it('filters schedule by status and search query keyword', async () => {
-      vi.spyOn(axiosClient, 'get').mockResolvedValueOnce({
-        data: [
-          sampleInterview,
-          {
-            ...sampleInterview,
-            id: 'itv-test-102',
-            candidateName: 'Phạm Thị Thử Việc',
-            status: 'COMPLETED',
-          },
-        ],
-      });
-
-      const filteredByStatus = await interviewerCalendarService.getInterviewerSchedule({
-        userId: 'user-interviewer-01',
-        status: 'COMPLETED',
-      });
-      expect(filteredByStatus).toHaveLength(1);
-      expect(filteredByStatus[0].id).toBe('itv-test-102');
-
-      vi.spyOn(axiosClient, 'get').mockResolvedValueOnce({
-        data: [
-          sampleInterview,
-          {
-            ...sampleInterview,
-            id: 'itv-test-102',
-            candidateName: 'Phạm Thị Thử Việc',
-            status: 'COMPLETED',
-          },
-        ],
-      });
-
-      const filteredBySearch = await interviewerCalendarService.getInterviewerSchedule({
-        userId: 'user-interviewer-01',
-        search: 'Phạm Thị',
-      });
-      expect(filteredBySearch).toHaveLength(1);
-      expect(filteredBySearch[0].candidateName).toBe('Phạm Thị Thử Việc');
+      const items = [interview({ id: 'itv-test-101' }), interview({ id: 'itv-test-102', status: 'CANCELLED', roundName: 'Portfolio' })];
+      const get = vi.spyOn(axiosClient, 'get').mockResolvedValueOnce({ data: page(items) }).mockResolvedValueOnce({ data: evaluation({ interviewId: 'itv-test-102' }) });
+      const filtered = await interviewerCalendarService.getInterviewerSchedule({ status: 'CANCELLED' });
+      expect(filtered.map(item => item.id)).toEqual(['itv-test-102']);
+      get.mockResolvedValueOnce({ data: page(items) }).mockResolvedValueOnce({ data: evaluation({ interviewId: 'itv-test-102' }) });
+      const searched = await interviewerCalendarService.getInterviewerSchedule({ search: 'Portfolio' });
+      expect(searched.map(item => item.id)).toEqual(['itv-test-102']);
     });
   });
 
   describe('getAssignedCandidateProfile & Access Control (AC 1 & AC 2)', () => {
-    it('returns candidate profile and CV when interviewer is authorized via API', async () => {
-      const mockProfile = {
-        candidateId: 'can-test-101',
-        applicationId: 'app-test-101',
-        interviewId: 'itv-test-101',
-        fullName: 'Nguyễn Văn Ứng Viên',
-        email: 'candidate101@gmail.com',
-        phone: '0987 654 321',
-        appliedJobTitle: 'Senior Frontend Engineer',
-        departmentName: 'Trung tâm Phát triển Phần mềm',
-        experienceYears: 5,
-        skills: ['React', 'TypeScript', 'Tailwind CSS'],
-        cvUrl: 'https://smartrecruitment.vn/cvs/candidate101.pdf',
-        cvFileName: 'CV_Nguyen_Van_Ung_Vien.pdf',
-        cvFileType: 'pdf',
-      };
-
-      vi.spyOn(axiosClient, 'get').mockResolvedValueOnce({ data: mockProfile });
-
-      const profile = await interviewerCalendarService.getAssignedCandidateProfile(
-        'app-test-101',
-        'itv-test-101',
-      );
-
-      expect(profile).toEqual(mockProfile);
-      expect(profile.cvUrl).toBe('https://smartrecruitment.vn/cvs/candidate101.pdf');
+    it('keeps assigned profile and CV unavailable without a verified contract', async () => {
+      const get = vi.spyOn(axiosClient, 'get');
+      await expect(interviewerCalendarService.getAssignedCandidateProfile('app-test-101', 'itv-test-101')).rejects.toMatchObject({ statusCode: 501 });
+      expect(get).not.toHaveBeenCalled();
     });
 
-    it('throws InterviewerAccessForbiddenError (403) when server returns 403 Forbidden', async () => {
-      const axiosError = new axios.AxiosError('Forbidden');
-      axiosError.response = {
-        status: 403,
-        statusText: 'Forbidden',
-        data: {
-          code: 'FORBIDDEN',
-          message: 'Bạn không có quyền truy cập hồ sơ hoặc tệp CV của ứng viên này do không thuộc hội đồng phỏng vấn được phân công.',
-        },
-        headers: {},
-        config: {} as never,
-      };
-      vi.spyOn(axiosClient, 'get').mockRejectedValueOnce(axiosError);
-
-      await expect(
-        interviewerCalendarService.getAssignedCandidateProfile('app-test-101', 'itv-test-101'),
-      ).rejects.toThrow(InterviewerAccessForbiddenError);
+    it('does not invent a profile endpoint even when a mock could return 403', async () => {
+      const get = vi.spyOn(axiosClient, 'get').mockRejectedValue(httpError(403, 'FORBIDDEN'));
+      await expect(interviewerCalendarService.getAssignedCandidateProfile('app-test-101', 'itv-test-101')).rejects.toMatchObject({ statusCode: 501 });
+      expect(get).not.toHaveBeenCalled();
     });
 
-    it('throws InterviewerAccessForbiddenError when current user is NOT in interview panel (client validation fallback)', async () => {
-      vi.spyOn(axiosClient, 'get').mockRejectedValueOnce(new Error('Network offline'));
-
-      // Phỏng vấn gán cho user khác (không có user-interviewer-01)
-      const restrictedInterview: InterviewSchedulePayload = {
-        ...sampleInterview,
-        id: 'itv-restricted-999',
-        interviewerIds: ['user-other-person'],
-        interviewers: [{ id: 'user-other-person', name: 'Người khác', role: 'INTERVIEWER', email: 'other@smartrecruitment.vn' }],
-      };
-      storage.set(
-        LOCAL_STORAGE_INTERVIEWS_KEY,
-        JSON.stringify([restrictedInterview]),
-      );
-
-      await expect(
-        interviewerCalendarService.getAssignedCandidateProfile('app-test-101', 'itv-restricted-999'),
-      ).rejects.toThrow(InterviewerAccessForbiddenError);
+    it('never exposes cached CV or profile data from another panel', async () => {
+      storage.set(LOCAL_STORAGE_INTERVIEWS_KEY, JSON.stringify([{ ...sampleInterview, interviewerIds: ['other-user'] }]));
+      const get = vi.spyOn(axiosClient, 'get');
+      await expect(interviewerCalendarService.getAssignedCandidateProfile('app-test-101', 'itv-restricted-999')).rejects.toMatchObject({ statusCode: 501 });
+      expect(get).not.toHaveBeenCalled();
     });
   });
 
   describe('submitInterviewerEvaluation & dynamic update (AC 3)', () => {
-    it('submits evaluation and updates local status without page reload', async () => {
-      const postSpy = vi.spyOn(axiosClient, 'post').mockResolvedValueOnce({ data: { success: true } });
-
-      storage.set(
-        LOCAL_STORAGE_INTERVIEWS_KEY,
-        JSON.stringify([sampleInterview]),
-      );
-
-      const evaluationData = {
-        calculatedTotalScore: 4.5,
-        overallConclusion: 'PASSED',
-        notes: 'Ứng viên có kỹ năng chuyên môn xuất sắc.',
-      };
-
-      await interviewerCalendarService.submitInterviewerEvaluation(
-        'itv-test-101',
-        evaluationData,
-        'user-interviewer-01',
-      );
-
-      expect(postSpy).toHaveBeenCalledWith(
-        '/recruitment/interviews/itv-test-101/evaluations',
-        expect.objectContaining({
-          interviewId: 'itv-test-101',
-          interviewerId: 'user-interviewer-01',
-          score: 4.5,
-          conclusion: 'PASSED',
-        }),
-      );
-
-      // Kiểm tra trạng thái đã được cập nhật
-      const statusResult = await interviewerCalendarService.checkEvaluationSubmittedStatus(
-        'itv-test-101',
-        'user-interviewer-01',
-      );
-
-      expect(statusResult.hasSubmitted).toBe(true);
-      expect(statusResult.score).toBe(4.5);
-      expect(statusResult.conclusion).toBe('PASSED');
+    it('submits versioned answers and uses confirmed server status without local flags', async () => {
+      const submitted = evaluation({ status: 'SUBMITTED', version: 4, conclusion: 'HIRE', totalScore: 4, submittedAt: '2026-10-20T01:00:00Z' });
+      const get = vi.spyOn(axiosClient, 'get').mockResolvedValueOnce({ data: evaluation() }).mockResolvedValueOnce({ data: submitted });
+      const post = vi.spyOn(axiosClient, 'post').mockResolvedValue({ data: submitted });
+      await interviewerCalendarService.submitInterviewerEvaluation('itv-test-101', {
+        expectedVersion: 3, criteriaEvaluations: answers, conclusion: 'RECOMMENDED',
+      }, 'user-interviewer-01');
+      expect(post).toHaveBeenCalledWith('/interviews/itv-test-101/evaluations/me/submit', {
+        expectedVersion: 3, items: [{ criterionId: 'criterion-1', score: 4, comment: 'Evidence' }], conclusion: 'HIRE',
+      });
+      const status = await interviewerCalendarService.checkEvaluationSubmittedStatus('itv-test-101', 'user-interviewer-01');
+      expect(status.hasSubmitted).toBe(true); expect(status.score).toBe(4); expect(status.conclusion).toBe('RECOMMENDED');
+      expect(get).toHaveBeenCalledTimes(2);
+      expect(storage.size).toBe(0);
     });
   });
 
