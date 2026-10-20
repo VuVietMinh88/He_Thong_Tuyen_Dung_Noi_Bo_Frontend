@@ -1,3 +1,5 @@
+import { featureStatus } from '../../services/backendCapabilities';
+import { CapabilityNotice } from '../../components/Interview/CapabilityNotice';
 import React, { useState, useEffect, useMemo, useCallback, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -123,7 +125,7 @@ export const InterviewerCalendarPage: React.FC = () => {
       });
 
       const enrichedList = await Promise.all(assignedList.map(async item => {
-        if (!item.id) return { ...item, isEvaluationSubmitted: undefined };
+        if (!item.id || featureStatus('evaluations') !== 'AVAILABLE') return { ...item, isEvaluationSubmitted: undefined };
         const state = await interviewerCalendarService.checkEvaluationSubmittedStatus(item.id);
         return { ...item, isEvaluationSubmitted: state.hasSubmitted,
           evaluationScore: state.score, evaluationSubmittedAt: state.submittedAt };
@@ -235,7 +237,7 @@ export const InterviewerCalendarPage: React.FC = () => {
     const upcoming = interviews.filter((i) => i.interviewDate >= todayVN && i.status === 'SCHEDULED').length;
 
     // Các buổi đã diễn ra nhưng CHƯA NỘP PHIẾU ĐÁNH GIÁ (AC 2)
-    const needEvaluation = interviews.filter((i) => checkIsPastInterview(i) && !i.isEvaluationSubmitted).length;
+    const needEvaluation = interviews.filter((i) => checkIsPastInterview(i) && i.isEvaluationSubmitted === false).length;
     const completed = interviews.filter((i) => i.isEvaluationSubmitted || i.status === 'COMPLETED').length;
 
     return { total, today, upcoming, needEvaluation, completed };
@@ -249,10 +251,10 @@ export const InterviewerCalendarPage: React.FC = () => {
       const isPast = checkIsPastInterview(item);
 
       // 1. Lọc theo trạng thái
-      if (statusFilter === 'NEED_EVALUATION' && (!isPast || item.isEvaluationSubmitted)) return false;
+      if (statusFilter === 'NEED_EVALUATION' && (!isPast || item.isEvaluationSubmitted !== false)) return false;
       if (statusFilter === 'TODAY' && item.interviewDate !== todayVN) return false;
       if (statusFilter === 'UPCOMING' && (item.interviewDate < todayVN || item.status !== 'SCHEDULED')) return false;
-      if (statusFilter === 'COMPLETED' && !item.isEvaluationSubmitted && item.status !== 'COMPLETED') return false;
+      if (statusFilter === 'COMPLETED' && item.isEvaluationSubmitted !== true && item.status !== 'COMPLETED') return false;
 
       // 2. Lọc theo hình thức
       if (formatFilter !== 'ALL' && item.format !== formatFilter) return false;
@@ -314,6 +316,9 @@ export const InterviewerCalendarPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-6 space-y-6">
+      <CapabilityNotice feature="schedules" />
+      <CapabilityNotice feature="evaluations" />
+      <CapabilityNotice feature="assignedProfile" />
       {/* 1. Header Trang & Phân quyền bảo mật cá nhân (AC 3) */}
       <div className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-7 shadow-xs">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
@@ -667,7 +672,7 @@ export const InterviewerCalendarPage: React.FC = () => {
           {filteredInterviews.map((item) => {
             const isToday = item.interviewDate === todayVN;
             const isPast = checkIsPastInterview(item);
-            const isNeedEvaluation = isPast && !item.isEvaluationSubmitted;
+            const isNeedEvaluation = isPast && item.isEvaluationSubmitted === false;
             const isCompletedEvaluation = item.isEvaluationSubmitted;
 
             return (
@@ -847,6 +852,7 @@ export const InterviewerCalendarPage: React.FC = () => {
                       {/* NÚT ĐÁNH GIÁ NĂNG LỰC / NỘP PHIẾU ĐÁNH GIÁ (AC 2) */}
                       <button
                         type="button"
+                        disabled={featureStatus('evaluations') !== 'AVAILABLE'}
                         onClick={() => setEvaluatingInterview(item)}
                         className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl transition cursor-pointer shadow-xs ${
                           isNeedEvaluation

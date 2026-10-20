@@ -49,7 +49,7 @@ export const InterviewConflictModal: React.FC<InterviewConflictModalProps> = ({
   const currentConflict: ConflictItemDetail | undefined = conflicts[selectedConflictIndex] || conflicts[0];
   const conflictingInterview = currentConflict?.conflictingInterview;
 
-  const isReasonValid = overrideReason.trim().length >= 5;
+  const isReasonValid = overrideReason.trim().length > 0 && overrideReason.length <= 2000;
   const canSubmitOverride = isOverrideConfirmed && isReasonValid && !isSubmitting;
 
   const handleOverrideSubmit = (e: React.FormEvent) => {
@@ -411,14 +411,15 @@ export const InterviewConflictModal: React.FC<InterviewConflictModalProps> = ({
                   </label>
                   <span
                     className={`text-[11px] font-mono ${
-                      overrideReason.trim().length >= 5 ? 'text-emerald-600 font-semibold' : 'text-slate-400'
+                      overrideReason.trim().length > 0 && overrideReason.length <= 2000 ? 'text-emerald-600 font-semibold' : 'text-slate-400'
                     }`}
                   >
-                    {overrideReason.trim().length}/5 ký tự tối thiểu
+                    {overrideReason.trim().length}/2000 ký tự tối đa
                   </span>
                 </div>
                 <textarea
                   rows={2}
+                  maxLength={2000}
                   value={overrideReason}
                   onChange={(e) => setOverrideReason(e.target.value)}
                   placeholder="Ví dụ: Đã thống nhất với anh Hải hoán đổi ca phỏng vấn; Đã xin phép sử dụng chung phòng họp Lotus..."
@@ -426,7 +427,7 @@ export const InterviewConflictModal: React.FC<InterviewConflictModalProps> = ({
                 />
                 {!isReasonValid && overrideReason.length > 0 && (
                   <p className="text-[11px] text-rose-600">
-                    Lý do ghi đè phải có ít nhất 5 ký tự để lưu vào nhật ký kiểm toán hệ thống.
+                    Lý do ghi đè không được để trống và không được vượt quá 2000 ký tự.
                   </p>
                 )}
               </div>
@@ -464,7 +465,7 @@ export const InterviewConflictModal: React.FC<InterviewConflictModalProps> = ({
               Quay lại chỉnh sửa thời gian
             </button>
 
-            {/* Nút Ghi đè (Chỉ kích hoạt khi tích checkbox và nhập lý do >= 5 ký tự) */}
+            {/* Nút Ghi đè (Chỉ kích hoạt khi tích checkbox và nhập lý do không rỗng, tối đa 2000 ký tự) */}
             <button
               type="button"
               onClick={handleOverrideSubmit}

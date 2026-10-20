@@ -95,14 +95,14 @@ describe('TKNHTTDNB1-465 / Story TKNHTTDNB1-66: Tích hợp mở lại phiếu v
       expect(REOPEN_EVALUATION_WINDOW_MS).toBe(24 * 60 * 60 * 1000);
     });
 
-    it('checkIsRecruiterRole: Chỉ cho phép role RECRUITER (hoặc ADMIN / HR_MANAGER) mở lại phiếu', () => {
+    it('checkIsRecruiterRole: Chỉ cho phép role RECRUITER mở lại phiếu', () => {
       // Role RECRUITER được phép
       expect(checkIsRecruiterRole(['RECRUITER'])).toBe(true);
       expect(checkIsRecruiterRole(['recruiter'])).toBe(true);
 
       // Role ADMIN và HR_MANAGER được phép quản trị
-      expect(checkIsRecruiterRole(['ADMIN'])).toBe(true);
-      expect(checkIsRecruiterRole(['HR_MANAGER'])).toBe(true);
+      expect(checkIsRecruiterRole(['ADMIN'])).toBe(false);
+      expect(checkIsRecruiterRole(['HR_MANAGER'])).toBe(false);
 
       // Role INTERVIEWER thuần túy không có quyền mở lại phiếu
       expect(checkIsRecruiterRole(['INTERVIEWER'])).toBe(false);
@@ -111,7 +111,7 @@ describe('TKNHTTDNB1-465 / Story TKNHTTDNB1-66: Tích hợp mở lại phiếu v
       expect(checkIsRecruiterRole(null)).toBe(false);
 
       // Cho phép override tường minh qua prop isRecruiterExplicit
-      expect(checkIsRecruiterRole(['INTERVIEWER'], true)).toBe(true);
+      expect(checkIsRecruiterRole(['INTERVIEWER'], true)).toBe(false);
       expect(checkIsRecruiterRole(['RECRUITER'], false)).toBe(false);
     });
 

@@ -1,3 +1,4 @@
+import { requireFeature } from './backendCapabilities';
 import client from '../utils/axiosClient';
 import type { CreateInterviewSchedulePayload, InterviewSchedulePayload, PersonalScheduleParams } from '../types/interview';
 
@@ -35,6 +36,7 @@ export function interviewModel(value: InterviewView): InterviewSchedulePayload {
     createdAt: value.createdAt };
 }
 async function pages(path: string): Promise<InterviewSchedulePayload[]> {
+    requireFeature('schedules');
   const items: InterviewSchedulePayload[] = [];
   let page = 0;
   while (true) {
@@ -48,14 +50,17 @@ async function pages(path: string): Promise<InterviewSchedulePayload[]> {
 }
 export const interviewApi = {
   async create(payload: CreateInterviewSchedulePayload) {
+    requireFeature('scheduleWrites');
     const value = (await client.post<InterviewView>(`/applications/${encodeURIComponent(payload.applicationId)}/interviews`, scheduleRequest(payload))).data;
     return interviewModel(value);
   },
   async update(id: string, payload: CreateInterviewSchedulePayload) {
+    requireFeature('scheduleWrites');
     if (payload.expectedVersion === undefined) throw new Error('Thiếu version lịch. Tải lại trước khi sửa.');
     return interviewModel((await client.put<InterviewView>(`/interviews/${encodeURIComponent(id)}`, scheduleRequest(payload))).data);
   },
   async cancel(id: string, expectedVersion: number, reason: string) {
+    requireFeature('scheduleWrites');
     if (!Number.isSafeInteger(expectedVersion) || !reason.trim()) throw new Error('Cần version và lý do hủy lịch.');
     return interviewModel((await client.post<InterviewView>(`/interviews/${encodeURIComponent(id)}/cancel`, { expectedVersion, reason: reason.trim() })).data);
   },

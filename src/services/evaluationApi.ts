@@ -1,3 +1,4 @@
+import { requireFeature } from './backendCapabilities';
 import axios from 'axios';
 import client from '../utils/axiosClient';
 import type { CriterionEvaluationRecord, InterviewConclusion } from '../types/interviewEvaluation';
@@ -43,12 +44,15 @@ function checked(value: EvaluationView, interviewId: string): EvaluationView {
 }
 export const evaluationApi = {
   async get(interviewId: string): Promise<EvaluationView> {
+    requireFeature('evaluations');
     return checked((await client.get<EvaluationView>(ownPath(interviewId))).data, interviewId);
   },
   async create(interviewId: string): Promise<EvaluationView> {
+    requireFeature('evaluations');
     return checked((await client.post<EvaluationView>(ownPath(interviewId))).data, interviewId);
   },
   async save(form: EvaluationView, records: Record<string, CriterionEvaluationRecord>, conclusion: InterviewConclusion | null, submit: boolean): Promise<EvaluationView> {
+    requireFeature('evaluations');
     const body = { expectedVersion: form.version,
       items: form.items.map(item => ({ criterionId: item.criterionId,
         score: records[item.criterionId]?.score ?? null, comment: records[item.criterionId]?.comment ?? '' })),
@@ -63,17 +67,20 @@ export const evaluationApi = {
     return saved;
   },
   async peers(interviewId: string): Promise<EvaluationView[]> {
+    requireFeature('evaluations');
     const response = await client.get<EvaluationView[]>(`/interviews/${encodeURIComponent(interviewId)}/evaluations`);
     if (!Array.isArray(response.data)) throw new Error('Response danh sách đánh giá không hợp lệ.');
     return response.data.map(form => checked(form, interviewId));
   },
   async status(interviewId: string, formId: string): Promise<EvaluationStatus> {
+    requireFeature('reopening');
     const data = (await client.get<EvaluationStatus>(`/interviews/${encodeURIComponent(interviewId)}/evaluations/${encodeURIComponent(formId)}/status`)).data;
     if (data.id !== formId || data.interviewId !== interviewId || !Number.isSafeInteger(data.version) || data.version < 0
       || !['DRAFT', 'SUBMITTED'].includes(data.status)) throw new Error('Metadata phiếu không hợp lệ.');
     return data;
   },
   async reopen(interviewId: string, formId: string, expectedVersion: number, reason: string): Promise<EvaluationStatus> {
+    requireFeature('reopening');
     if (!reason.trim()) throw new Error('Cần nhập lý do mở lại phiếu.');
     const response = await client.post<EvaluationStatus>(`/interviews/${encodeURIComponent(interviewId)}/evaluations/${encodeURIComponent(formId)}/reopen`,
       { expectedVersion, reason: reason.trim() });

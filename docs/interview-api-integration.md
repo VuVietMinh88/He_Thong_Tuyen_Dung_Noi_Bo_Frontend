@@ -4,7 +4,8 @@ Frontend base: `4ab577e8f5490ddd52b3f7331f0c75d5fbd3712e` (`develop`).
 Backend contract: PR #191, `faba268fc3e174e2d11463db325f2ba021292342`.
 At verification this Backend PR was open, not merged or deployed; its CI succeeded.
 Backend `develop` was `c6c374d686d4f02e252832d8ed81d4583926c840` and does not provide these features.
-This Frontend branch must not be deployed against that older Backend.
+Release policy updated: Frontend may ship independently with per-feature capability gates.
+See partial-frontend-release.md for current VPS evidence and the approval plan; GitHub PR state is not deployment state.
 
 ## Requests (relative to VITE_API_BASE_URL ending in /api/v1)
 
@@ -30,7 +31,7 @@ that discovers these identifiers by fetching confidential forms.
 ## Contract gaps — not implemented by guessing
 
 - PR #191 has no scoped participant picker matching the deployed `/applications/{id}/interview-participants`.
-  The existing picker now reports that dependency instead of returning mock identities.
+  The scoped participant-picker adapter is now implemented; activation requires verification against the actual target Backend. The VPS JAR contains this mapping even though #201 is unmerged.
 - Its InterviewView contains logistics and participant UUIDs, not candidate names, email, participant names or CVs.
   These fields remain absent unless provided by an independently authorized API; no fabricated profiles are shown.
 - The legacy assigned-profile endpoint has no verified counterpart here. It reports unavailable, never a sample CV.

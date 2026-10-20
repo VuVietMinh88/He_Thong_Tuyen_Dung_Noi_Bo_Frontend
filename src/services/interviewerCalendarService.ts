@@ -1,3 +1,4 @@
+import { featureStatus, BackendCapabilityError } from './backendCapabilities';
 import axios from 'axios';
 import { evaluationApi, fromApiConclusion } from './evaluationApi';
 import type { CriterionEvaluationRecord, InterviewConclusion } from '../types/interviewEvaluation';
@@ -7,9 +8,6 @@ import type {
   PersonalScheduleParams,
   AssignedCandidateProfileResult,
   EvaluationSubmittedStatusResult,
-} from '../types/interview';
-import {
-  InterviewApiError,
 } from '../types/interview';
 import {
   interviewService,
@@ -33,7 +31,7 @@ class InterviewerCalendarService {
     interviewId?: string,
   ): Promise<AssignedCandidateProfileResult> {
     void applicationId; void interviewId;
-    throw new InterviewApiError('Contract #191 chưa có API assigned-profile tương ứng. Không hiển thị hồ sơ hoặc CV mẫu.', 501);
+    throw new BackendCapabilityError(featureStatus('assignedProfile') === 'AVAILABLE' ? 'NOT_VERIFIED' : featureStatus('assignedProfile'));
   }
 
   async checkEvaluationSubmittedStatus(
@@ -92,6 +90,7 @@ class InterviewerCalendarService {
   private async enrichScheduleWithEvaluationStatus(
     scheduleList: InterviewSchedulePayload[], userId?: string,
   ): Promise<InterviewSchedulePayload[]> {
+    if (featureStatus('evaluations') !== 'AVAILABLE') return scheduleList.map(item => ({ ...item, isEvaluationSubmitted: undefined, evaluationScore: undefined }));
     return Promise.all(scheduleList.map(async item => {
       if (!item.id) return { ...item, isEvaluationSubmitted: undefined, evaluationScore: undefined };
       const state = await this.checkEvaluationSubmittedStatus(item.id, userId);

@@ -1,3 +1,4 @@
+import { requireFeature, BackendCapabilityError, featureStatus } from './backendCapabilities';
 import { interviewApi, scheduleRequest, type InterviewConflict } from './interviewApi';
 import axios from 'axios';
 import axiosClient from '../utils/axiosClient';
@@ -203,8 +204,24 @@ class InterviewService {
   /**
    * Lấy danh sách nhân sự nội bộ có thể tham gia phỏng vấn
    */
-  async getInternalInterviewers(_searchQuery?: string): Promise<InterviewerInfo[]> {
-    throw new InterviewApiError('Backend PR #191 chưa có API chọn người phỏng vấn theo phạm vi hồ sơ. Không dùng danh sách mẫu.', 501);
+  async getInternalInterviewers(searchQuery?: string, applicationId?: string): Promise<InterviewerInfo[]> {
+    requireFeature('participantPicker');
+    if (!applicationId?.trim()) throw new InterviewApiError('Cần mã hồ sơ ứng tuyển để chọn người phỏng vấn.', 400);
+    const result: InterviewerInfo[] = [];
+    let page = 0;
+    while (true) {
+      const { data } = await axiosClient.get(`/applications/${encodeURIComponent(applicationId)}/interview-participants`, {
+        params: { q: searchQuery || '', page, size: 50 },
+      });
+      if (!data || !Array.isArray(data.items) || data.page !== page || !Number.isSafeInteger(data.totalElements)
+          || data.totalElements < 0 || !Number.isSafeInteger(data.size) || data.size < 1
+          || data.items.some((v: { id?: unknown; fullName?: unknown }) => typeof v.id !== 'string' || typeof v.fullName !== 'string')) {
+        throw new InterviewApiError('Response danh sách người phỏng vấn không hợp lệ.');
+      }
+      result.push(...data.items.map((v: { id: string; fullName: string }) => ({ id: v.id, name: v.fullName, role: '', email: '' })));
+      if ((page + 1) * data.size >= data.totalElements) return result;
+      if (!data.items.length || ++page > 1000) throw new InterviewApiError('Phân trang người phỏng vấn không nhất quán.');
+    }
   }
 
 
@@ -348,6 +365,7 @@ class InterviewService {
    * Kiểm tra xung đột lịch phỏng vấn theo người phỏng vấn và phòng họp (AC 1 & AC 3 - TKNHTTDNB1-439)
    */
   async checkInterviewConflict(payload: CheckInterviewConflictPayload): Promise<InterviewConflictCheckResult> {
+    requireFeature('scheduleWrites');
     if (!payload.applicationId) throw new InterviewApiError('Thiếu mã hồ sơ ứng tuyển để kiểm tra trùng lịch.', 400);
     const request = scheduleRequest({ applicationId: payload.applicationId, interviewRound: payload.roundName || '',
       startTime: `${payload.interviewDate}T${payload.startTime.length === 5 ? payload.startTime + ':00' : payload.startTime}+07:00`,
@@ -478,7 +496,8 @@ class InterviewService {
    * Đồng bộ tạo sự kiện lịch phỏng vấn vào dòng thời gian (Timeline) của ứng viên
    */
   async batchCreateInterviewSchedules(_payload: BatchCreateInterviewSchedulePayload): Promise<BatchCreateInterviewScheduleResult> {
-    throw new InterviewApiError('Đặt lịch hàng loạt cần Backend nhóm PR #192–#200. Chưa có trong contract #191.', 501);
+    // No verified Frontend adapter exists for a bulk API yet, even if misconfigured as AVAILABLE.
+    throw new BackendCapabilityError(featureStatus('bulkScheduling') === 'AVAILABLE' ? 'NOT_VERIFIED' : featureStatus('bulkScheduling'));
   }
 }
 

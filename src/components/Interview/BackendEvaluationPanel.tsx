@@ -1,9 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { featureStatus } from '../../services/backendCapabilities';
+import { CapabilityNotice } from './CapabilityNotice';
+import { PermissionContext } from '../../context/PermissionContext';
+import { canReopenEvaluation } from '../../utils/interviewEvaluationHelper';
+import { tokenService } from '../../services/token.service';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { InterviewEvaluationForm, type InterviewEvaluationFormProps } from './InterviewEvaluationForm';
 import { evaluationApi, evaluationError, fromApiConclusion, isVersionConflict, type EvaluationView } from '../../services/evaluationApi';
 
 export function BackendEvaluationPanel(props: InterviewEvaluationFormProps & { interviewId: string }) {
+  const permissions = useContext(PermissionContext);
+  const canReopen = !permissions?.isLoading && !permissions?.error && canReopenEvaluation(props.currentUserRoles ?? tokenService.getUserData()?.roles, permissions?.permissions ?? []);
   const [form, setForm] = useState<EvaluationView | null>(null);
   const [loading, setLoading] = useState(true);
   const [missing, setMissing] = useState(false);
@@ -45,6 +52,7 @@ export function BackendEvaluationPanel(props: InterviewEvaluationFormProps & { i
     catch (cause) { setError(evaluationError(cause)); setConflict(isVersionConflict(cause)); }
     finally { pending.current = false; setLoading(false); }
   };
+  if (featureStatus('evaluations') !== 'AVAILABLE') return <CapabilityNotice feature="evaluations" />;
   if (loading) return <p role="status">Đang tải phiếu đánh giá từ máy chủ…</p>;
   if (!props.interviewId) return <p role="alert">Thiếu mã lịch phỏng vấn.</p>;
   if (!form) return <div>
@@ -71,7 +79,8 @@ export function BackendEvaluationPanel(props: InterviewEvaluationFormProps & { i
         if (window.confirm('Tải lại sẽ thay thế bản chỉnh sửa chưa lưu bằng dữ liệu trên máy chủ. Tiếp tục?')) void load();
       }}>Tải lại dữ liệu</button></div>}
     {peerError && <p role="alert">Không tải được đánh giá hội đồng: {peerError}</p>}
-    <InterviewEvaluationForm {...props} key={`${form.id}:${revision}`} isAuthorized
+    <CapabilityNotice feature="reopening" />
+    <InterviewEvaluationForm {...props} isRecruiter={Boolean(canReopen && featureStatus('reopening') === 'AVAILABLE')} key={`${form.id}:${revision}`} isAuthorized
       readOnly={props.readOnly || conflict} isLocked={form.status === 'SUBMITTED'}
       submittedAt={form.firstSubmittedAt} hasSubmittedOwnEvaluation={form.status === 'SUBMITTED'}
       frameworkName={form.framework.name} frameworkCode={form.framework.code} frameworkVersion=""

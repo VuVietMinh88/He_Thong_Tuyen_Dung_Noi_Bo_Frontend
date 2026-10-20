@@ -1,3 +1,5 @@
+import { featureStatus } from '../../services/backendCapabilities';
+import { CapabilityNotice } from '../../components/Interview/CapabilityNotice';
 import React, { useState, useEffect, useMemo, useCallback, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -194,7 +196,7 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
       const isPast =
         interviewerCalendarService.isInterviewPast(i.interviewDate, i.interviewTime) ||
         i.status === 'COMPLETED';
-      return isPast && !i.isEvaluationSubmitted && i.status !== 'CANCELLED';
+      return isPast && i.isEvaluationSubmitted === false && i.status !== 'CANCELLED';
     }).length;
 
     return { total, today, upcoming, completed, pendingEvaluation };
@@ -212,7 +214,7 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
         const isPast =
           interviewerCalendarService.isInterviewPast(item.interviewDate, item.interviewTime) ||
           item.status === 'COMPLETED';
-        if (!isPast || item.isEvaluationSubmitted || item.status === 'CANCELLED') return false;
+        if (!isPast || item.isEvaluationSubmitted !== false || item.status === 'CANCELLED') return false;
       }
 
       // 2. Lọc theo hình thức
@@ -237,6 +239,10 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <CapabilityNotice feature="schedules" />
+      <CapabilityNotice feature="evaluations" />
+      <CapabilityNotice feature="scheduleWrites" />
+      <CapabilityNotice feature="assignedProfile" />
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-xs">
         <div>
@@ -414,7 +420,7 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
             const isPast =
               interviewerCalendarService.isInterviewPast(item.interviewDate, item.interviewTime) ||
               isCompleted;
-            const needsEvaluation = isPast && !item.isEvaluationSubmitted && !isCancelled;
+            const needsEvaluation = isPast && item.isEvaluationSubmitted === false && !isCancelled;
 
             return (
               <div
@@ -541,7 +547,7 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => handleViewCandidateCv(item)}
-                        disabled={loadingCvId === item.id}
+                        disabled
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition cursor-pointer disabled:opacity-50"
                         title="Xem hồ sơ ứng viên và tệp CV theo phân quyền người phỏng vấn"
                       >
@@ -556,6 +562,7 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
                       {/* Nút Đánh giá năng lực */}
                       <button
                         type="button"
+                        disabled={featureStatus('evaluations') !== 'AVAILABLE'}
                         onClick={() => setEvaluatingInterview(item)}
                         className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer shadow-2xs ${
                           needsEvaluation
@@ -594,6 +601,7 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
+                          disabled={featureStatus('scheduleWrites') !== 'AVAILABLE'}
                           onClick={() => handleUpdateStatus(item.id || '', 'CANCELLED')}
                           className="text-[11px] font-semibold text-slate-400 hover:text-rose-600 transition cursor-pointer"
                         >
@@ -601,7 +609,7 @@ export const PersonalInterviewSchedulePage: React.FC = () => {
                         </button>
                         <button
                           type="button"
-                          disabled title="Backend chưa hỗ trợ hoàn thành lịch thủ công"
+                          disabled title="Chức năng hoàn thành lịch thủ công chưa khả dụng trong bản tích hợp này"
                           className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-1 rounded-md transition cursor-pointer"
                         >
                           <CheckCircle2 className="w-3 h-3" />
