@@ -43,7 +43,7 @@ describe('Task Jira TKNHTTDNB1-433: batchInterviewHelper Unit Tests (User Story 
   ];
 
   const defaultSettings: BatchInterviewScheduleSettings = {
-    interviewDate: '2026-10-20',
+    interviewDate: '2099-10-20',
     startFirstSlotTime: '08:30',
     durationMinutes: 45,
     breakMinutes: 15,
