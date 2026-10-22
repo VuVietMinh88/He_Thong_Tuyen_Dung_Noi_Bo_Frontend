@@ -6,6 +6,7 @@ import axios, {
 import type { LoginResponse } from '../types/auth';
 import { tokenService } from '../services/token.service';
 import { captureSessionExpiryDraft } from '../services/sessionDraft.service';
+import { getMockApiResponse } from './mockApiFallback';
 
 type RetryRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
@@ -113,6 +114,25 @@ axiosClient.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as RetryRequestConfig | undefined;
     const status = error.response?.status;
+
+    // NẾU GẶP LỖI MẠNG (BACKEND CHƯA BẬT) -> TỰ ĐỘNG PHẢN HỒI DỮ LIỆU MẪU ĐẦY ĐỦ ĐỂ TEST CHỨC NĂNG
+    if (!error.response && originalRequest?.url) {
+      const mockResult = getMockApiResponse(
+        originalRequest.url,
+        originalRequest.method,
+        originalRequest.params,
+        originalRequest.data,
+      );
+      if (mockResult !== null) {
+        return {
+          data: mockResult,
+          status: 200,
+          statusText: 'OK (Mock Data Fallback)',
+          headers: {},
+          config: originalRequest,
+        };
+      }
+    }
 
     if (status === 403 && originalRequest && !isAuthRequest(originalRequest.url)) {
       redirectToUnauthorized();

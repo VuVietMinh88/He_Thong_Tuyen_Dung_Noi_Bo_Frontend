@@ -4,6 +4,7 @@ export type SidebarMenuItem = {
   icon?: string;
   roles?: string[];
   permissions?: string[];
+  group?: string;
 };
 
 export const normalizeRole = (value?: string | null): string =>
@@ -35,8 +36,24 @@ export const getVisibleMenuItems = (
   currentRoles?: string[] | string | null,
   currentPermissions?: string[],
 ): SidebarMenuItem[] =>
-  items.filter((item) =>
-    (!item.roles || canAccessMenu(item.roles, currentRoles))
-    && (!item.permissions?.length
-      || item.permissions.some((permission) => currentPermissions?.includes(permission))),
-  );
+  items.filter((item) => {
+    // 1. Kiểm tra vai trò (Role)
+    if (item.roles && !canAccessMenu(item.roles, currentRoles)) {
+      return false;
+    }
+
+    // 2. Nếu item không yêu cầu permission cụ thể -> Luôn hiển thị
+    if (!item.permissions?.length) {
+      return true;
+    }
+
+    // 3. Nếu chưa nạp được quyền từ server (rỗng do lỗi mạng / offline) -> Hiển thị theo role để không mất chức năng
+    if (!currentPermissions || currentPermissions.length === 0) {
+      return true;
+    }
+
+    // 4. Nếu có danh sách quyền thực tế từ máy chủ -> Kiểm tra mã quyền chi tiết
+    return item.permissions.some((permission) =>
+      currentPermissions.includes(permission),
+    );
+  });
