@@ -10,17 +10,14 @@ import {
 } from '../../utils/sidebarAccess';
 import {
   LayoutDashboard,
-  Shield,
   FileSpreadsheet,
   Megaphone,
   TrendingUp,
   Users2,
   Share2,
   CalendarDays,
-  CalendarCheck2,
   FileCheck2,
   Rocket,
-  ClipboardList,
   Filter,
   Target,
   Clock4,
@@ -34,50 +31,33 @@ import {
   FolderKanban,
   Timer,
   Mail,
-  MailCheck,
   User,
   KeyRound,
   Bell,
-  ChevronDown,
   LogOut,
-  Search,
+  ShieldAlert,
+  Globe,
 } from 'lucide-react';
 
-// Cấu hình đầy đủ tất cả các chức năng theo nhóm (Labels) khớp ảnh yêu cầu
+// Cấu hình đầy đủ 100% chức năng theo 4 nhóm phân hệ trực quan, không bị rối
 const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ className?: string }> })[] = [
-  // 1. TỔNG QUAN
+  // -------------------------------------------------------------
+  // 1. VẬN HÀNH TUYỂN DỤNG (RECRUITMENT OPERATIONS)
+  // -------------------------------------------------------------
   {
     label: 'Bảng điều khiển',
     to: '/dashboard',
     icon: '📊',
     iconComponent: LayoutDashboard,
-    group: 'Tổng quan',
+    group: 'Vận hành tuyển dụng',
     roles: Object.values(ROLES),
   },
-  {
-    label: 'Cổng tuyển dụng công khai',
-    to: '/careers',
-    icon: '↗️',
-    iconComponent: Rocket,
-    group: 'Tổng quan',
-    roles: Object.values(ROLES),
-  },
-  {
-    label: 'Giới thiệu công ty',
-    to: '/company',
-    icon: '🏢',
-    iconComponent: Building,
-    group: 'Tổng quan',
-    roles: Object.values(ROLES),
-  },
-
-  // 2. YÊU CẦU & PHÊ DUYỆT
   {
     label: 'Yêu cầu tuyển dụng',
     to: '/jobs',
     icon: '📝',
     iconComponent: FileSpreadsheet,
-    group: 'Yêu cầu & Phê duyệt',
+    group: 'Vận hành tuyển dụng',
     roles: Object.values(ROLES),
     permissions: ['REQUISITIONS_READ_ALL', 'REQUISITIONS_READ_SCOPED'],
   },
@@ -86,7 +66,7 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     to: '/offers/approval',
     icon: '✓',
     iconComponent: FileCheck2,
-    group: 'Yêu cầu & Phê duyệt',
+    group: 'Vận hành tuyển dụng',
     roles: [
       ROLES.ADMIN,
       ROLES.HR_MANAGER,
@@ -99,8 +79,8 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     label: 'Luồng phê duyệt',
     to: '/job-postings/review',
     icon: '⇄',
-    iconComponent: Shield,
-    group: 'Yêu cầu & Phê duyệt',
+    iconComponent: ShieldAlert,
+    group: 'Vận hành tuyển dụng',
     roles: Object.values(ROLES),
     permissions: ['REQUISITIONS_READ_ALL', 'REQUISITIONS_READ_SCOPED'],
   },
@@ -109,7 +89,7 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     to: '/job-postings',
     icon: '📢',
     iconComponent: Megaphone,
-    group: 'Yêu cầu & Phê duyệt',
+    group: 'Vận hành tuyển dụng',
     roles: Object.values(ROLES),
     permissions: ['JOB_POSTINGS_READ_ALL', 'JOB_POSTINGS_READ_SCOPED'],
   },
@@ -118,71 +98,49 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     to: '/department/positions/progress',
     icon: '📈',
     iconComponent: TrendingUp,
-    group: 'Yêu cầu & Phê duyệt',
-    roles: [ROLES.HIRING_MANAGER],
+    group: 'Vận hành tuyển dụng',
+    roles: [ROLES.HIRING_MANAGER, ROLES.ADMIN, ROLES.HR_MANAGER],
     permissions: ['REQUISITIONS_READ_SCOPED'],
   },
-
-  // 3. QUẢN LÝ ỨNG VIÊN
   {
     label: 'Quản lý CV / Ứng viên',
     to: '/candidates',
     icon: '📄',
     iconComponent: Users2,
-    group: 'Quản lý ứng viên',
+    group: 'Vận hành tuyển dụng',
     roles: Object.values(ROLES),
     permissions: ['CANDIDATES_READ_ALL', 'CANDIDATES_READ_SCOPED'],
+  },
+  {
+    label: 'Lịch phỏng vấn',
+    to: '/interviews',
+    icon: '📅',
+    iconComponent: CalendarDays,
+    group: 'Vận hành tuyển dụng',
+    roles: Object.values(ROLES),
+    permissions: ['INTERVIEWS_READ_ALL', 'INTERVIEWS_READ_SCOPED'],
+  },
+  {
+    label: 'Tiến độ tiếp nhận nhân sự',
+    to: '/onboarding/tracking',
+    icon: '🚀',
+    iconComponent: Rocket,
+    group: 'Vận hành tuyển dụng',
+    roles: [ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER, ROLES.HIRING_MANAGER],
+    permissions: ['ORGANIZATION_READ_ALL'],
   },
   {
     label: 'Giới thiệu ứng viên',
     to: '/referrals',
     icon: '🤝',
     iconComponent: Share2,
-    group: 'Quản lý ứng viên',
+    group: 'Vận hành tuyển dụng',
     roles: Object.values(ROLES),
   },
 
-  // 4. PHỎNG VẤN & ĐÁNH GIÁ
-  {
-    label: 'Lịch phỏng vấn',
-    to: '/interviews',
-    icon: '📅',
-    iconComponent: CalendarDays,
-    group: 'Phỏng vấn & Đánh giá',
-    roles: Object.values(ROLES),
-    permissions: ['INTERVIEWS_READ_ALL', 'INTERVIEWS_READ_SCOPED'],
-  },
-  {
-    label: 'Lịch cá nhân phỏng vấn',
-    to: '/interviewer/calendar',
-    icon: '🗓️',
-    iconComponent: CalendarCheck2,
-    group: 'Phỏng vấn & Đánh giá',
-    roles: Object.values(ROLES),
-    permissions: ['INTERVIEWS_READ_ALL', 'INTERVIEWS_READ_SCOPED'],
-  },
-
-  // 5. ONBOARDING & TIẾP NHẬN
-  {
-    label: 'Tiến độ tiếp nhận nhân sự',
-    to: '/onboarding/tracking',
-    icon: '🚀',
-    iconComponent: Rocket,
-    group: 'Tiếp nhận Onboarding',
-    roles: [ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER, ROLES.HIRING_MANAGER],
-    permissions: ['ORGANIZATION_READ_ALL'],
-  },
-  {
-    label: 'Mẫu Checklist tiếp nhận',
-    to: '/onboarding/checklist-templates',
-    icon: '📋',
-    iconComponent: ClipboardList,
-    group: 'Tiếp nhận Onboarding',
-    roles: [ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER],
-    permissions: ['ORGANIZATION_READ_ALL'],
-  },
-
-  // 6. BÁO CÁO & PHÂN TÍCH
+  // -------------------------------------------------------------
+  // 2. BÁO CÁO & PHÂN TÍCH (ANALYTICS & REPORTS)
+  // -------------------------------------------------------------
   {
     label: 'Báo cáo phễu tuyển dụng',
     to: '/reports/funnel',
@@ -208,7 +166,9 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     roles: Object.values(ROLES),
   },
 
-  // 7. DANH MỤC & CƠ CẤU
+  // -------------------------------------------------------------
+  // 3. DANH MỤC & CƠ CẤU TỔ CHỨC (MASTER DATA)
+  // -------------------------------------------------------------
   {
     label: 'Phòng ban',
     to: '/settings/departments',
@@ -290,50 +250,42 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     roles: [ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER],
     permissions: ['ORGANIZATION_READ_ALL'],
   },
-  {
-    label: 'Lịch sử gửi email',
-    to: '/candidates/email-audit-logs',
-    icon: '📨',
-    iconComponent: MailCheck,
-    group: 'Danh mục & Cơ cấu',
-    roles: [ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER],
-    permissions: ['CANDIDATES_READ_ALL', 'CANDIDATES_READ_SCOPED'],
-  },
 
-  // 8. QUẢN TRỊ HỆ THỐNG
+  // -------------------------------------------------------------
+  // 4. HỆ THỐNG & CÁ NHÂN (SYSTEM & PERSONAL)
+  // -------------------------------------------------------------
   {
     label: 'Quản lý tài khoản',
     to: '/users',
     icon: '👥',
     iconComponent: UserCog,
-    group: 'Quản trị hệ thống',
+    group: 'Hệ thống & Cá nhân',
     roles: [ROLES.ADMIN, ROLES.HR_MANAGER],
     permissions: ['USER_ADMIN_READ_ALL'],
   },
   {
-    label: 'Bảng điều khiển quản trị',
-    to: '/admin/dashboard',
-    icon: '🛡️',
-    iconComponent: Shield,
-    group: 'Quản trị hệ thống',
-    roles: [ROLES.ADMIN],
+    label: 'Cổng tuyển dụng công khai',
+    to: '/careers',
+    icon: '↗️',
+    iconComponent: Globe,
+    group: 'Hệ thống & Cá nhân',
+    roles: Object.values(ROLES),
   },
-
-  // 9. TÀI KHOẢN CÁ NHÂN
+  {
+    label: 'Giới thiệu công ty',
+    to: '/company',
+    icon: '🏢',
+    iconComponent: Building,
+    group: 'Hệ thống & Cá nhân',
+    roles: Object.values(ROLES),
+  },
   {
     label: 'Hồ sơ cá nhân',
     to: '/profile',
     icon: '👤',
     iconComponent: User,
-    group: 'Tài khoản cá nhân',
-    roles: [
-      ROLES.ADMIN,
-      ROLES.HR_MANAGER,
-      ROLES.RECRUITER,
-      ROLES.HIRING_MANAGER,
-      ROLES.INTERVIEWER,
-      ROLES.APPROVER,
-    ],
+    group: 'Hệ thống & Cá nhân',
+    roles: Object.values(ROLES),
     permissions: ['SELF_PROFILE_READ'],
   },
   {
@@ -341,7 +293,7 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     to: '/change-password',
     icon: '🔑',
     iconComponent: KeyRound,
-    group: 'Tài khoản cá nhân',
+    group: 'Hệ thống & Cá nhân',
     roles: Object.values(ROLES),
     permissions: ['SELF_SECURITY_WRITE'],
   },
@@ -350,7 +302,7 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     to: '/settings/notifications',
     icon: '🔔',
     iconComponent: Bell,
-    group: 'Tài khoản cá nhân',
+    group: 'Hệ thống & Cá nhân',
     roles: Object.values(ROLES),
   },
 ];
@@ -359,9 +311,6 @@ const isRole = (role: string): role is Role => Object.hasOwn(ROLE_NAMES, role);
 
 export const Sidebar: FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
-
   const navigate = useNavigate();
   const user = tokenService.getUserData();
   const { permissions } = usePermission();
@@ -372,43 +321,25 @@ export const Sidebar: FC = () => {
     return getVisibleMenuItems(allMenuItems, userRoles, permissions) as typeof allMenuItems;
   }, [userRoles, permissions]);
 
-  // 2. Lọc nhanh theo ô tìm kiếm
-  const filteredMenu = useMemo(() => {
-    if (!searchQuery.trim()) return visibleMenu;
-    const q = searchQuery.toLowerCase().trim();
-    return visibleMenu.filter(
-      (item) => item.label.toLowerCase().includes(q) || item.group?.toLowerCase().includes(q)
-    );
-  }, [visibleMenu, searchQuery]);
-
-  // 3. Gom nhóm theo Group Label
+  // 2. Gom nhóm theo 4 Phân hệ lớn
   const groupedMenu = useMemo(() => {
     const groups: { groupName: string; items: typeof allMenuItems }[] = [];
-    const map = new Map<string, typeof allMenuItems>();
+    const groupOrder = [
+      'Vận hành tuyển dụng',
+      'Báo cáo & Phân tích',
+      'Danh mục & Cơ cấu',
+      'Hệ thống & Cá nhân',
+    ];
 
-    filteredMenu.forEach((item) => {
-      const g = item.group || 'Chức năng khác';
-      if (!map.has(g)) {
-        map.set(g, []);
-      }
-      map.get(g)!.push(item);
-    });
-
-    map.forEach((items, groupName) => {
+    groupOrder.forEach((groupName) => {
+      const items = visibleMenu.filter((item) => item.group === groupName);
       if (items.length > 0) {
         groups.push({ groupName, items });
       }
     });
 
     return groups;
-  }, [filteredMenu]);
-
-  const toggleGroupCollapse = (groupName: string) => {
-    setCollapsedGroups((prev) => ({
-      ...prev,
-      [groupName]: !prev[groupName],
-    }));
-  };
+  }, [visibleMenu]);
 
   const displayName = user?.fullName || user?.email || 'Người dùng';
   const roleLabel =
@@ -430,7 +361,7 @@ export const Sidebar: FC = () => {
 
   return (
     <>
-      {/* Mobile Sticky Header */}
+      {/* Mobile Topbar toggle */}
       <div className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur-sm md:hidden">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2.5">
@@ -438,7 +369,7 @@ export const Sidebar: FC = () => {
               🏢
             </div>
             <div>
-              <p className="text-xs font-bold text-slate-900 leading-tight">Tuyển Dụng Nội Bộ</p>
+              <p className="text-xs font-bold text-slate-900 leading-tight">Smart Recruitment</p>
               <p className="text-[10px] text-slate-500 truncate max-w-[150px]">{displayName}</p>
             </div>
           </div>
@@ -464,137 +395,98 @@ export const Sidebar: FC = () => {
         />
       )}
 
-      {/* Main Sidebar Container */}
+      {/* Main Sidebar */}
       <aside
         className={[
-          'fixed left-0 top-0 z-40 w-72 h-full flex flex-col bg-slate-900 text-white shadow-2xl transition-transform duration-200',
+          'fixed left-0 top-0 z-40 w-68 h-full flex flex-col bg-slate-900 text-white shadow-2xl transition-transform duration-200',
           isOpen ? 'translate-x-0' : '-translate-x-full',
           'md:static md:translate-x-0 md:shrink-0',
         ].join(' ')}
       >
         {/* Brand Header */}
-        <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-950 px-5">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-500 to-indigo-600 text-white text-base font-black shadow-md">
+        <div className="flex h-16 shrink-0 items-center border-b border-slate-800 bg-slate-950 px-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white text-lg font-black shadow-md shadow-indigo-600/30">
               🏢
             </div>
             <div>
               <p className="text-sm font-black tracking-tight text-white leading-none">
-                TUYỂN DỤNG NỘI BỘ
+                Smart Recruitment
               </p>
-              <p className="text-[9px] font-bold uppercase tracking-wider text-indigo-400 mt-1">
-                Enterprise ATS Portal
+              <p className="text-[10px] font-medium text-slate-400 mt-1">
+                Hệ thống tuyển dụng nội bộ
               </p>
             </div>
           </div>
         </div>
 
         {/* User Card */}
-        <div className="shrink-0 border-b border-slate-800/80 bg-slate-900/60 p-4">
+        <div className="shrink-0 border-b border-slate-800 bg-slate-900/90 px-4 py-3.5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white text-sm font-black shadow-md">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white text-sm font-black shadow-md">
               {displayName.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-bold text-slate-100">{displayName}</p>
-              <p className="mt-0.5 truncate text-[10px] font-semibold tracking-wide text-indigo-300">
+              <p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-wider text-blue-400">
                 {roleLabel}
               </p>
             </div>
           </div>
-
-          {/* Quick Menu Filter Input */}
-          <div className="mt-3 relative">
-            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-500" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm nhanh chức năng..."
-              className="w-full rounded-lg border border-slate-800 bg-slate-950/80 py-1.5 pl-8 pr-3 text-xs text-slate-200 placeholder-slate-500 outline-none transition focus:border-indigo-500 focus:bg-slate-950"
-            />
-          </div>
         </div>
 
-        {/* Navigation Menu (Grouped with Section Labels) */}
+        {/* Navigation Menu (Chỉ 4 Phân hệ lớn, liền mạch, không rối mắt) */}
         <nav className="custom-scrollbar flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-4">
-          {groupedMenu.length === 0 ? (
-            <div className="p-4 text-center text-xs text-slate-500">
-              Không tìm thấy chức năng phù hợp.
+          {groupedMenu.map((group, groupIdx) => (
+            <div key={group.groupName} className="space-y-1">
+              {/* Tiêu đề nhóm nhã nhặn */}
+              <div className={`px-3 pb-1 text-[10px] font-black uppercase tracking-wider text-slate-400 select-none ${
+                groupIdx > 0 ? 'pt-3 border-t border-slate-800/80' : 'pt-1'
+              }`}>
+                {group.groupName}
+              </div>
+
+              {/* Danh sách các chức năng trong nhóm */}
+              <ul className="space-y-0.5">
+                {group.items.map((item) => {
+                  const Icon = item.iconComponent;
+
+                  return (
+                    <li key={item.to}>
+                      <NavLink
+                        to={item.to}
+                        onClick={() => setIsOpen(false)}
+                        className={({ isActive }) => [
+                          'group flex items-center rounded-xl px-3 py-2 text-xs font-semibold transition-all',
+                          isActive
+                            ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30 font-bold'
+                            : 'text-slate-300 hover:bg-slate-800/90 hover:text-white',
+                        ].join(' ')}
+                      >
+                        {Icon ? (
+                          <Icon className="mr-2.5 h-4 w-4 shrink-0 text-slate-400 group-hover:text-blue-300 transition-colors" />
+                        ) : (
+                          <span className="mr-2.5 text-base">{item.icon}</span>
+                        )}
+                        <span className="truncate">{item.label}</span>
+                      </NavLink>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
-          ) : (
-            groupedMenu.map((group) => {
-              const isCollapsed = Boolean(collapsedGroups[group.groupName]);
-
-              return (
-                <div key={group.groupName} className="space-y-1">
-                  {/* Group Section Header (Label) */}
-                  <button
-                    type="button"
-                    onClick={() => toggleGroupCollapse(group.groupName)}
-                    className="w-full flex items-center justify-between px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400 hover:text-slate-200 transition select-none group"
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-1 w-1 rounded-full bg-indigo-500" />
-                      {group.groupName}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <span className="text-[9px] font-semibold text-slate-500 group-hover:text-slate-400">
-                        {group.items.length}
-                      </span>
-                      <ChevronDown
-                        className={`h-3 w-3 text-slate-500 transition-transform duration-150 ${
-                          isCollapsed ? '-rotate-90' : 'rotate-0'
-                        }`}
-                      />
-                    </div>
-                  </button>
-
-                  {/* Group Menu Items */}
-                  {!isCollapsed && (
-                    <ul className="space-y-0.5 pt-0.5">
-                      {group.items.map((item) => {
-                        const Icon = item.iconComponent;
-
-                        return (
-                          <li key={item.to}>
-                            <NavLink
-                              to={item.to}
-                              onClick={() => setIsOpen(false)}
-                              className={({ isActive }) => [
-                                'group flex items-center rounded-xl px-3 py-2 text-xs font-semibold transition-all',
-                                isActive
-                                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                                  : 'text-slate-300 hover:bg-slate-800/80 hover:text-white',
-                              ].join(' ')}
-                            >
-                              {Icon ? (
-                                <Icon className="mr-2.5 h-4 w-4 shrink-0 text-slate-400 group-hover:text-indigo-300 transition-colors" />
-                              ) : (
-                                <span className="mr-2.5 text-sm">{item.icon}</span>
-                              )}
-                              <span className="truncate">{item.label}</span>
-                            </NavLink>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
-              );
-            })
-          )}
+          ))}
         </nav>
 
-        {/* Footer Logout */}
+        {/* Bottom Logout */}
         <div className="shrink-0 border-t border-slate-800 bg-slate-950 p-3">
           <button
             type="button"
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 border border-slate-800 px-4 py-2 text-xs font-bold text-slate-300 transition hover:bg-rose-600/90 hover:border-rose-600 hover:text-white"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 border border-slate-800 px-4 py-2.5 text-xs font-bold text-slate-300 transition hover:bg-rose-600 hover:border-rose-600 hover:text-white"
             onClick={handleLogout}
           >
-            <LogOut className="h-3.5 w-3.5" />
-            <span>Đăng xuất phiên làm việc</span>
+            <LogOut className="h-4 w-4" />
+            <span>Đăng xuất</span>
           </button>
         </div>
       </aside>
