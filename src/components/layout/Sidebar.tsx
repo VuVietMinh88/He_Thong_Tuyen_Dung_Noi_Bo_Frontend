@@ -43,67 +43,98 @@ import {
   Search,
 } from 'lucide-react';
 
-// Cấu hình đầy đủ tất cả các chức năng theo nhóm (Labels)
+// Cấu hình đầy đủ tất cả các chức năng theo nhóm (Labels) khớp ảnh yêu cầu
 const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ className?: string }> })[] = [
-  // 1. TỔNG QUAN & ĐIỀU HÀNH
+  // 1. TỔNG QUAN
   {
-    label: 'Bảng điều khiển tuyển dụng',
+    label: 'Bảng điều khiển',
     to: '/dashboard',
     icon: '📊',
     iconComponent: LayoutDashboard,
-    group: 'Tổng quan & Điều hành',
+    group: 'Tổng quan',
     roles: Object.values(ROLES),
   },
   {
-    label: 'Bảng điều khiển quản trị',
-    to: '/admin/dashboard',
-    icon: '🛡️',
-    iconComponent: Shield,
-    group: 'Tổng quan & Điều hành',
-    roles: [ROLES.ADMIN],
+    label: 'Cổng tuyển dụng công khai',
+    to: '/careers',
+    icon: '↗️',
+    iconComponent: Rocket,
+    group: 'Tổng quan',
+    roles: Object.values(ROLES),
+  },
+  {
+    label: 'Giới thiệu công ty',
+    to: '/company',
+    icon: '🏢',
+    iconComponent: Building,
+    group: 'Tổng quan',
+    roles: Object.values(ROLES),
   },
 
-  // 2. YÊU CẦU & ĐĂNG TIN (RECRUITMENT & JOBS)
+  // 2. YÊU CẦU & PHÊ DUYỆT
   {
     label: 'Yêu cầu tuyển dụng',
     to: '/jobs',
     icon: '📝',
     iconComponent: FileSpreadsheet,
-    group: 'Yêu cầu & Đăng tin',
+    group: 'Yêu cầu & Phê duyệt',
     roles: Object.values(ROLES),
     permissions: ['REQUISITIONS_READ_ALL', 'REQUISITIONS_READ_SCOPED'],
   },
   {
-    label: 'Quản lý tin tuyển dụng',
+    label: 'Chờ tôi phê duyệt',
+    to: '/offers/approval',
+    icon: '✓',
+    iconComponent: FileCheck2,
+    group: 'Yêu cầu & Phê duyệt',
+    roles: [
+      ROLES.ADMIN,
+      ROLES.HR_MANAGER,
+      ROLES.HIRING_MANAGER,
+      ROLES.APPROVER,
+      ROLES.RECRUITER,
+    ],
+  },
+  {
+    label: 'Luồng phê duyệt',
+    to: '/job-postings/review',
+    icon: '⇄',
+    iconComponent: Shield,
+    group: 'Yêu cầu & Phê duyệt',
+    roles: Object.values(ROLES),
+    permissions: ['REQUISITIONS_READ_ALL', 'REQUISITIONS_READ_SCOPED'],
+  },
+  {
+    label: 'Tin tuyển dụng',
     to: '/job-postings',
     icon: '📢',
     iconComponent: Megaphone,
-    group: 'Yêu cầu & Đăng tin',
+    group: 'Yêu cầu & Phê duyệt',
     roles: Object.values(ROLES),
     permissions: ['JOB_POSTINGS_READ_ALL', 'JOB_POSTINGS_READ_SCOPED'],
   },
   {
-    label: 'Tiến độ theo phòng ban',
+    label: 'Tiến độ vị trí phòng ban',
     to: '/department/positions/progress',
     icon: '📈',
     iconComponent: TrendingUp,
-    group: 'Yêu cầu & Đăng tin',
+    group: 'Yêu cầu & Phê duyệt',
     roles: [ROLES.HIRING_MANAGER],
     permissions: ['REQUISITIONS_READ_SCOPED'],
   },
 
-  // 3. QUẢN LÝ ỨNG VIÊN (CANDIDATES & TALENT POOL)
+  // 3. QUẢN LÝ ỨNG VIÊN
   {
-    label: 'Hồ sơ ứng viên & Pipeline',
+    label: 'Quản lý CV / Ứng viên',
     to: '/candidates',
-    icon: '👥',
+    icon: '📄',
     iconComponent: Users2,
     group: 'Quản lý ứng viên',
     roles: Object.values(ROLES),
     permissions: ['CANDIDATES_READ_ALL', 'CANDIDATES_READ_SCOPED'],
   },
   {
-    label: 'Giới thiệu ứng viên nội bộ',
+    label: 'Giới thiệu ứng viên',
     to: '/referrals',
     icon: '🤝',
     iconComponent: Share2,
@@ -111,9 +142,9 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     roles: Object.values(ROLES),
   },
 
-  // 4. PHỎNG VẤN & ĐÁNH GIÁ (INTERVIEWS)
+  // 4. PHỎNG VẤN & ĐÁNH GIÁ
   {
-    label: 'Lịch phỏng vấn toàn ban',
+    label: 'Lịch phỏng vấn',
     to: '/interviews',
     icon: '📅',
     iconComponent: CalendarDays,
@@ -131,27 +162,13 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     permissions: ['INTERVIEWS_READ_ALL', 'INTERVIEWS_READ_SCOPED'],
   },
 
-  // 5. OFFER & ONBOARDING (OFFER & TIẾP NHẬN)
+  // 5. ONBOARDING & TIẾP NHẬN
   {
-    label: 'Phê duyệt Offer',
-    to: '/offers/approval',
-    icon: '📜',
-    iconComponent: FileCheck2,
-    group: 'Offer & Tiếp nhận',
-    roles: [
-      ROLES.ADMIN,
-      ROLES.HR_MANAGER,
-      ROLES.HIRING_MANAGER,
-      ROLES.APPROVER,
-      ROLES.RECRUITER,
-    ],
-  },
-  {
-    label: 'Tiến độ tiếp nhận Onboarding',
+    label: 'Tiến độ tiếp nhận nhân sự',
     to: '/onboarding/tracking',
     icon: '🚀',
     iconComponent: Rocket,
-    group: 'Offer & Tiếp nhận',
+    group: 'Tiếp nhận Onboarding',
     roles: [ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER, ROLES.HIRING_MANAGER],
     permissions: ['ORGANIZATION_READ_ALL'],
   },
@@ -160,12 +177,12 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     to: '/onboarding/checklist-templates',
     icon: '📋',
     iconComponent: ClipboardList,
-    group: 'Offer & Tiếp nhận',
+    group: 'Tiếp nhận Onboarding',
     roles: [ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER],
     permissions: ['ORGANIZATION_READ_ALL'],
   },
 
-  // 6. BÁO CÁO & PHÂN TÍCH (ANALYTICS & REPORTS)
+  // 6. BÁO CÁO & PHÂN TÍCH
   {
     label: 'Báo cáo phễu tuyển dụng',
     to: '/reports/funnel',
@@ -191,31 +208,22 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     roles: Object.values(ROLES),
   },
 
-  // 7. CẤU HÌNH & HỆ THỐNG (SETTINGS & MASTER DATA)
+  // 7. DANH MỤC & CƠ CẤU
   {
-    label: 'Quản lý tài khoản nội bộ',
-    to: '/users',
-    icon: '👤',
-    iconComponent: UserCog,
-    group: 'Quản trị & Cấu hình',
-    roles: [ROLES.ADMIN, ROLES.HR_MANAGER],
-    permissions: ['USER_ADMIN_READ_ALL'],
-  },
-  {
-    label: 'Cơ cấu phòng ban',
+    label: 'Phòng ban',
     to: '/settings/departments',
     icon: '🏢',
     iconComponent: Building,
-    group: 'Quản trị & Cấu hình',
+    group: 'Danh mục & Cơ cấu',
     roles: Object.values(ROLES),
     permissions: ['ORGANIZATION_READ_ALL'],
   },
   {
-    label: 'Chức danh công việc',
+    label: 'Chức danh',
     to: '/settings/positions',
     icon: '💼',
     iconComponent: Briefcase,
-    group: 'Quản trị & Cấu hình',
+    group: 'Danh mục & Cơ cấu',
     roles: Object.values(ROLES),
     permissions: ['ORGANIZATION_READ_ALL'],
   },
@@ -224,7 +232,7 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     to: '/settings/competency-frameworks',
     icon: '🧩',
     iconComponent: Puzzle,
-    group: 'Quản trị & Cấu hình',
+    group: 'Danh mục & Cơ cấu',
     roles: Object.values(ROLES),
     permissions: ['ORGANIZATION_READ_ALL'],
   },
@@ -233,7 +241,7 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     to: '/settings/interview-questions',
     icon: '❔',
     iconComponent: HelpCircle,
-    group: 'Quản trị & Cấu hình',
+    group: 'Danh mục & Cơ cấu',
     roles: Object.values(ROLES),
     permissions: ['ORGANIZATION_READ_ALL'],
   },
@@ -242,7 +250,7 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     to: '/headcount-budget',
     icon: '💰',
     iconComponent: Coins,
-    group: 'Quản trị & Cấu hình',
+    group: 'Danh mục & Cơ cấu',
     roles: Object.values(ROLES),
     permissions: ['ORGANIZATION_READ_ALL'],
   },
@@ -251,25 +259,25 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     to: '/settings/master-data',
     icon: '🗂️',
     iconComponent: Folders,
-    group: 'Quản trị & Cấu hình',
+    group: 'Danh mục & Cơ cấu',
     roles: Object.values(ROLES),
     permissions: ['ORGANIZATION_READ_ALL'],
   },
   {
     label: 'Danh mục tuyển dụng',
     to: '/settings/recruitment-catalogs',
-    icon: '📁',
+    icon: '⚙️',
     iconComponent: FolderKanban,
-    group: 'Quản trị & Cấu hình',
+    group: 'Danh mục & Cơ cấu',
     roles: Object.values(ROLES),
     permissions: ['ORGANIZATION_READ_ALL'],
   },
   {
-    label: 'Cấu hình hạn mức SLA',
+    label: 'Cấu hình SLA',
     to: '/settings/sla',
     icon: '⏳',
     iconComponent: Timer,
-    group: 'Quản trị & Cấu hình',
+    group: 'Danh mục & Cơ cấu',
     roles: [ROLES.ADMIN, ROLES.HR_MANAGER],
     permissions: ['ORGANIZATION_READ_ALL'],
   },
@@ -278,7 +286,7 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     to: '/settings/email-templates',
     icon: '✉️',
     iconComponent: Mail,
-    group: 'Quản trị & Cấu hình',
+    group: 'Danh mục & Cơ cấu',
     roles: [ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER],
     permissions: ['ORGANIZATION_READ_ALL'],
   },
@@ -287,18 +295,37 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     to: '/candidates/email-audit-logs',
     icon: '📨',
     iconComponent: MailCheck,
-    group: 'Quản trị & Cấu hình',
+    group: 'Danh mục & Cơ cấu',
     roles: [ROLES.ADMIN, ROLES.HR_MANAGER, ROLES.RECRUITER],
     permissions: ['CANDIDATES_READ_ALL', 'CANDIDATES_READ_SCOPED'],
   },
 
-  // 8. CÁ NHÂN (PERSONAL SETTINGS)
+  // 8. QUẢN TRỊ HỆ THỐNG
+  {
+    label: 'Quản lý tài khoản',
+    to: '/users',
+    icon: '👥',
+    iconComponent: UserCog,
+    group: 'Quản trị hệ thống',
+    roles: [ROLES.ADMIN, ROLES.HR_MANAGER],
+    permissions: ['USER_ADMIN_READ_ALL'],
+  },
+  {
+    label: 'Bảng điều khiển quản trị',
+    to: '/admin/dashboard',
+    icon: '🛡️',
+    iconComponent: Shield,
+    group: 'Quản trị hệ thống',
+    roles: [ROLES.ADMIN],
+  },
+
+  // 9. TÀI KHOẢN CÁ NHÂN
   {
     label: 'Hồ sơ cá nhân',
     to: '/profile',
     icon: '👤',
     iconComponent: User,
-    group: 'Cá nhân & Bảo mật',
+    group: 'Tài khoản cá nhân',
     roles: [
       ROLES.ADMIN,
       ROLES.HR_MANAGER,
@@ -314,7 +341,7 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     to: '/change-password',
     icon: '🔑',
     iconComponent: KeyRound,
-    group: 'Cá nhân & Bảo mật',
+    group: 'Tài khoản cá nhân',
     roles: Object.values(ROLES),
     permissions: ['SELF_SECURITY_WRITE'],
   },
@@ -323,7 +350,7 @@ const allMenuItems: (SidebarMenuItem & { iconComponent?: React.ComponentType<{ c
     to: '/settings/notifications',
     icon: '🔔',
     iconComponent: Bell,
-    group: 'Cá nhân & Bảo mật',
+    group: 'Tài khoản cá nhân',
     roles: Object.values(ROLES),
   },
 ];
