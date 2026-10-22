@@ -3,7 +3,6 @@ import {
   BrowserRouter as Router,
   Routes,
   Route,
-  Navigate,
 } from "react-router-dom";
 import ToastProvider from "./components/notifications/ToastProvider";
 import LoginPage from "./pages/Login/LoginPage";
@@ -35,6 +34,7 @@ import PublicJobListPage from "./pages/CareerPage/PublicJobListPage";
 import PublicJobDetailPage from "./pages/CareerPage/PublicJobDetailPage";
 import PublicJobApplyPage from "./pages/CareerPage/PublicJobApplyPage";
 import ApplicationLookupPage from "./pages/CareerPage/ApplicationLookupPage";
+import CompanyLandingPage from "./pages/Company/CompanyLandingPage";
 import InternalReferralPage from "./pages/Referral/InternalReferralPage";
 import JobPostingManagementPage from "./pages/Recruitment/JobPostingManagementPage";
 import CandidateManagementPage from "./pages/Candidate/CandidateManagementPage";
@@ -52,7 +52,9 @@ import NotificationSettingsPage from "./pages/Settings/NotificationSettingsPage"
 import EmailTemplateManagementPage from "./pages/Settings/EmailTemplateManagementPage";
 import EmailAuditLogPage from "./pages/Candidate/EmailAuditLogPage";
 import DashboardOverview from "./pages/Dashboard/DashboardOverview";
+import AdminDashboardPage from "./pages/Dashboard/AdminDashboardPage";
 import RecruitmentTimeCostReportPage from "./pages/Reports/RecruitmentTimeCostReportPage";
+import NotFoundPage from "./pages/error/NotFoundPage";
 
 const ALL_ROLES = Object.values(ROLES) as Role[];
 
@@ -106,14 +108,7 @@ function HealthCheck() {
   );
 }
 
-const PlaceholderPage = ({ title }: { title: string }) => (
-  <section className="rounded-lg bg-white p-8">
-    <h1 className="text-2xl font-bold">{title}</h1>
-    <p className="mt-3 text-sm text-slate-600">
-      Giao diện chức năng này chưa được tích hợp với API Backend.
-    </p>
-  </section>
-);
+
 
 function App() {
   return (
@@ -122,7 +117,9 @@ function App() {
         <PermissionProvider>
           <SessionDraftRestorer />
           <Routes>
-            <Route path="/" element={<Navigate to="/careers" replace />} />
+            <Route path="/" element={<CompanyLandingPage />} />
+            <Route path="/company" element={<CompanyLandingPage />} />
+            <Route path="/about" element={<CompanyLandingPage />} />
             <Route path="/careers" element={<PublicJobListPage />} />
             <Route path="/careers/jobs" element={<PublicJobListPage />} />
             <Route path="/careers/jobs/:id" element={<PublicJobDetailPage />} />
@@ -225,7 +222,7 @@ function App() {
                 path="/admin/dashboard"
                 element={
                   <MainLayout>
-                    <PlaceholderPage title="Bảng điều khiển quản trị" />
+                    <AdminDashboardPage />
                   </MainLayout>
                 }
               />
@@ -622,11 +619,7 @@ function App() {
 
             <Route
               path="*"
-              element={
-                <div className="flex h-screen items-center justify-center text-2xl">
-                  404 - Không tìm thấy trang
-                </div>
-              }
+              element={<NotFoundPage />}
             />
           </Routes>
         </PermissionProvider>
