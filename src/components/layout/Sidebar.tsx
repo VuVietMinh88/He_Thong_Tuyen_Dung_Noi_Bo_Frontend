@@ -470,14 +470,29 @@ export const Sidebar: FC = () => {
 
   // 2. Tự động mở thư mục nếu người dùng đang ở trang con hoặc khi đang tìm kiếm
   useEffect(() => {
+    const foldersToOpen: string[] = [];
     visibleFolderGroups.forEach((folder) => {
       const isCurrentRouteInFolder = folder.items.some(
         (item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
       );
       if (isCurrentRouteInFolder || searchQuery.trim().length > 0) {
-        setOpenFolders((prev) => ({ ...prev, [folder.id]: true }));
+        foldersToOpen.push(folder.id);
       }
     });
+
+    if (foldersToOpen.length > 0) {
+      setOpenFolders((prev) => {
+        let hasChange = false;
+        const next = { ...prev };
+        foldersToOpen.forEach((id) => {
+          if (!next[id]) {
+            next[id] = true;
+            hasChange = true;
+          }
+        });
+        return hasChange ? next : prev;
+      });
+    }
   }, [location.pathname, searchQuery, visibleFolderGroups]);
 
   // Chuyển đổi trạng thái đóng / mở thẻ thư mục
