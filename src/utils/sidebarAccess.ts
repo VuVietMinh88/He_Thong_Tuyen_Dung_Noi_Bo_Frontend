@@ -4,6 +4,7 @@ export type SidebarMenuItem = {
   icon?: string;
   roles?: string[];
   permissions?: string[];
+  group?: string;
 };
 
 export const normalizeRole = (value?: string | null): string =>
