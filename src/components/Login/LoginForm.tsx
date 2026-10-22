@@ -1,4 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { LoginSuccessOverlay } from './LoginSuccessOverlay';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useToast } from '../notifications/useToast';
 import {
@@ -20,7 +21,7 @@ import {
 } from '../../utils/loginState';
 
 export const LoginForm = () => {
-  const { notify, addToast } = useToast();
+  const { addToast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState(() => localStorage.getItem('rememberedEmail') ?? '');
@@ -33,6 +34,9 @@ export const LoginForm = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [lockVersion, setLockVersion] = useState(0);
   const [lockStatus, setLockStatus] = useState(() => getLockStatus(email));
+  const [showSuccessOverlay, setShowSuccessOverlay] = useState(false);
+  const [successUserName, setSuccessUserName] = useState<string | undefined>(undefined);
+  const [pendingNavigateTo, setPendingNavigateTo] = useState<string | null>(null);
 
   useEffect(() => {
     const updateLockStatus = () => setLockStatus(getLockStatus(email.trim()));
@@ -83,7 +87,8 @@ export const LoginForm = () => {
       if (rememberMe) localStorage.setItem('rememberedEmail', normalizedEmail);
       else localStorage.removeItem('rememberedEmail');
       window.dispatchEvent(new Event('auth:changed'));
-      notify('Đăng nhập thành công!', 'success');
+
+      // Tính toán route trước khi hiển thị overlay
       const routeFromState = (location.state as { from?: { pathname?: unknown; search?: unknown; hash?: unknown } } | null)?.from;
       const fromPath = typeof routeFromState?.pathname === 'string'
         && routeFromState.pathname.startsWith('/')
@@ -91,7 +96,12 @@ export const LoginForm = () => {
         : null;
       const returnTo = getSessionExpiryReturnTo(response.user.id);
       clearSessionExpiryReturnTo();
-      navigate(returnTo ?? fromPath ?? '/dashboard', { replace: true });
+
+      // Hiển thị overlay thành công với tên người dùng
+      const displayName = response.user.fullName ?? response.user.email ?? undefined;
+      setSuccessUserName(displayName);
+      setPendingNavigateTo(returnTo ?? fromPath ?? '/dashboard');
+      setShowSuccessOverlay(true);
     } catch (error) {
       if (error instanceof InvalidLoginResponseError) {
         tokenService.clearAll();
@@ -139,10 +149,24 @@ export const LoginForm = () => {
     }
   };
 
+  // Callback khi overlay kết thúc animation -> navigate
+  const handleOverlayDone = useCallback(() => {
+    if (pendingNavigateTo) {
+      navigate(pendingNavigateTo, { replace: true });
+    }
+  }, [navigate, pendingNavigateTo]);
+
   const minutes = Math.floor(lockStatus.remainingSeconds / 60);
   const seconds = lockStatus.remainingSeconds % 60;
 
   return (
+    <>
+    {showSuccessOverlay && (
+      <LoginSuccessOverlay
+        userName={successUserName}
+        onDone={handleOverlayDone}
+      />
+    )}
     <div className="w-full max-w-md rounded-3xl border border-gray-100 bg-white p-10 shadow-2xl sm:p-12">
       <div className="mb-8 text-center">
         {new URLSearchParams(location.search).get('sessionExpired') === '1' && (
@@ -253,5 +277,6 @@ export const LoginForm = () => {
         </>
       )}
     </div>
+    </>
   );
 };
