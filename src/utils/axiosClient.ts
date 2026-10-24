@@ -1,5 +1,6 @@
 import axios, {
   type AxiosError,
+  type AxiosRequestConfig,
   type AxiosResponse,
   type InternalAxiosRequestConfig,
 } from 'axios';
@@ -7,7 +8,8 @@ import type { LoginResponse } from '../types/auth';
 import { tokenService } from '../services/token.service';
 import { captureSessionExpiryDraft } from '../services/sessionDraft.service';
 
-type RetryRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
+export type SessionRequestConfig = AxiosRequestConfig & { _sessionId: string | null };
+type RetryRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean; _sessionId?: string | null };
 
 const normalizeApiBaseUrl = (baseUrl?: string): string => {
   const trimmed = (baseUrl ?? '').trim().replace(/\/+$/, '');
@@ -89,14 +91,20 @@ const redirectToUnauthorized = (): void => {
 };
 
 axiosClient.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
+  (config: RetryRequestConfig) => {
     tokenService.removeInvalidStoredTokens();
     if (isAuthRequest(config.url)) {
+      if (/\/auth\/login\/?$/i.test(config.url ?? '')) isRedirectingToLogin = false;
       config.headers.delete('Authorization');
       return config;
     }
 
     const accessToken = tokenService.getAccessToken();
+    const sessionId = tokenService.getSessionId();
+    if (config._sessionId !== undefined && config._sessionId !== sessionId) {
+      return Promise.reject(new Error('SESSION_CHANGED'));
+    }
+    config._sessionId = sessionId;
     if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
 
     if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
@@ -113,6 +121,13 @@ axiosClient.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as RetryRequestConfig | undefined;
     const status = error.response?.status;
+    const sentAuthorization = originalRequest?.headers.get('Authorization');
+    const currentSessionId = tokenService.getSessionId();
+    if ((status === 401 || status === 403) && originalRequest
+      && !isAuthRequest(originalRequest.url) && originalRequest._sessionId !== currentSessionId) {
+      // A response from a previous session must not refresh or clear the current one.
+      return Promise.reject(error);
+    }
 
     if (status === 403 && originalRequest && !isAuthRequest(originalRequest.url)) {
       redirectToUnauthorized();
@@ -136,11 +151,21 @@ axiosClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    const currentAccessToken = tokenService.getAccessToken();
+    if (currentSessionId && currentAccessToken && sentAuthorization !== `Bearer ${currentAccessToken}`) {
+      // Another request already rotated this same session while this response was delayed.
+      originalRequest._retry = true;
+      originalRequest.headers.Authorization = `Bearer ${currentAccessToken}`;
+      return axiosClient(originalRequest);
+    }
+
     if (isRefreshing) {
       originalRequest._retry = true;
       return new Promise<string>((resolve, reject) => {
         failedQueue.push({ resolve, reject });
-      }).then((accessToken) => {
+      }).then(() => {
+        const accessToken = tokenService.getAccessToken();
+        if (!accessToken || tokenService.getSessionId() !== originalRequest._sessionId) throw new Error('SESSION_CHANGED');
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return axiosClient(originalRequest);
       });
@@ -149,6 +174,9 @@ axiosClient.interceptors.response.use(
     originalRequest._retry = true;
     isRefreshing = true;
     const refreshToken = tokenService.getRefreshToken();
+    const sessionRevision = tokenService.getSessionRevision();
+    const sessionId = currentSessionId;
+    let expectedRefreshToken = refreshToken;
     if (!refreshToken) {
       isRefreshing = false;
       processQueue(error);
@@ -162,21 +190,31 @@ axiosClient.interceptors.response.use(
         { refreshToken },
         { headers: { 'Content-Type': 'application/json' }, timeout: 15000 },
       );
+      if (tokenService.getSessionRevision() !== sessionRevision
+        || tokenService.getSessionId() !== sessionId
+        || tokenService.getRefreshToken() !== expectedRefreshToken) {
+        throw new Error('SESSION_CHANGED');
+      }
       if (!isTokenResponse(refreshResponse.data)) {
         throw new Error('Backend trả về dữ liệu refresh token không đúng hợp đồng API.');
       }
 
       const { accessToken, refreshToken: rotatedRefreshToken, user } = refreshResponse.data;
-      if (!tokenService.saveTokens(accessToken, rotatedRefreshToken) || !tokenService.setUserData(user)) {
+      if (!sessionId || !tokenService.rotateTokens(accessToken, rotatedRefreshToken, sessionId) || !tokenService.setUserData(user)) {
+        tokenService.clearAll();
+        redirectToLogin();
         throw new Error('Không thể lưu phiên đăng nhập mới.');
       }
+      expectedRefreshToken = rotatedRefreshToken;
 
       processQueue(null, accessToken);
       originalRequest.headers.Authorization = `Bearer ${accessToken}`;
       return await axiosClient(originalRequest);
     } catch (refreshError: unknown) {
       processQueue(refreshError);
-      redirectToLogin();
+      if (tokenService.getSessionRevision() === sessionRevision
+        && tokenService.getSessionId() === sessionId
+        && tokenService.getRefreshToken() === expectedRefreshToken) redirectToLogin();
       return Promise.reject(refreshError);
     } finally {
       isRefreshing = false;

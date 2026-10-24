@@ -19,6 +19,28 @@ afterEach(() => {
 });
 
 describe('tokenService', () => {
+  it('keeps session identity across rotation and changes it on a new login', () => {
+    tokenService.saveTokens('initial-access', 'initial-refresh');
+    const identity = tokenService.getSessionId()!;
+    expect(tokenService.rotateTokens('rotated-access', 'rotated-refresh', identity)).toBe(true);
+    expect(tokenService.getSessionId()).toBe(identity);
+    tokenService.saveTokens('new-login-access', 'new-login-refresh');
+    expect(tokenService.getSessionId()).not.toBe(identity);
+    expect(tokenService.rotateTokens('stale-access', 'stale-refresh', identity)).toBe(false);
+    expect(tokenService.getAccessToken()).toBe('new-login-access');
+  });
+
+  it('assigns existing deployed tokens one persisted identity without discarding them', () => {
+    window.localStorage.setItem('accessToken', 'legacy-access');
+    window.localStorage.setItem('refreshToken', 'legacy-refresh');
+    const identity = tokenService.getSessionId();
+    expect(identity).toBeTruthy();
+    expect(tokenService.getSessionId()).toBe(identity);
+    expect(window.localStorage.getItem('authSessionId')).toBe(identity);
+    expect(tokenService.getAccessToken()).toBe('legacy-access');
+    expect(tokenService.getRefreshToken()).toBe('legacy-refresh');
+  });
+
   it('stores valid access and refresh tokens', () => {
     expect(tokenService.saveTokens(' access-token ', ' refresh-token ')).toBe(true);
     expect(tokenService.getAccessToken()).toBe('access-token');
