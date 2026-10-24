@@ -1,14 +1,34 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { InterviewerCalendarPage } from '../src/pages/Interview/InterviewerCalendarPage';
 import { calculateEndTime } from '../src/services/interviewService';
 import { tokenService } from '../src/services/token.service';
 
+const calendarState = vi.hoisted(() => ({ items: null as unknown[] | null }));
+vi.mock('react', async (original) => {
+  const actual = await original<typeof import('react')>();
+  return { ...actual, useState: (initial: unknown) => {
+    if (calendarState.items && Array.isArray(initial) && initial.length === 0) {
+      const items = calendarState.items; calendarState.items = null;
+      return actual.useState(items);
+    }
+    return actual.useState(initial);
+  } };
+});
 const storage = new Map<string, string>();
+function seedSchedule() {
+  calendarState.items = [{ id: 'server-interview', applicationId: 'app-1', candidateId: '', candidateName: '',
+    roundName: 'Server round', interviewDate: '2026-10-25', interviewTime: '14:00',
+    startTime: '2026-10-25T07:00:00Z', scheduledDateTimeISO: '2026-10-25T07:00:00Z',
+    durationMinutes: 60, format: 'ONLINE', locationOrLink: 'https://meet.example.com/room',
+    interviewerIds: ['usr-001'], interviewers: [], status: 'SCHEDULED', isEvaluationSubmitted: false, version: 0 }];
+}
 
 describe('TKNHTTDNB1-475 / TKNHTTDNB1-68 (User Story S7-01): Lịch cá nhân cho người phỏng vấn', () => {
   beforeEach(() => {
+    calendarState.items = null;
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-20T00:00:00Z'));
     storage.clear();
     vi.stubGlobal('localStorage', {
       getItem: (key: string) => storage.get(key) ?? null,
@@ -27,6 +47,8 @@ describe('TKNHTTDNB1-475 / TKNHTTDNB1-68 (User Story S7-01): Lịch cá nhân ch
       departmentName: 'Bộ phận Công nghệ & Kỹ thuật',
     });
   });
+
+  afterEach(() => { calendarState.items = null; vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
   describe('AC 1: Hiển thị danh sách buổi phỏng vấn sắp tới (Upcoming Interviews List & Calendar View)', () => {
     it('hiển thị đầy đủ tiêu đề, chế độ xem Danh sách thẻ (Cards) và Lịch tuần (Calendar View)', () => {
@@ -73,7 +95,8 @@ describe('TKNHTTDNB1-475 / TKNHTTDNB1-68 (User Story S7-01): Lịch cá nhân ch
   });
 
   describe('AC 2: Liên kết mở CV & Đánh dấu trạng thái Phiếu đánh giá (CV Link & Evaluation Badge)', () => {
-    it('cung cấp nút mở xem trước CV ứng viên trực tiếp trong hệ thống', () => {
+    it('hiển thị CV không khả dụng rõ ràng khi chưa có contract truy cập hồ sơ', () => {
+      seedSchedule();
       const html = renderToString(
         <MemoryRouter>
           <InterviewerCalendarPage />
@@ -81,9 +104,12 @@ describe('TKNHTTDNB1-475 / TKNHTTDNB1-68 (User Story S7-01): Lịch cá nhân ch
       );
 
       expect(html).toContain('Xem trước CV');
+      expect(html).toMatch(/<button[^>]*disabled=""[^>]*title="Chức năng xem CV theo phân công hiện chưa khả dụng/);
+      expect(html).toContain('Server round');
     });
 
     it('hiển thị thẻ cảnh báo và nút thao tác nộp phiếu đánh giá năng lực', () => {
+      seedSchedule();
       const html = renderToString(
         <MemoryRouter>
           <InterviewerCalendarPage />
@@ -92,6 +118,8 @@ describe('TKNHTTDNB1-475 / TKNHTTDNB1-68 (User Story S7-01): Lịch cá nhân ch
 
       expect(html).toContain('Chưa nộp đánh giá');
       expect(html).toContain('Đánh giá năng lực');
+      expect(html).toContain('Server round');
+      expect(html).not.toContain('Đã nộp phiếu đánh giá');
     });
   });
 

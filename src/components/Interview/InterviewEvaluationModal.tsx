@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, Award, Lock, HelpCircle } from 'lucide-react';
 import {
-  InterviewEvaluationForm,
   type InterviewEvaluationFormProps,
 } from './InterviewEvaluationForm';
+import { BackendEvaluationPanel } from './BackendEvaluationPanel';
 import { InterviewSuggestedQuestions } from './InterviewSuggestedQuestions';
 
 export interface InterviewEvaluationModalProps extends InterviewEvaluationFormProps {
@@ -111,10 +111,10 @@ export const InterviewEvaluationModal: React.FC<InterviewEvaluationModalProps> =
 
         {/* Nội dung form */}
         <div className="p-4 sm:p-6">
-          <InterviewEvaluationForm
-            {...formProps}
+          {formProps.interviewId ? <BackendEvaluationPanel
+            {...formProps} interviewId={formProps.interviewId}
             onCancel={formProps.onCancel || onClose}
-          />
+          /> : <p role="alert">Thiếu mã lịch phỏng vấn. Không thể tải hoặc nộp phiếu.</p>}
         </div>
       </div>
 

@@ -30,6 +30,7 @@ export interface CandidateInterviewResponse {
 }
 
 export interface InterviewSchedulePayload {
+  version?: number;
   id?: string;
   candidateId: string;
   candidateName: string;
@@ -69,6 +70,7 @@ export interface InterviewSchedulePayload {
  * Payload chuẩn cho API tạo lịch phỏng vấn theo User Story S6-02 (AC 1)
  */
 export interface CreateInterviewSchedulePayload {
+  expectedVersion?: number;
   id?: string;
   applicationId: string;
   candidateId?: string;
@@ -172,6 +174,7 @@ export interface InterviewConflictCheckResult {
 }
 
 export interface CheckInterviewConflictPayload {
+  applicationId?: string;
   id?: string;
   candidateName?: string;
   jobTitle?: string;
@@ -262,7 +265,7 @@ export class InterviewConflictValidationError extends Error {
   statusCode = 400;
 
   constructor(
-    message = 'Lý do ghi đè lịch phỏng vấn là bắt buộc và phải có tối thiểu 5 ký tự.',
+    message = 'Lý do ghi đè lịch phỏng vấn không được để trống.',
   ) {
     super(message);
     this.name = 'InterviewConflictValidationError';

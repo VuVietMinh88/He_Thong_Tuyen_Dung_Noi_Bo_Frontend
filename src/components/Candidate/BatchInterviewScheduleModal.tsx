@@ -1,3 +1,5 @@
+import { featureStatus } from '../../services/backendCapabilities';
+import { CapabilityNotice } from '../Interview/CapabilityNotice';
 import React, { useState, useEffect, useMemo, useId } from 'react';
 import {
   closestCorners,
@@ -47,7 +49,6 @@ import type {
 } from '../../types/interview';
 import {
   DEFAULT_INTERVIEW_ROUNDS,
-  MOCK_INTERNAL_INTERVIEWERS,
 } from '../../types/interview';
 import { interviewService } from '../../services/interviewService';
 import {
@@ -264,15 +265,13 @@ export const BatchInterviewScheduleModal: React.FC<BatchInterviewScheduleModalPr
   const [breakMinutes, setBreakMinutes] = useState<number>(10);
   const [format, setFormat] = useState<InterviewFormat>('ONLINE');
   const [locationOrLink, setLocationOrLink] = useState<string>('https://meet.google.com/xyz-demo-rec');
-  const [selectedInterviewerIds, setSelectedInterviewerIds] = useState<string[]>([
-    MOCK_INTERNAL_INTERVIEWERS[0]?.id || 'usr-001',
-  ]);
+  const [selectedInterviewerIds, setSelectedInterviewerIds] = useState<string[]>([]);
   const [defaultRoundType, setDefaultRoundType] = useState<InterviewRoundType>('TECHNICAL');
   const [customRoundName, setCustomRoundName] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
 
   // Trạng thái hội đồng & tìm kiếm
-  const [allInterviewers, setAllInterviewers] = useState<InterviewerInfo[]>(MOCK_INTERNAL_INTERVIEWERS);
+  const [allInterviewers, setAllInterviewers] = useState<InterviewerInfo[]>([]);
   const [interviewerSearch, setInterviewerSearch] = useState<string>('');
   const [isInterviewerDropdownOpen, setIsInterviewerDropdownOpen] = useState<boolean>(false);
 
@@ -493,6 +492,7 @@ export const BatchInterviewScheduleModal: React.FC<BatchInterviewScheduleModalPr
       data-testid="batch-interview-schedule-modal"
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-black/60 backdrop-blur-xs"
     >
+      <CapabilityNotice feature="bulkScheduling" />
       <div className="relative flex flex-col w-full max-w-5xl max-h-[92vh] overflow-hidden rounded-2xl bg-white shadow-2xl border border-gray-200 dark:border-gray-800 dark:bg-gray-900">
         {/* Header Modal */}
         <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-800">
@@ -1007,7 +1007,7 @@ export const BatchInterviewScheduleModal: React.FC<BatchInterviewScheduleModalPr
               <button
                 type="submit"
                 data-testid="btn-submit-batch"
-                disabled={candidatesList.length === 0}
+                disabled={featureStatus('bulkScheduling') !== 'AVAILABLE' || candidatesList.length === 0}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-indigo-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <span>{`Tiếp tục: Xem trước & Xác nhận (${candidatesList.length})`}</span>

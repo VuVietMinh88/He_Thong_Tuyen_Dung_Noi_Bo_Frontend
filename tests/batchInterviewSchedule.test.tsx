@@ -183,56 +183,18 @@ describe('Task Jira TKNHTTDNB1-433: Giao diện xếp lịch nhiều ứng viên
       ],
     };
 
-    it('gọi API POST /recruitment/interviews/batch-schedule khi backend phản hồi thành công', async () => {
-      const mockApiResponse = {
-        totalScheduled: 2,
-        scheduledInterviews: [
-          {
-            id: 'sched-01',
-            candidateId: 'cand-001',
-            candidateName: 'Nguyễn Văn An',
-            roundName: 'Vòng 1',
-            interviewDate: '2026-10-25',
-            startTime: '09:00',
-            durationMinutes: 45,
-            format: 'ONLINE',
-            locationOrLink: 'https://meet.google.com/abc-defg-hij',
-            interviewerIds: ['usr-001'],
-            interviewers: [],
-            status: 'SCHEDULED',
-            createdAt: '2026-10-15T00:00:00.000Z',
-          },
-        ],
-        message: 'Thành công',
-      };
-
-      const postSpy = vi.spyOn(axiosClient, 'post').mockResolvedValueOnce({
-        data: mockApiResponse,
-      });
-
-      const result = await interviewService.batchCreateInterviewSchedules(validPayload);
-
-      expect(postSpy).toHaveBeenCalledWith(
-        '/recruitment/interviews/batch-schedule',
-        validPayload
-      );
-      expect(result.totalScheduled).toBe(2);
+    it('không gọi endpoint batch chưa có contract Backend', async () => {
+      const post = vi.spyOn(axiosClient, 'post');
+      await expect(interviewService.batchCreateInterviewSchedules(validPayload)).rejects.toMatchObject({ statusCode: 501 });
+      expect(post).not.toHaveBeenCalled();
+      expect(localStorage.getItem(LOCAL_STORAGE_INTERVIEWS_KEY)).toBeNull();
     });
 
-    it('fallback lưu trữ localStorage khi backend trả về lỗi mạng', async () => {
-      vi.spyOn(axiosClient, 'post').mockRejectedValueOnce(new Error('Network error'));
-
-      const result = await interviewService.batchCreateInterviewSchedules(validPayload);
-
-      expect(result.totalScheduled).toBe(2);
-      expect(result.scheduledInterviews).toHaveLength(2);
-      expect(result.scheduledInterviews[0].candidateName).toBe('Nguyễn Văn An');
-      expect(result.scheduledInterviews[0].locationOrLink).toBe('https://meet.google.com/abc-defg-hij');
-
-      // Kiểm tra lịch đã được đồng bộ vào localStorage
-      const stored = localStorage.getItem(LOCAL_STORAGE_INTERVIEWS_KEY);
-      expect(stored).not.toBeNull();
-      expect(stored).toContain('Nguyễn Văn An');
+    it('không tạo lịch local giả khi batch không khả dụng', async () => {
+      const post = vi.spyOn(axiosClient, 'post').mockRejectedValue(new Error('Network error'));
+      await expect(interviewService.batchCreateInterviewSchedules(validPayload)).rejects.toMatchObject({ statusCode: 501 });
+      expect(post).not.toHaveBeenCalled();
+      expect(localStorage.getItem(LOCAL_STORAGE_INTERVIEWS_KEY)).toBeNull();
     });
   });
 

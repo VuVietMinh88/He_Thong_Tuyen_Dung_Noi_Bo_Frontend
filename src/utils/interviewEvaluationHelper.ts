@@ -430,18 +430,9 @@ export const checkIsRecruiterRole = (
   userRoles?: string[] | null,
   isRecruiterExplicit?: boolean,
 ): boolean => {
-  if (typeof isRecruiterExplicit === 'boolean') {
-    return isRecruiterExplicit;
-  }
-
-  const activeRoles: string[] = userRoles || tokenService.getUserData()?.roles || [];
-  const normalizedRoles = activeRoles.map((role) => role.toUpperCase().trim());
-
-  return (
-    normalizedRoles.includes('RECRUITER') ||
-    normalizedRoles.includes('ADMIN') ||
-    normalizedRoles.includes('HR_MANAGER')
-  );
+  if (isRecruiterExplicit === false) return false;
+  const activeRoles = userRoles ?? tokenService.getUserData()?.roles ?? [];
+  return activeRoles.some(role => role.toUpperCase().trim() === 'RECRUITER');
 };
 
 /**
@@ -453,3 +444,10 @@ export const isPeerReviewVisible = (hasSubmittedOwnEvaluation: boolean): boolean
 };
 
 
+
+export function canReopenEvaluation(roles: string[] | null | undefined, permissions: readonly string[]): boolean {
+  return checkIsRecruiterRole(roles)
+    && permissions.some(p => p === 'INTERVIEWS_READ_ALL' || p === 'INTERVIEWS_READ_SCOPED')
+    && permissions.some(p => p === 'INTERVIEWS_WRITE_ALL' || p === 'INTERVIEWS_WRITE_SCOPED')
+    && permissions.some(p => p === 'CANDIDATES_READ_ALL' || p === 'CANDIDATES_READ_SCOPED');
+}

@@ -1,3 +1,5 @@
+import { featureStatus } from '../../services/backendCapabilities';
+import { CapabilityNotice } from '../Interview/CapabilityNotice';
 import React, { useState, useEffect, useMemo, useId } from 'react';
 import {
   X,
@@ -107,6 +109,7 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
 
   // Auxiliary UI state
   const [availableInterviewers, setAvailableInterviewers] = useState<InterviewerInfo[]>([]);
+  const [participantError, setParticipantError] = useState('');
   const [interviewerSearch, setInterviewerSearch] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [hasCopiedLink, setHasCopiedLink] = useState<boolean>(false);
@@ -123,9 +126,10 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
+    setAvailableInterviewers([]); setSelectedInterviewers([]); setParticipantError('');
     let isMounted = true;
     interviewService
-      .getInternalInterviewers()
+      .getInternalInterviewers(undefined, applicationId)
       .then((data) => {
         if (isMounted) {
           setAvailableInterviewers(data);
@@ -138,14 +142,14 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
           });
         }
       })
-      .catch(() => {
-        // Fallback
+      .catch(cause => {
+        if (isMounted) setParticipantError(cause instanceof Error ? cause.message : 'Không tải được người phỏng vấn.');
       });
 
     return () => {
       isMounted = false;
     };
-  }, [isOpen]);
+  }, [isOpen, applicationId]);
 
   // Vòng phỏng vấn đang chọn
   const activeRoundOption = useMemo(() => {
@@ -187,6 +191,7 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
 
   // Kiểm tra tính hợp lệ của toàn bộ form
   const isFormValid = useMemo(() => {
+    if (featureStatus('scheduleWrites') !== 'AVAILABLE' || featureStatus('participantPicker') !== 'AVAILABLE' || participantError) return false;
     if (!candidateId) return false;
     if (!effectiveRoundName.trim()) return false;
     if (!timeValidation.isValid) return false;
@@ -198,7 +203,7 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
     effectiveRoundName,
     timeValidation.isValid,
     locationOrLink,
-    selectedInterviewers.length,
+    selectedInterviewers.length, participantError,
   ]);
 
   // Format ngày để xem trước thân thiện (Hook được gọi vô điều kiện)
@@ -261,7 +266,7 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
       setIsOverriding(true);
       setOverrideError(null);
       const payload: OverrideInterviewPayload = {
-        applicationId: applicationId || 'app-current',
+        applicationId: applicationId || '',
         candidateId,
         candidateName,
         candidateEmail,
@@ -343,7 +348,7 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
     try {
       setIsSubmitting(true);
       const payload: CreateInterviewSchedulePayload = {
-        applicationId: applicationId || 'app-current',
+        applicationId: applicationId || '',
         candidateId,
         candidateName,
         candidateEmail,
@@ -390,6 +395,7 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
         } else {
           try {
             const checkRes = await interviewService.checkInterviewConflict({
+              applicationId,
               candidateName,
               jobTitle,
               roundName: effectiveRoundName,
@@ -473,6 +479,9 @@ export const InterviewScheduleModal: React.FC<InterviewScheduleModalProps> = ({
         </div>
 
         {/* Modal Body - 2 Column Split Layout */}
+        <CapabilityNotice feature="scheduleWrites" />
+        <CapabilityNotice feature="participantPicker" />
+        {participantError && featureStatus('participantPicker') === 'AVAILABLE' && <p role="alert">{participantError}</p>}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* Cột trái: Form nhập liệu (7/12 cols trên lg) */}

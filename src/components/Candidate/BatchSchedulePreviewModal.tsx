@@ -1,3 +1,5 @@
+import { featureStatus } from '../../services/backendCapabilities';
+import { CapabilityNotice } from '../Interview/CapabilityNotice';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
@@ -24,7 +26,6 @@ import type {
   InterviewSchedulePayload,
   InterviewerInfo,
 } from '../../types/interview';
-import { MOCK_INTERNAL_INTERVIEWERS } from '../../types/interview';
 import { interviewService } from '../../services/interviewService';
 import {
   annotateSlotsWithConflicts,
@@ -58,7 +59,7 @@ export const BatchSchedulePreviewModal: React.FC<BatchSchedulePreviewModalProps>
   const [existingInterviews, setExistingInterviews] = useState<InterviewSchedulePayload[]>(
     () => interviewService.getStoredInterviews()
   );
-  const [allInterviewers, setAllInterviewers] = useState<InterviewerInfo[]>(MOCK_INTERNAL_INTERVIEWERS);
+  const [allInterviewers, setAllInterviewers] = useState<InterviewerInfo[]>([]);
 
   // Tùy chọn gửi thư mời lịch (Calendar Invite) - AC 3
   const [sendCalendarInvite, setSendCalendarInvite] = useState<boolean>(true);
@@ -207,6 +208,7 @@ export const BatchSchedulePreviewModal: React.FC<BatchSchedulePreviewModalProps>
       data-testid="batch-schedule-preview-modal"
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-black/60 backdrop-blur-xs"
     >
+      <CapabilityNotice feature="bulkScheduling" />
       <div className="relative flex flex-col w-full max-w-5xl max-h-[92vh] overflow-hidden rounded-2xl bg-white shadow-2xl border border-gray-200 dark:border-gray-800 dark:bg-gray-900">
         {/* Header Modal */}
         <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-800">
@@ -568,7 +570,7 @@ export const BatchSchedulePreviewModal: React.FC<BatchSchedulePreviewModalProps>
               type="button"
               data-testid="btn-confirm-create-batch-schedule"
               onClick={handleConfirmBatchSchedule}
-              disabled={isSubmitting || annotatedSlots.length === 0}
+              disabled={isSubmitting || featureStatus('bulkScheduling') !== 'AVAILABLE' || annotatedSlots.length === 0}
               className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                 conflictCount > 0
                   ? 'bg-amber-600 hover:bg-amber-700 focus:ring-amber-500/20'

@@ -1,3 +1,4 @@
+import { interview, page } from './fixtures/interviewContract';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import axios from 'axios';
@@ -29,6 +30,7 @@ describe('TKNHTTDNB1-427 / S6-02: Tích hợp tạo lịch và hiển thị trê
       clear: () => storage.clear(),
     });
     vi.restoreAllMocks();
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-10-20T00:00:00Z').getTime());
   });
 
   afterEach(() => {
@@ -117,51 +119,29 @@ describe('TKNHTTDNB1-427 / S6-02: Tích hợp tạo lịch và hiển thị trê
     });
 
     it('gọi axiosClient.post đến endpoint backend khi dữ liệu hợp lệ', async () => {
-      const mockBackendResponse = {
-        id: 'intv-server-001',
-        applicationId: 'app-itv-101',
-        candidateId: 'can-itv-101',
-        candidateName: 'Nguyễn Hoàng Nam',
-        roundName: 'Vòng Kỹ thuật & Chuyên môn',
-        startTime: validStartTime,
-        durationMinutes: 60,
-        format: 'ONLINE',
-        locationOrLink: 'https://meet.google.com/abc-defg-hij',
-        interviewers: [{ id: 'usr-001', name: 'Nguyễn Văn Hải', role: 'Engineering Manager', email: 'hai@test.com' }],
-        status: 'SCHEDULED',
-      };
-
-      vi.spyOn(axiosClient, 'post').mockResolvedValueOnce({ data: mockBackendResponse });
-
+      const response = interview({ id: 'intv-server-001', applicationId: samplePayload.applicationId,
+        startsAt: validStartTime, endsAt: new Date(Date.parse(validStartTime) + 3600000).toISOString() });
+      const post = vi.spyOn(axiosClient, 'post').mockResolvedValueOnce({ data: response });
       const result = await interviewService.createInterviewSchedule(samplePayload);
-
-      expect(axiosClient.post).toHaveBeenCalledWith(
-        '/recruitment/applications/app-itv-101/interviews',
-        expect.objectContaining({
-          applicationId: 'app-itv-101',
-          interviewRound: 'Vòng Kỹ thuật & Chuyên môn',
-          startTime: validStartTime,
-          interviewerIds: ['usr-001', 'usr-003'],
-        }),
-      );
-
+      expect(post).toHaveBeenCalledWith('/applications/app-itv-101/interviews', {
+        roundName: samplePayload.interviewRound, startsAt: validStartTime, durationMinutes: 60, mode: 'ONLINE',
+        room: null, meetingUrl: samplePayload.locationOrLink, participantIds: ['usr-001', 'usr-003'],
+        expectedVersion: null, overrideConflicts: false, overrideReason: null,
+      });
       expect(result.id).toBe('intv-server-001');
-
-      // Kiểm tra lưu vào LocalStorage và Timeline
-      const stored = JSON.parse(storage.get(LOCAL_STORAGE_INTERVIEWS_KEY) || '[]');
-      expect(stored.some((i: { id: string }) => i.id === 'intv-server-001')).toBe(true);
-
-      const timeline = JSON.parse(storage.get(LOCAL_STORAGE_TIMELINE_KEY) || '[]');
-      expect(timeline.some((evt: { eventType: string }) => evt.eventType === 'INTERVIEW_SCHEDULED')).toBe(true);
+      expect(result.candidateId).toBe(samplePayload.candidateId);
+      expect(result.version).toBe(0);
+      expect(storage.has(LOCAL_STORAGE_INTERVIEWS_KEY)).toBe(false);
+      expect(storage.has(LOCAL_STORAGE_TIMELINE_KEY)).toBe(false);
     });
 
-    it('xử lý lỗi Backend response: 400 Past Time ném InterviewPastTimeError', async () => {
+    it('xử lý lỗi Backend response: 400 validation thời gian giữ status và lỗi Backend', async () => {
       const axiosError = new axios.AxiosError('Bad Request');
       axiosError.response = {
         status: 400,
         statusText: 'Bad Request',
         data: {
-          code: 'PAST_TIME_NOT_ALLOWED',
+          code: 'VALIDATION_ERROR',
           message: 'Thời gian đã qua so với giờ hệ thống',
         },
         headers: {},
@@ -170,9 +150,7 @@ describe('TKNHTTDNB1-427 / S6-02: Tích hợp tạo lịch và hiển thị trê
 
       vi.spyOn(axiosClient, 'post').mockRejectedValueOnce(axiosError);
 
-      await expect(interviewService.createInterviewSchedule(samplePayload)).rejects.toThrow(
-        InterviewPastTimeError,
-      );
+      await expect(interviewService.createInterviewSchedule(samplePayload)).rejects.toMatchObject({ statusCode: 400, errorCode: 'VALIDATION_ERROR', message: 'Thời gian đã qua so với giờ hệ thống' });
     });
 
     it('xử lý lỗi Backend response: 409 Conflict ném InterviewerConflictError', async () => {
@@ -181,7 +159,7 @@ describe('TKNHTTDNB1-427 / S6-02: Tích hợp tạo lịch và hiển thị trê
         status: 409,
         statusText: 'Conflict',
         data: {
-          code: 'INTERVIEWER_CONFLICT',
+          code: 'INTERVIEW_CONFLICT',
           message: 'Người phỏng vấn Nguyễn Văn Hải đã có lịch bận trong khung giờ 09:30 - 10:30',
         },
         headers: {},
@@ -216,57 +194,21 @@ describe('TKNHTTDNB1-427 / S6-02: Tích hợp tạo lịch và hiển thị trê
   });
 
   describe('AC 1 & AC 3: getCandidateInterviews & Hiển thị trên hồ sơ ứng viên', () => {
-    it('lấy danh sách lịch phỏng vấn theo applicationId từ server hoặc local fallback', async () => {
-      const mockInterviews = [
-        {
-          id: 'intv-01',
-          applicationId: 'app-999',
-          candidateId: 'can-999',
-          candidateName: 'Trần Văn Hoàng',
-          roundName: 'Vòng Kỹ thuật',
-          interviewDate: '2026-10-25',
-          interviewTime: '10:00',
-          scheduledDateTimeISO: '2026-10-25T10:00:00+07:00',
-          durationMinutes: 60,
-          format: 'ONLINE' as const,
-          locationOrLink: 'https://meet.google.com/test',
-          interviewers: [{ id: 'usr-001', name: 'Nguyễn Văn Hải', role: 'Dev', email: 'hai@test.com' }],
-          status: 'SCHEDULED' as const,
-        },
-      ];
-
-      vi.spyOn(axiosClient, 'get').mockResolvedValueOnce({ data: mockInterviews });
-
+    it('lấy danh sách phân trang theo applicationId, không suy diễn PII', async () => {
+      const get = vi.spyOn(axiosClient, 'get').mockResolvedValue({ data: page([interview({ id: 'intv-01', applicationId: 'app-999' })]) });
       const data = await interviewService.getCandidateInterviews('app-999');
-      expect(data.length).toBe(1);
-      expect(data[0].candidateName).toBe('Trần Văn Hoàng');
-      expect(axiosClient.get).toHaveBeenCalledWith('/recruitment/applications/app-999/interviews');
+      expect(data).toHaveLength(1);
+      expect(data[0].id).toBe('intv-01');
+      expect(data[0].applicationId).toBe('app-999');
+      expect(data[0].candidateName).toBe(''); // Logistics DTO does not expose candidate PII.
+      expect(get).toHaveBeenCalledWith('/applications/app-999/interviews', { params: { page: 0, size: 100 } });
     });
 
-    it('fallback đọc đúng từ LocalStorage khi backend offline', async () => {
-      const stored = [
-        {
-          id: 'intv-local-1',
-          applicationId: 'app-offline-1',
-          candidateId: 'can-offline-1',
-          candidateName: 'Phạm Minh Anh',
-          roundName: 'Vòng HR',
-          interviewDate: '2026-10-28',
-          interviewTime: '15:00',
-          durationMinutes: 45,
-          format: 'OFFLINE' as const,
-          locationOrLink: 'Phòng họp Lotus - Tầng 8',
-          interviewers: [],
-          status: 'SCHEDULED' as const,
-        },
-      ];
-      storage.set(LOCAL_STORAGE_INTERVIEWS_KEY, JSON.stringify(stored));
-
-      vi.spyOn(axiosClient, 'get').mockRejectedValueOnce(new Error('Network error'));
-
-      const result = await interviewService.getCandidateInterviews('app-offline-1');
-      expect(result.length).toBe(1);
-      expect(result[0].candidateName).toBe('Phạm Minh Anh');
+    it('không dùng cache chưa xác thực khi backend offline', async () => {
+      storage.set(LOCAL_STORAGE_INTERVIEWS_KEY, JSON.stringify([{ id: 'stale-private-record' }]));
+      vi.spyOn(axiosClient, 'get').mockRejectedValue(new Error('Network error'));
+      await expect(interviewService.getCandidateInterviews('app-offline-1')).rejects.toThrow('Network error');
+      expect(storage.get(LOCAL_STORAGE_INTERVIEWS_KEY)).toBe(JSON.stringify([{ id: 'stale-private-record' }]));
     });
   });
 
@@ -312,48 +254,36 @@ describe('TKNHTTDNB1-427 / S6-02: Tích hợp tạo lịch và hiển thị trê
       storage.set(LOCAL_STORAGE_INTERVIEWS_KEY, JSON.stringify(mockScheduleList));
     });
 
-    it('lọc chính xác lịch cá nhân theo ID người phỏng vấn được phân công', async () => {
-      vi.spyOn(axiosClient, 'get').mockRejectedValueOnce(new Error('Network offline'));
-
-      // Tìm lịch của usr-001
-      const mySchedule = await interviewService.getPersonalInterviewSchedule({
-        userId: 'usr-001',
-      });
-
-      expect(mySchedule.length).toBe(1);
-      expect(mySchedule[0].candidateName).toBe('Lê Văn Cường');
-
-      // Tìm lịch của usr-003
-      const tuanSchedule = await interviewService.getPersonalInterviewSchedule({
-        interviewerId: 'usr-003',
-      });
-      expect(tuanSchedule.length).toBe(1);
-      expect(tuanSchedule[0].candidateName).toBe('Hoàng Thùy Linh');
+    it('lịch cá nhân do Backend xác định, không đổi scope theo userId client', async () => {
+      const get = vi.spyOn(axiosClient, 'get').mockResolvedValue({ data: page([interview({ id: 'intv-pers-1' })]) });
+      const mine = await interviewService.getPersonalInterviewSchedule({ userId: 'usr-001' });
+      expect(mine).toHaveLength(1); expect(mine[0].id).toBe('intv-pers-1');
+      const other = await interviewService.getPersonalInterviewSchedule({ interviewerId: 'usr-003' });
+      expect(other.map(item => item.id)).toEqual(['intv-pers-1']);
+      expect(get).toHaveBeenNthCalledWith(1, '/interviews/me', { params: { page: 0, size: 100 } });
+      expect(get).toHaveBeenNthCalledWith(2, '/interviews/me', { params: { page: 0, size: 100 } });
     });
 
     it('lọc theo ngày cụ thể và tìm kiếm từ khóa', async () => {
-      vi.spyOn(axiosClient, 'get').mockRejectedValue(new Error('Offline'));
-
-      const filteredByDate = await interviewService.getPersonalInterviewSchedule({
-        date: '2026-10-20',
-      });
-      expect(filteredByDate.length).toBe(1);
-      expect(filteredByDate[0].candidateName).toBe('Lê Văn Cường');
-
-      const searched = await interviewService.getPersonalInterviewSchedule({
-        search: 'Product Designer',
-      });
-      expect(searched.length).toBe(1);
-      expect(searched[0].candidateName).toBe('Hoàng Thùy Linh');
+      vi.spyOn(axiosClient, 'get').mockResolvedValue({ data: page([
+        interview({ id: 'intv-pers-1', startsAt: '2026-10-20T02:00:00Z', endsAt: '2026-10-20T03:00:00Z' }),
+        interview({ id: 'intv-pers-2', roundName: 'Vòng Portfolio', startsAt: '2026-10-21T07:00:00Z', endsAt: '2026-10-21T08:00:00Z' }),
+      ]) });
+      const byDate = await interviewService.getPersonalInterviewSchedule({ date: '2026-10-20' });
+      expect(byDate.map(item => item.id)).toEqual(['intv-pers-1']);
+      const searched = await interviewService.getPersonalInterviewSchedule({ search: 'Portfolio' });
+      expect(searched.map(item => item.id)).toEqual(['intv-pers-2']);
     });
 
-    it('cập nhật trạng thái buổi phỏng vấn (updateInterviewStatus)', async () => {
-      const updated = await interviewService.updateInterviewStatus('intv-pers-1', 'COMPLETED');
-      expect(updated).not.toBeNull();
-      expect(updated?.status).toBe('COMPLETED');
-
-      const reloaded = await interviewService.getPersonalInterviewSchedule({ userId: 'usr-001' });
-      expect(reloaded[0].status).toBe('COMPLETED');
+    it('không tự đánh dấu hoàn thành; hủy lịch gửi version và lý do', async () => {
+      const post = vi.spyOn(axiosClient, 'post');
+      await expect(interviewService.updateInterviewStatus('intv-pers-1', 'COMPLETED')).rejects.toThrow('không hỗ trợ');
+      expect(post).not.toHaveBeenCalled();
+      post.mockResolvedValue({ data: interview({ id: 'intv-pers-1', status: 'CANCELLED', version: 1 }) });
+      const updated = await interviewService.updateInterviewStatus('intv-pers-1', 'CANCELLED', { expectedVersion: 0, reason: 'Candidate unavailable' });
+      expect(updated?.status).toBe('CANCELLED');
+      expect(updated?.version).toBe(1);
+      expect(post).toHaveBeenCalledWith('/interviews/intv-pers-1/cancel', { expectedVersion: 0, reason: 'Candidate unavailable' });
     });
   });
 

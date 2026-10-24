@@ -1,3 +1,5 @@
+import { featureStatus } from '../../services/backendCapabilities';
+import { CapabilityNotice } from '../Interview/CapabilityNotice';
 import React, { useState } from 'react';
 import {
   Calendar,
@@ -243,6 +245,7 @@ export const CandidateInterviewsList: React.FC<CandidateInterviewsListProps> = (
               <div className="mt-3 pt-2 border-t border-slate-100 flex flex-wrap items-center justify-end gap-2">
                 <button
                   type="button"
+                  disabled={featureStatus('evaluations') !== 'AVAILABLE'}
                   onClick={() => setEvaluatingInterview(item)}
                   className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition cursor-pointer shadow-2xs"
                 >
@@ -254,6 +257,7 @@ export const CandidateInterviewsList: React.FC<CandidateInterviewsListProps> = (
                   <>
                     <button
                       type="button"
+                      disabled={featureStatus('scheduleWrites') !== 'AVAILABLE'}
                       onClick={() => onStatusChange(item.id || '', 'CANCELLED')}
                       className="px-2.5 py-1 text-xs font-semibold text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
                     >
@@ -261,7 +265,7 @@ export const CandidateInterviewsList: React.FC<CandidateInterviewsListProps> = (
                     </button>
                     <button
                       type="button"
-                      onClick={() => onStatusChange(item.id || '', 'COMPLETED')}
+                      disabled title="Chức năng hoàn thành lịch thủ công chưa khả dụng trong bản tích hợp này"
                       className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition cursor-pointer"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
@@ -275,9 +279,12 @@ export const CandidateInterviewsList: React.FC<CandidateInterviewsListProps> = (
         })}
       </div>
 
+      <CapabilityNotice feature="evaluations" />
+      <CapabilityNotice feature="scheduleWrites" />
       {/* Modal Đánh giá năng lực phỏng vấn */}
       {evaluatingInterview && (
         <InterviewEvaluationModal
+          interviewId={evaluatingInterview.id}
           isOpen={true}
           onClose={() => setEvaluatingInterview(null)}
           candidateName={evaluatingInterview.candidateName}

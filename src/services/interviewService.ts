@@ -1,3 +1,5 @@
+import { requireFeature, BackendCapabilityError, featureStatus } from './backendCapabilities';
+import { interviewApi, scheduleRequest, type InterviewConflict } from './interviewApi';
 import axios from 'axios';
 import axiosClient from '../utils/axiosClient';
 import type {
@@ -12,7 +14,6 @@ import type {
   BatchCreateInterviewScheduleResult,
 } from '../types/interview';
 import {
-  MOCK_INTERNAL_INTERVIEWERS,
   InterviewPastTimeError,
   InterviewerConflictError,
   InterviewApiError,
@@ -203,35 +204,27 @@ class InterviewService {
   /**
    * Lấy danh sách nhân sự nội bộ có thể tham gia phỏng vấn
    */
-  async getInternalInterviewers(searchQuery?: string): Promise<InterviewerInfo[]> {
-    try {
-      const response = await axiosClient.get('/recruitment/interviewers', {
-        params: { search: searchQuery },
+  async getInternalInterviewers(searchQuery?: string, applicationId?: string): Promise<InterviewerInfo[]> {
+    requireFeature('participantPicker');
+    if (!applicationId?.trim()) throw new InterviewApiError('Cần mã hồ sơ ứng tuyển để chọn người phỏng vấn.', 400);
+    const result: InterviewerInfo[] = [];
+    let page = 0;
+    while (true) {
+      const { data } = await axiosClient.get(`/applications/${encodeURIComponent(applicationId)}/interview-participants`, {
+        params: { q: searchQuery || '', page, size: 50 },
       });
-      if (response?.data && Array.isArray(response.data) && response.data.length > 0) {
-        return response.data;
+      if (!data || !Array.isArray(data.items) || data.page !== page || !Number.isSafeInteger(data.totalElements)
+          || data.totalElements < 0 || !Number.isSafeInteger(data.size) || data.size < 1
+          || data.items.some((v: { id?: unknown; fullName?: unknown }) => typeof v.id !== 'string' || typeof v.fullName !== 'string')) {
+        throw new InterviewApiError('Response danh sách người phỏng vấn không hợp lệ.');
       }
-    } catch {
-      // API fallback dùng danh sách mẫu
+      result.push(...data.items.map((v: { id: string; fullName: string }) => ({ id: v.id, name: v.fullName, role: '', email: '' })));
+      if ((page + 1) * data.size >= data.totalElements) return result;
+      if (!data.items.length || ++page > 1000) throw new InterviewApiError('Phân trang người phỏng vấn không nhất quán.');
     }
-
-    if (!searchQuery || !searchQuery.trim()) {
-      return [...MOCK_INTERNAL_INTERVIEWERS];
-    }
-
-    const query = searchQuery.trim().toLowerCase();
-    return MOCK_INTERNAL_INTERVIEWERS.filter(
-      (interviewer) =>
-        interviewer.name.toLowerCase().includes(query) ||
-        interviewer.role.toLowerCase().includes(query) ||
-        interviewer.email.toLowerCase().includes(query) ||
-        (interviewer.department && interviewer.department.toLowerCase().includes(query)),
-    );
   }
 
-  /**
-   * Kiểm tra xung đột lịch phỏng vấn theo người phỏng vấn và phòng họp từ dữ liệu lưu cục bộ
-   */
+
   checkLocalConflict(
     payload: CheckInterviewConflictPayload,
   ): InterviewConflictCheckResult {
@@ -285,8 +278,7 @@ class InterviewService {
 
         if (isAssigned) {
           const matched =
-            existing.interviewers.find((i) => i.id === interviewerId) ||
-            MOCK_INTERNAL_INTERVIEWERS.find((i) => i.id === interviewerId);
+            existing.interviewers.find((i) => i.id === interviewerId);
           const name = matched?.name || `Người phỏng vấn (${interviewerId})`;
           const role = matched?.role || 'Hội đồng phỏng vấn';
 
@@ -350,8 +342,7 @@ class InterviewService {
       format: payload.format,
       locationOrLink: payload.locationOrLink,
       interviewerNames: payload.interviewerIds.map((id) => {
-        const found = MOCK_INTERNAL_INTERVIEWERS.find((i) => i.id === id);
-        return found ? found.name : id;
+        return id;
       }),
     };
 
@@ -373,259 +364,60 @@ class InterviewService {
   /**
    * Kiểm tra xung đột lịch phỏng vấn theo người phỏng vấn và phòng họp (AC 1 & AC 3 - TKNHTTDNB1-439)
    */
-  async checkInterviewConflict(
-    payload: CheckInterviewConflictPayload,
-  ): Promise<InterviewConflictCheckResult> {
-    try {
-      const response = await axiosClient.post(
-        '/recruitment/interviews/check-conflict',
-        payload,
-      );
-      if (response?.data && typeof response.data.hasConflict === 'boolean') {
-        return response.data;
-      }
-    } catch {
-      // Fallback kiểm tra client-side với danh sách đã lưu
-    }
-
-    return this.checkLocalConflict(payload);
+  async checkInterviewConflict(payload: CheckInterviewConflictPayload): Promise<InterviewConflictCheckResult> {
+    requireFeature('scheduleWrites');
+    if (!payload.applicationId) throw new InterviewApiError('Thiếu mã hồ sơ ứng tuyển để kiểm tra trùng lịch.', 400);
+    const request = scheduleRequest({ applicationId: payload.applicationId, interviewRound: payload.roundName || '',
+      startTime: `${payload.interviewDate}T${payload.startTime.length === 5 ? payload.startTime + ':00' : payload.startTime}+07:00`,
+      durationMinutes: payload.durationMinutes, interviewType: payload.format, locationOrLink: payload.locationOrLink,
+      interviewerIds: payload.interviewerIds });
+    const { expectedVersion: _version, overrideConflicts: _override, overrideReason: _reason, ...fields } = request;
+    const { data } = await axiosClient.post<InterviewConflict[]>('/interviews/conflicts', {
+      ...fields, applicationId: payload.applicationId, interviewId: payload.id ?? null,
+    });
+    if (!Array.isArray(data)) throw new InterviewApiError('Response kiểm tra trùng lịch không hợp lệ.');
+    const hasRoom = data.some(item => item.resourceType === 'ROOM');
+    const hasParticipant = data.some(item => item.resourceType !== 'ROOM');
+    return { hasConflict: data.length > 0,
+      conflictType: hasRoom && hasParticipant ? 'BOTH' : hasRoom ? 'ROOM_CONFLICT' : hasParticipant ? 'INTERVIEWER_CONFLICT' : undefined,
+      conflicts: data.map(item => ({
+      type: item.resourceType === 'ROOM' ? 'ROOM' : 'INTERVIEWER',
+      entityId: item.participantId ?? undefined, entityName: item.room || item.participantId || '',
+      reason: 'Tài nguyên đã có lịch trong khung giờ này.',
+      conflictingInterview: { id: item.interviewId, candidateName: '', jobTitle: '', roundName: '',
+        interviewDate: '', startTime: item.startsAt, endTime: item.endsAt,
+        durationMinutes: (Date.parse(item.endsAt) - Date.parse(item.startsAt)) / 60000,
+        format: payload.format, locationOrLink: item.room || '' },
+    })) };
   }
 
-  /**
-   * API TẠO LỊCH PHỎNG VẤN (AC 1 & AC 2 - Jira TKNHTTDNB1-427 & TKNHTTDNB1-439)
-   * - Gửi thông tin: applicationId, interviewRound, startTime, durationMinutes, interviewType, locationOrLink, interviewerIds
-   * - Chặn thời gian quá khứ ở client (không gửi request)
-   * - Kiểm tra chặn xung đột lịch (hoặc cho phép ghi đè khi có lý do hợp lệ)
-   */
-  async createInterviewSchedule(
-    payload: CreateInterviewSchedulePayload,
-  ): Promise<InterviewSchedulePayload> {
-    // 1. Kiểm tra trường bắt buộc
-    if (!payload.applicationId) {
-      throw new InterviewApiError('Mã hồ sơ ứng tuyển (applicationId) là bắt buộc.', 400, 'MISSING_APPLICATION_ID');
-    }
 
-    const effectiveRound = payload.interviewRound || payload.roundName;
-    if (!effectiveRound || !effectiveRound.trim()) {
-      throw new InterviewApiError('Vui lòng chọn hoặc nhập vòng phỏng vấn.', 400, 'MISSING_ROUND');
-    }
-
-    const effectiveType = payload.interviewType || payload.format || 'ONLINE';
-    if (!payload.locationOrLink || !payload.locationOrLink.trim()) {
-      throw new InterviewApiError(
-        effectiveType === 'ONLINE'
-          ? 'Vui lòng cung cấp liên kết họp trực tuyến (Google Meet, Zoom...).'
-          : 'Vui lòng nhập tên phòng họp hoặc địa điểm phỏng vấn trực tiếp.',
-        400,
-        'MISSING_LOCATION',
-      );
-    }
-
-    const interviewerIds =
-      payload.interviewerIds && payload.interviewerIds.length > 0
-        ? payload.interviewerIds
-        : payload.interviewers?.map((i) => i.id) || [];
-
-    if (interviewerIds.length === 0) {
-      throw new InterviewApiError('Vui lòng chọn ít nhất một người phỏng vấn.', 400, 'MISSING_INTERVIEWERS');
-    }
-
-    // 2. Chuẩn hóa startTime và Kiểm tra thời gian quá khứ (CLIENT-SIDE VALIDATION)
-    let startTimeIso = payload.startTime || payload.scheduledDateTimeISO;
-    if (!startTimeIso && payload.interviewDate && payload.interviewTime) {
-      const timeValidation = validateScheduleTime(payload.interviewDate, payload.interviewTime);
-      if (!timeValidation.isValid) {
-        throw new InterviewPastTimeError(timeValidation.error);
-      }
-      startTimeIso = timeValidation.scheduledDateTimeISO;
-    }
-
-    if (!startTimeIso) {
-      throw new InterviewApiError('Vui lòng chọn thời gian bắt đầu phỏng vấn.', 400, 'MISSING_START_TIME');
-    }
-
-    // Kiểm tra client-side: Tuyệt đối không gửi request nếu thời gian ở quá khứ (AC 2)
-    const isoCheck = validateIsoStartTime(startTimeIso);
-    if (!isoCheck.isValid) {
-      throw new InterviewPastTimeError(isoCheck.error);
-    }
-
-    const startTimeDate = new Date(startTimeIso);
-    const dateFormatted = startTimeDate.toISOString().slice(0, 10);
-    const hours = String(startTimeDate.getHours()).padStart(2, '0');
-    const minutes = String(startTimeDate.getMinutes()).padStart(2, '0');
-    const timeFormatted = `${hours}:${minutes}`;
-
-    // 3. Kiểm tra ngoại lệ ghi đè vs chặn lỗi xung đột (AC 2 - TKNHTTDNB1-439)
-    if (payload.isOverride) {
-      if (!payload.overrideReason || payload.overrideReason.trim().length < 5) {
-        throw new InterviewApiError(
-          'Vui lòng nhập lý do ghi đè lịch phỏng vấn cụ thể (tối thiểu 5 ký tự).',
-          400,
-          'MISSING_OVERRIDE_REASON',
-        );
-      }
-    } else {
-      // Kiểm tra xung đột trước khi gửi từ dữ liệu đã lưu (Client-side Blocking Error)
-      const conflictCheck = this.checkLocalConflict({
-        id: payload.id,
-        candidateName: payload.candidateName,
-        jobTitle: payload.jobTitle,
-        roundName: effectiveRound,
-        interviewDate: payload.interviewDate || dateFormatted,
-        startTime: timeFormatted,
-        durationMinutes: payload.durationMinutes || 60,
-        format: effectiveType,
-        locationOrLink: payload.locationOrLink,
-        interviewerIds,
-      });
-
-      if (conflictCheck.hasConflict) {
-        throw new InterviewerConflictError(
-          conflictCheck.message,
-          conflictCheck.conflicts.map((c) => c.entityId || ''),
-          conflictCheck,
-        );
-      }
-    }
-
-    // Tìm thông tin đầy đủ của interviewers
-    const selectedInterviewers: InterviewerInfo[] =
-      payload.interviewers && payload.interviewers.length > 0
-        ? payload.interviewers
-        : MOCK_INTERNAL_INTERVIEWERS.filter((i) => interviewerIds.includes(i.id));
-
-    const finalInterview: InterviewSchedulePayload = {
-      id: payload.id || `intv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      candidateId: payload.candidateId || 'can-unknown',
-      candidateName: payload.candidateName || 'Ứng viên',
-      candidateEmail: payload.candidateEmail,
-      applicationId: payload.applicationId,
-      jobTitle: payload.jobTitle || 'Vị trí ứng tuyển',
-      roundName: effectiveRound,
-      interviewRound: effectiveRound,
-      roundType: payload.roundType || 'TECHNICAL',
-      interviewDate: payload.interviewDate || dateFormatted,
-      interviewTime: payload.interviewTime || timeFormatted,
-      scheduledDateTimeISO: startTimeIso,
-      startTime: startTimeIso,
-      durationMinutes: payload.durationMinutes || 60,
-      format: effectiveType,
-      interviewType: effectiveType,
-      locationOrLink: payload.locationOrLink.trim(),
-      interviewers: selectedInterviewers,
-      interviewerIds,
-      notes: payload.notes?.trim() || '',
-      status: payload.status || 'SCHEDULED',
-      isOverride: payload.isOverride,
-      overrideReason: payload.overrideReason?.trim(),
-      createdAt: payload.createdAt || new Date().toISOString(),
-      createdByName: payload.createdByName,
-    };
-
-    // 4. Gửi API backend và bắt lỗi từ axiosClient (AC 2)
-    const backendPayload = {
-      applicationId: payload.applicationId,
-      interviewRound: effectiveRound,
-      startTime: startTimeIso,
-      durationMinutes: payload.durationMinutes || 60,
-      interviewType: effectiveType,
-      locationOrLink: payload.locationOrLink.trim(),
-      interviewerIds,
-      notes: payload.notes?.trim() || '',
-      isOverride: payload.isOverride,
-      overrideReason: payload.overrideReason?.trim(),
-    };
-
+  async createInterviewSchedule(payload: CreateInterviewSchedulePayload): Promise<InterviewSchedulePayload> {
+    if (!payload.applicationId?.trim()) throw new InterviewApiError('Thiếu mã hồ sơ ứng tuyển (applicationId).', 400);
+    if (!(payload.roundName || payload.interviewRound)?.trim()) throw new InterviewApiError('Thiếu vòng phỏng vấn.', 400);
+    if (!payload.interviewerIds?.length) throw new InterviewApiError('Cần chọn người phỏng vấn.', 400);
+    if (!payload.locationOrLink?.trim()) throw new InterviewApiError('Cần địa điểm hoặc liên kết họp.', 400);
+    if (payload.isOverride && !payload.overrideReason?.trim()) throw new InterviewApiError('Lý do ghi đè không được để trống.', 400);
+    const time = payload.startTime || payload.scheduledDateTimeISO || '';
+    const validation = validateIsoStartTime(time);
+    if (!validation.isValid) throw new InterviewPastTimeError(validation.error);
     try {
-      const response = await axiosClient.post(
-        `/recruitment/applications/${encodeURIComponent(payload.applicationId)}/interviews`,
-        backendPayload,
-      );
-
-      if (response?.data) {
-        const savedData: InterviewSchedulePayload = {
-          ...finalInterview,
-          ...response.data,
-        };
-        this.saveInterviewToStorage(savedData);
-        this.syncInterviewToTimeline(savedData);
-        return savedData;
+      const saved = await interviewApi.create({ ...payload, startTime: time });
+      return { ...saved, candidateId: payload.candidateId || '', candidateName: payload.candidateName || '',
+        candidateEmail: payload.candidateEmail, jobTitle: payload.jobTitle, interviewers: payload.interviewers || [] };
+    } catch (cause) {
+      if (axios.isAxiosError(cause) && cause.response?.status === 409 && cause.response.data?.code === 'INTERVIEW_CONFLICT') {
+        throw new InterviewerConflictError(cause.response.data.message);
       }
-    } catch (err: unknown) {
-      const isAxios =
-        axios.isAxiosError(err) ||
-        (err !== null &&
-          typeof err === 'object' &&
-          ('isAxiosError' in err || 'response' in err));
-
-      if (isAxios) {
-        const axiosErr = err as {
-          response?: {
-            status?: number;
-            data?: {
-              code?: string;
-              message?: string;
-              error?: string;
-              conflictResult?: InterviewConflictCheckResult;
-            };
-          };
-        };
-        const status = axiosErr.response?.status;
-        const responseData = axiosErr.response?.data;
-        const errorCode = responseData?.code || '';
-        const serverMessage = responseData?.message || responseData?.error || '';
-
-        // Bắt lỗi thời gian quá khứ từ backend (AC 2)
-        if (
-          status === 400 &&
-          (errorCode === 'PAST_TIME_NOT_ALLOWED' ||
-            errorCode === 'INVALID_INTERVIEW_TIME' ||
-            serverMessage.toLowerCase().includes('quá khứ') ||
-            serverMessage.toLowerCase().includes('past'))
-        ) {
-          throw new InterviewPastTimeError(
-            serverMessage ||
-              'Thời gian phỏng vấn không được ở thời điểm quá khứ theo múi giờ Việt Nam (GMT+7). Vui lòng chọn ngày giờ trong tương lai.',
-          );
-        }
-
-        // Bắt lỗi trùng lịch người phỏng vấn hoặc phòng họp (AC 2 & TKNHTTDNB1-439)
-        if (
-          status === 409 ||
-          errorCode === 'INTERVIEWER_CONFLICT' ||
-          serverMessage.toLowerCase().includes('trùng lịch') ||
-          serverMessage.toLowerCase().includes('conflict')
-        ) {
-          throw new InterviewerConflictError(
-            serverMessage ||
-              'Một hoặc nhiều người phỏng vấn hoặc phòng họp đã có lịch bận trong khung giờ này. Vui lòng chọn thời gian khác hoặc kích hoạt ghi đè.',
-            undefined,
-            responseData?.conflictResult,
-          );
-        }
-
-        // Nếu backend trả về mã lỗi 4xx/5xx khác, ném InterviewApiError
-        if (status && status >= 400 && status < 600 && axiosErr.response?.data) {
-          throw new InterviewApiError(
-            serverMessage || 'Không thể tạo lịch phỏng vấn trên hệ thống máy chủ.',
-            status,
-            errorCode,
-          );
-        }
+      if (axios.isAxiosError(cause)) {
+        const data = cause.response?.data;
+        throw new InterviewApiError(data?.message || cause.message, cause.response?.status, data?.code);
       }
-
-      // Trường hợp offline / mạng lỗi / server mock: lưu dữ liệu fallback để demo và test
+      throw cause;
     }
-
-    this.saveInterviewToStorage(finalInterview);
-    this.syncInterviewToTimeline(finalInterview);
-    return finalInterview;
   }
 
-  /**
-   * Alias tương thích ngược với scheduleInterview
-   */
+
   async scheduleInterview(
     payload: Omit<InterviewSchedulePayload, 'id' | 'createdAt'> & { id?: string; createdAt?: string },
   ): Promise<InterviewSchedulePayload> {
@@ -635,7 +427,7 @@ class InterviewService {
 
     return this.createInterviewSchedule({
       ...payload,
-      applicationId: payload.applicationId || 'app-default',
+      applicationId: payload.applicationId || '',
       interviewRound: payload.roundName,
       startTime: payload.scheduledDateTimeISO,
       interviewType: payload.format,
@@ -646,87 +438,16 @@ class InterviewService {
   /**
    * Lấy danh sách lịch phỏng vấn của ứng viên theo đợt ứng tuyển (AC 1)
    */
-  async getCandidateInterviews(
-    applicationId: string,
-    candidateId?: string,
-  ): Promise<InterviewSchedulePayload[]> {
-    try {
-      const response = await axiosClient.get(
-        `/recruitment/applications/${encodeURIComponent(applicationId)}/interviews`,
-      );
-      if (response?.data && Array.isArray(response.data)) {
-        return response.data;
-      }
-    } catch {
-      // Fallback đọc LocalStorage
-    }
-
-    const localList = this.getStoredInterviews();
-    return localList.filter(
-      (item) => item.applicationId === applicationId || (candidateId && item.candidateId === candidateId),
-    );
+  async getCandidateInterviews(applicationId: string, _candidateId?: string): Promise<InterviewSchedulePayload[]> {
+    return interviewApi.list(applicationId);
   }
 
-  /**
-   * Lấy danh sách lịch phỏng vấn cá nhân phân công theo người phỏng vấn / recruiter (AC 1)
-   */
-  async getPersonalInterviewSchedule(
-    params?: PersonalScheduleParams,
-  ): Promise<InterviewSchedulePayload[]> {
-    try {
-      const response = await axiosClient.get('/recruitment/interviews/personal', {
-        params,
-      });
-      if (response?.data && Array.isArray(response.data)) {
-        return response.data;
-      }
-    } catch {
-      // Fallback đọc LocalStorage
-    }
 
-    let list = this.getStoredInterviews();
-
-    const targetUserId = params?.userId || params?.interviewerId;
-    if (targetUserId) {
-      list = list.filter((item) => {
-        if (item.interviewerIds && item.interviewerIds.includes(targetUserId)) return true;
-        if (item.interviewers && item.interviewers.some((i) => i.id === targetUserId)) return true;
-        return false;
-      });
-    }
-
-    if (params?.date) {
-      list = list.filter((item) => item.interviewDate === params.date || item.startTime?.startsWith(params.date!));
-    }
-
-    if (params?.status && params.status !== 'ALL') {
-      list = list.filter((item) => item.status === params.status);
-    }
-
-    if (params?.search && params.search.trim()) {
-      const q = params.search.toLowerCase().trim();
-      list = list.filter(
-        (item) =>
-          item.candidateName.toLowerCase().includes(q) ||
-          item.roundName.toLowerCase().includes(q) ||
-          (item.jobTitle && item.jobTitle.toLowerCase().includes(q)) ||
-          item.locationOrLink.toLowerCase().includes(q),
-      );
-    }
-
-    // Sắp xếp thời gian tăng dần (buổi sớm nhất lên trước)
-    list.sort((a, b) => {
-      const timeA = new Date(a.startTime || a.scheduledDateTimeISO).getTime();
-      const timeB = new Date(b.startTime || b.scheduledDateTimeISO).getTime();
-      return timeA - timeB;
-    });
-
-    return list;
+  async getPersonalInterviewSchedule(params?: PersonalScheduleParams): Promise<InterviewSchedulePayload[]> {
+    return interviewApi.mine(params);
   }
 
-  /**
-   * Lấy lịch phỏng vấn theo candidateId (tương thích ngược)
-   */
+
   async getInterviewsByCandidate(candidateId: string): Promise<InterviewSchedulePayload[]> {
     return this.getCandidateInterviews('', candidateId);
   }
@@ -735,21 +456,19 @@ class InterviewService {
    * Cập nhật trạng thái buổi phỏng vấn (Hoàn thành / Đã hủy)
    */
   async updateInterviewStatus(
-    interviewId: string,
-    newStatus: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED',
+    interviewId: string, newStatus: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED',
+    cancellation?: { expectedVersion: number; reason: string },
   ): Promise<InterviewSchedulePayload | null> {
-    const list = this.getStoredInterviews();
-    const index = list.findIndex((item) => item.id === interviewId);
-    if (index === -1) return null;
-
-    list[index].status = newStatus;
-    localStorage.setItem(LOCAL_STORAGE_INTERVIEWS_KEY, JSON.stringify(list));
-    return list[index];
+    if (newStatus !== 'CANCELLED') throw new InterviewApiError('Backend không hỗ trợ đổi trạng thái lịch thủ công.');
+    if (!cancellation) throw new InterviewApiError('Cần tải lại lịch và nhập lý do trước khi hủy.');
+    return interviewApi.cancel(interviewId, cancellation.expectedVersion, cancellation.reason);
   }
 
-  /**
-   * Lưu trữ lịch phỏng vấn vào LocalStorage
-   */
+  async rescheduleInterview(interviewId: string, payload: CreateInterviewSchedulePayload) {
+    return interviewApi.update(interviewId, payload);
+  }
+
+
   saveInterviewToStorage(interview: InterviewSchedulePayload): void {
     try {
       const existing = this.getStoredInterviews();
@@ -776,135 +495,11 @@ class InterviewService {
   /**
    * Đồng bộ tạo sự kiện lịch phỏng vấn vào dòng thời gian (Timeline) của ứng viên
    */
-  private syncInterviewToTimeline(interview: InterviewSchedulePayload): void {
-    try {
-      const rawEvents = localStorage.getItem(LOCAL_STORAGE_TIMELINE_KEY);
-      const events = rawEvents ? JSON.parse(rawEvents) : [];
-
-      const newTimelineEvent = {
-        id: `evt-intv-${Date.now()}`,
-        candidateId: interview.candidateId,
-        eventType: 'INTERVIEW_SCHEDULED',
-        timestamp: new Date().toISOString(),
-        actor: {
-          id: 'usr-current',
-          fullName: interview.createdByName || 'Chuyên viên Tuyển dụng',
-          role: 'Recruiter',
-        },
-        title: `Lên lịch: ${interview.roundName}`,
-        summary: `Đã đặt lịch phỏng vấn ${
-          interview.format === 'ONLINE' ? 'Trực tuyến' : 'Trực tiếp'
-        } với ứng viên ${interview.candidateName} vào ngày ${interview.interviewDate} lúc ${
-          interview.interviewTime
-        }.`,
-        interviewScheduled: {
-          roundName: interview.roundName,
-          interviewDate: interview.scheduledDateTimeISO || interview.startTime,
-          durationMinutes: interview.durationMinutes,
-          format: interview.format,
-          locationOrMeetingLink: interview.locationOrLink,
-          interviewers: interview.interviewers.map((i) => ({
-            name: i.name,
-            role: i.role,
-          })),
-          candidateResponseStatus: 'PENDING',
-        },
-      };
-
-      events.unshift(newTimelineEvent);
-      localStorage.setItem(LOCAL_STORAGE_TIMELINE_KEY, JSON.stringify(events));
-    } catch {
-      // Ignored
-    }
-  }
-
-  /**
-   * Tạo lịch phỏng vấn đồng loạt cho nhiều ứng viên (Task Jira TKNHTTDNB1-433 / User Story S6-01)
-   */
-  async batchCreateInterviewSchedules(
-    payload: BatchCreateInterviewSchedulePayload
-  ): Promise<BatchCreateInterviewScheduleResult> {
-    const { settings, slots } = payload;
-    if (!slots || slots.length === 0) {
-      throw new InterviewApiError('Danh sách ca phỏng vấn rỗng, không thể tạo lịch.', 400);
-    }
-
-    // 1. Thử gọi API Backend nếu có sẵn endpoint
-    try {
-      const response = await axiosClient.post<BatchCreateInterviewScheduleResult>(
-        '/recruitment/interviews/batch-schedule',
-        payload
-      );
-      if (response?.data && Array.isArray(response.data.scheduledInterviews)) {
-        return response.data;
-      }
-    } catch {
-      // Khi API chưa sẵn sàng hoặc offline, tự động fallback lưu cục bộ
-    }
-
-    // 2. Fallback xử lý cục bộ: Tạo từng lịch phỏng vấn tương ứng
-    const scheduledInterviews: InterviewSchedulePayload[] = [];
-
-    const interviewerDetails: InterviewerInfo[] = settings.interviewerIds.map((id) => {
-      const found =
-        settings.interviewers?.find((i) => i.id === id) ||
-        MOCK_INTERNAL_INTERVIEWERS.find((i) => i.id === id);
-      return (
-        found || {
-          id,
-          name: `Người phỏng vấn (${id})`,
-          role: 'Hội đồng phỏng vấn',
-          email: `${id}@smartrecruitment.vn`,
-        }
-      );
-    });
-
-    for (const slot of slots) {
-      const interviewItem: InterviewSchedulePayload = {
-        id: `intv-batch-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        candidateId: slot.candidate.candidateId,
-        candidateName: slot.candidate.candidateName,
-        candidateEmail: slot.candidate.candidateEmail,
-        applicationId: slot.candidate.applicationId || `app-${slot.candidate.candidateId}`,
-        jobTitle: slot.candidate.jobTitle || 'Vị trí ứng tuyển',
-        roundName:
-          slot.candidate.interviewRound ||
-          slot.candidate.customRoundName ||
-          settings.defaultRoundName ||
-          'Vòng Chuyên môn & Kỹ thuật',
-        roundType: slot.candidate.roundType || settings.defaultRoundType || 'TECHNICAL',
-        interviewDate: settings.interviewDate,
-        interviewTime: slot.startTime,
-        scheduledDateTimeISO: slot.startDateTimeISO,
-        startTime: slot.startTime,
-        durationMinutes: slot.durationMinutes,
-        format: settings.format,
-        locationOrLink: settings.locationOrLink,
-        interviewers: interviewerDetails,
-        interviewerIds: settings.interviewerIds,
-        notes: settings.notes,
-        status: 'SCHEDULED',
-        createdAt: new Date().toISOString(),
-        createdByName: 'Chuyên viên Tuyển dụng',
-      };
-
-      scheduledInterviews.push(interviewItem);
-      this.saveInterviewToStorage(interviewItem);
-      this.syncInterviewToTimeline(interviewItem);
-    }
-
-    const sendCalendarInvite =
-      payload.sendCalendarInvite ?? settings.sendCalendarInvite ?? true;
-
-    return {
-      totalScheduled: scheduledInterviews.length,
-      scheduledInterviews,
-      calendarInviteSent: sendCalendarInvite,
-      message: `Đã tạo thành công lịch phỏng vấn đồng loạt cho ${scheduledInterviews.length} ứng viên${
-        sendCalendarInvite ? ' (kèm thư mời lịch Calendar Invite)' : ''
-      }.`,
-    };
+  async batchCreateInterviewSchedules(_payload: BatchCreateInterviewSchedulePayload): Promise<BatchCreateInterviewScheduleResult> {
+    // No verified Frontend adapter exists for a bulk API yet, even if misconfigured as AVAILABLE.
+    throw new BackendCapabilityError(featureStatus('bulkScheduling') === 'AVAILABLE' ? 'NOT_VERIFIED' : featureStatus('bulkScheduling'));
   }
 }
 
 export const interviewService = new InterviewService();
+export default interviewService;

@@ -1,3 +1,5 @@
+import axiosClient from '../src/utils/axiosClient';
+import { interview, page } from './fixtures/interviewContract';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import {
@@ -9,7 +11,6 @@ import {
   LOCAL_STORAGE_TIMELINE_KEY,
 } from '../src/services/interviewService';
 import { InterviewScheduleModal } from '../src/components/Candidate/InterviewScheduleModal';
-import type { InterviewSchedulePayload } from '../src/types/interview';
 import {
   DEFAULT_INTERVIEW_ROUNDS,
   DEFAULT_DURATION_OPTIONS,
@@ -28,6 +29,7 @@ describe('TKNHTTDNB1-426 / S6-02: Thiết kế biểu mẫu đặt lịch phỏn
       clear: () => storage.clear(),
     });
     vi.restoreAllMocks();
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-10-20T00:00:00Z').getTime());
   });
 
   afterEach(() => {
@@ -125,18 +127,12 @@ describe('TKNHTTDNB1-426 / S6-02: Thiết kế biểu mẫu đặt lịch phỏn
   });
 
   describe('4. interviewService - Quản lý nhân sự và lưu lịch phỏng vấn', () => {
-    it('lấy danh sách người phỏng vấn nội bộ và hỗ trợ tìm kiếm theo tên, chức danh, email', async () => {
-      const all = await interviewService.getInternalInterviewers();
-      expect(all.length).toBeGreaterThanOrEqual(4);
-
-      const filteredByName = await interviewService.getInternalInterviewers('Hải');
-      expect(filteredByName.some((i) => i.name.includes('Hải'))).toBe(true);
-
-      const filteredByRole = await interviewService.getInternalInterviewers('Architect');
-      expect(filteredByRole.length).toBeGreaterThan(0);
-
-      const filteredByDept = await interviewService.getInternalInterviewers('Công nghệ');
-      expect(filteredByDept.length).toBeGreaterThan(0);
+    it('không trả danh sách người phỏng vấn mẫu khi thiếu contract picker', async () => {
+      const get = vi.spyOn(axiosClient, 'get');
+      for (const query of [undefined, 'Hải', 'Architect', 'Công nghệ']) {
+        await expect(interviewService.getInternalInterviewers(query)).rejects.toMatchObject({ statusCode: 501 });
+      }
+      expect(get).not.toHaveBeenCalled();
     });
 
     it('chặn lưu lịch nếu thiếu thông tin bắt buộc hoặc thời gian quá khứ', async () => {
@@ -151,7 +147,7 @@ describe('TKNHTTDNB1-426 / S6-02: Thiết kế biểu mẫu đặt lịch phỏn
           roundName: 'Vòng Kỹ thuật',
           interviewDate: futureDate,
           interviewTime: '10:00',
-          scheduledDateTimeISO: '',
+          scheduledDateTimeISO: `${futureDate}T10:00:00+07:00`,
           durationMinutes: 60,
           format: 'ONLINE',
           locationOrLink: 'https://meet.google.com/test',
@@ -162,12 +158,13 @@ describe('TKNHTTDNB1-426 / S6-02: Thiết kế biểu mẫu đặt lịch phỏn
       // Thiếu vòng phỏng vấn
       await expect(
         interviewService.scheduleInterview({
+          applicationId: 'app-123',
           candidateId: 'can-123',
           candidateName: 'Nguyễn Văn A',
           roundName: '',
           interviewDate: futureDate,
           interviewTime: '10:00',
-          scheduledDateTimeISO: '',
+          scheduledDateTimeISO: `${futureDate}T10:00:00+07:00`,
           durationMinutes: 60,
           format: 'ONLINE',
           locationOrLink: 'https://meet.google.com/test',
@@ -178,12 +175,13 @@ describe('TKNHTTDNB1-426 / S6-02: Thiết kế biểu mẫu đặt lịch phỏn
       // Thiếu người phỏng vấn
       await expect(
         interviewService.scheduleInterview({
+          applicationId: 'app-123',
           candidateId: 'can-123',
           candidateName: 'Nguyễn Văn A',
           roundName: 'Vòng Kỹ thuật',
           interviewDate: futureDate,
           interviewTime: '10:00',
-          scheduledDateTimeISO: '',
+          scheduledDateTimeISO: `${futureDate}T10:00:00+07:00`,
           durationMinutes: 60,
           format: 'ONLINE',
           locationOrLink: 'https://meet.google.com/test',
@@ -194,12 +192,13 @@ describe('TKNHTTDNB1-426 / S6-02: Thiết kế biểu mẫu đặt lịch phỏn
       // Thiếu link hoặc địa điểm
       await expect(
         interviewService.scheduleInterview({
+          applicationId: 'app-123',
           candidateId: 'can-123',
           candidateName: 'Nguyễn Văn A',
           roundName: 'Vòng Kỹ thuật',
           interviewDate: futureDate,
           interviewTime: '10:00',
-          scheduledDateTimeISO: '',
+          scheduledDateTimeISO: `${futureDate}T10:00:00+07:00`,
           durationMinutes: 60,
           format: 'ONLINE',
           locationOrLink: '',
@@ -210,12 +209,13 @@ describe('TKNHTTDNB1-426 / S6-02: Thiết kế biểu mẫu đặt lịch phỏn
       // Thời gian quá khứ
       await expect(
         interviewService.scheduleInterview({
+          applicationId: 'app-123',
           candidateId: 'can-123',
           candidateName: 'Nguyễn Văn A',
           roundName: 'Vòng Kỹ thuật',
           interviewDate: yesterday,
           interviewTime: '10:00',
-          scheduledDateTimeISO: '',
+          scheduledDateTimeISO: `${yesterday}T10:00:00+07:00`,
           durationMinutes: 60,
           format: 'ONLINE',
           locationOrLink: 'https://meet.google.com/test',
@@ -224,58 +224,24 @@ describe('TKNHTTDNB1-426 / S6-02: Thiết kế biểu mẫu đặt lịch phỏn
       ).rejects.toThrow('quá khứ');
     });
 
-    it('lưu lịch phỏng vấn thành công vào LocalStorage và đồng bộ Timeline', async () => {
-      const futureDate = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      const payload: Omit<InterviewSchedulePayload, 'id'> = {
-        candidateId: 'candidate-999',
-        candidateName: 'Trần Văn Hoàng',
-        candidateEmail: 'hoang.tran@gmail.com',
-        jobTitle: 'Senior React Developer',
-        roundName: 'Vòng Chuyên môn & Kỹ thuật',
-        interviewDate: futureDate,
-        interviewTime: '14:00',
-        scheduledDateTimeISO: `${futureDate}T14:00:00+07:00`,
-        durationMinutes: 60,
-        format: 'ONLINE',
-        locationOrLink: 'https://meet.google.com/xyz-abcd-efg',
-        interviewers: [
-          {
-            id: 'usr-001',
-            name: 'Nguyễn Văn Hải',
-            role: 'Engineering Manager',
-            email: 'hai@test.com',
-          },
-        ],
-        notes: 'Chuẩn bị bài thuyết trình kỹ thuật',
-        status: 'SCHEDULED',
-      };
-
-      const result = await interviewService.scheduleInterview(payload);
-
-      expect(result).toBeDefined();
-      expect(result.id).toBeDefined();
-      expect(result.candidateId).toBe('candidate-999');
-
-      // Kiểm tra lưu trong LocalStorage interviews
-      const storedInterviews = JSON.parse(
-        localStorage.getItem(LOCAL_STORAGE_INTERVIEWS_KEY) || '[]',
-      );
-      expect(storedInterviews.length).toBe(1);
-      expect(storedInterviews[0].candidateName).toBe('Trần Văn Hoàng');
-
-      // Kiểm tra đồng bộ vào Timeline
-      const storedTimeline = JSON.parse(
-        localStorage.getItem(LOCAL_STORAGE_TIMELINE_KEY) || '[]',
-      );
-      expect(storedTimeline.length).toBe(1);
-      expect(storedTimeline[0].eventType).toBe('INTERVIEW_SCHEDULED');
-      expect(storedTimeline[0].candidateId).toBe('candidate-999');
-      expect(storedTimeline[0].interviewScheduled.roundName).toBe('Vòng Chuyên môn & Kỹ thuật');
-
-      // Lấy lịch theo ứng viên
-      const candidateInterviews = await interviewService.getInterviewsByCandidate('candidate-999');
-      expect(candidateInterviews.length).toBe(1);
-      expect(candidateInterviews[0].id).toBe(result.id);
+    it('lưu lịch qua API và tải lại theo hồ sơ, không tạo timeline local', async () => {
+      const start = new Date(Date.now() + 5 * 86400000).toISOString();
+      const response = interview({ applicationId: 'app-999', startsAt: start, endsAt: new Date(Date.parse(start) + 3600000).toISOString() });
+      const post = vi.spyOn(axiosClient, 'post').mockResolvedValue({ data: response });
+      const get = vi.spyOn(axiosClient, 'get').mockResolvedValue({ data: page([response]) });
+      const result = await interviewService.scheduleInterview({
+        applicationId: 'app-999', candidateId: 'candidate-999', candidateName: 'Trần Văn Hoàng',
+        roundName: response.roundName, interviewDate: start.slice(0, 10), interviewTime: '14:00', scheduledDateTimeISO: start,
+        durationMinutes: 60, format: 'ONLINE', locationOrLink: response.meetingUrl!,
+        interviewers: [{ id: 'usr-001', name: 'Known interviewer', role: 'INTERVIEWER', email: 'test@example.com' }], status: 'SCHEDULED',
+      });
+      expect(result.id).toBe(response.id); expect(result.candidateId).toBe('candidate-999');
+      expect(post).toHaveBeenCalledWith('/applications/app-999/interviews', expect.objectContaining({ participantIds: ['usr-001'], startsAt: start }));
+      expect(localStorage.getItem(LOCAL_STORAGE_INTERVIEWS_KEY)).toBeNull();
+      expect(localStorage.getItem(LOCAL_STORAGE_TIMELINE_KEY)).toBeNull();
+      const reloaded = await interviewService.getCandidateInterviews('app-999');
+      expect(reloaded.map(item => item.id)).toEqual([result.id]);
+      expect(get).toHaveBeenCalledWith('/applications/app-999/interviews', { params: { page: 0, size: 100 } });
     });
   });
 

@@ -102,29 +102,20 @@ describe('interviewEvaluationService', () => {
 
   it('reopens evaluation when requested by a recruiter', async () => {
     const postSpy = vi.spyOn(axiosClient, 'post').mockResolvedValueOnce({
-      data: { success: true, reopenedAt: '2026-10-15T12:00:00.000Z' },
+      data: { id: 'eval-1', interviewId: 'interview-1', status: 'DRAFT', version: 4, updatedAt: '2026-10-15T12:00:00.000Z' },
     });
-
-    await expect(
-      interviewEvaluationService.reopenEvaluation('candidate-1', {
-        evaluationId: 'eval-1',
-        reason: 'Cần bổ sung tiêu chí chuyên môn',
-      }),
-    ).resolves.toEqual({ success: true, reopenedAt: '2026-10-15T12:00:00.000Z' });
-
-    expect(postSpy).toHaveBeenCalledWith(
-      '/recruitment/candidates/candidate-1/interviews/reopen-evaluation',
-      {
-        evaluationId: 'eval-1',
-        reason: 'Cần bổ sung tiêu chí chuyên môn',
-      },
-    );
+    await expect(interviewEvaluationService.reopenEvaluation('interview-1', {
+      evaluationId: 'eval-1', expectedVersion: 3, reason: 'Cần bổ sung tiêu chí chuyên môn',
+    })).resolves.toEqual({ success: true, reopenedAt: '2026-10-15T12:00:00.000Z' });
+    expect(postSpy).toHaveBeenCalledWith('/interviews/interview-1/evaluations/eval-1/reopen', {
+      expectedVersion: 3, reason: 'Cần bổ sung tiêu chí chuyên môn',
+    });
   });
 
-  it('rejects reopening when candidateId is empty', async () => {
+  it('rejects reopening when interviewId is empty', async () => {
     await expect(
       interviewEvaluationService.reopenEvaluation('   '),
-    ).rejects.toThrow('Thiếu mã ứng viên để mở lại phiếu đánh giá.');
+    ).rejects.toThrow('Cần interviewId, formId, expectedVersion và lý do để mở lại phiếu.');
   });
 });
 

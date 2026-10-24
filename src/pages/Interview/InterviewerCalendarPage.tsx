@@ -1,3 +1,5 @@
+import { featureStatus } from '../../services/backendCapabilities';
+import { CapabilityNotice } from '../../components/Interview/CapabilityNotice';
 import React, { useState, useEffect, useMemo, useCallback, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -33,15 +35,15 @@ import { interviewService, calculateEndTime } from '../../services/interviewServ
 import { candidateProfileService } from '../../services/candidateProfileService';
 import { useContext } from 'react';
 import { ToastContext } from '../../components/notifications/ToastContext';
-import type { InterviewSchedulePayload, InterviewFormat } from '../../types/interview';
+import type { InterviewSchedulePayload } from '../../types/interview';
 import CandidateResponseStatus from '../../components/Candidate/CandidateResponseStatus';
 import { InterviewEvaluationModal } from '../../components/Interview/InterviewEvaluationModal';
+import { interviewerCalendarService } from '../../services/interviewerCalendarService';
 import { resolveEvaluationCriteriaForJob } from '../../utils/interviewEvaluationHelper';
 
 export type CalendarViewMode = 'CARDS' | 'CALENDAR';
 export type FilterStatus = 'ALL' | 'NEED_EVALUATION' | 'UPCOMING' | 'TODAY' | 'COMPLETED';
 
-const LOCAL_STORAGE_EVALUATION_PREFIX = 'smart_recruitment_interview_evaluation_';
 
 export const InterviewerCalendarPage: React.FC = () => {
   const navigate = useNavigate();
@@ -73,205 +75,8 @@ export const InterviewerCalendarPage: React.FC = () => {
     }).format(new Date());
   }, []);
 
-  /**
-   * Khởi tạo dữ liệu mẫu phong phú gán cho Interviewer hiện tại
-   * nếu hệ thống chưa có dữ liệu hoặc dùng offline
-   */
-  const createDefaultInterviews = useCallback((): InterviewSchedulePayload[] => {
-    // Tính toán mốc ngày: Hôm nay, Ngày mai, Hôm qua, 3 ngày trước
-    const now = new Date();
-    const formatDate = (offsetDays: number) => {
-      const d = new Date(now);
-      d.setDate(d.getDate() + offsetDays);
-      return new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Ho_Chi_Minh',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }).format(d);
-    };
-
-    const dateToday = formatDate(0);
-    const dateTomorrow = formatDate(1);
-    const dateYesterday = formatDate(-1);
-    const datePast3Days = formatDate(-3);
-
-    return [
-      {
-        id: 'int-cal-001',
-        candidateId: 'can-demo-891',
-        candidateName: 'Lê Quốc Bảo',
-        candidateEmail: 'bao.lequoc.tech@gmail.com',
-        applicationId: 'app-2026-002',
-        jobTitle: 'Senior Frontend Developer (React, TypeScript)',
-        departmentName: 'Khối Công nghệ & Sản phẩm',
-        roundName: 'Vòng 2: Chuyên môn & Kỹ thuật',
-        interviewRound: 'Vòng 2: Chuyên môn & Kỹ thuật',
-        interviewDate: dateToday,
-        interviewTime: '14:00',
-        scheduledDateTimeISO: `${dateToday}T14:00:00+07:00`,
-        startTime: `${dateToday}T14:00:00+07:00`,
-        durationMinutes: 60,
-        format: 'ONLINE' as InterviewFormat,
-        interviewType: 'ONLINE' as InterviewFormat,
-        locationOrLink: 'https://meet.google.com/abc-defg-hij',
-        interviewerIds: [interviewerId, 'usr-005'],
-        interviewers: [
-          {
-            id: interviewerId,
-            name: interviewerName,
-            email: interviewerEmail,
-            role: 'Trưởng hội đồng phỏng vấn (Interviewer)',
-          },
-          {
-            id: 'usr-005',
-            name: 'Vũ Đức Đạt',
-            email: 'dat.vu@smartrecruitment.vn',
-            role: 'Frontend Tech Lead',
-          },
-        ],
-        status: 'SCHEDULED',
-        candidateResponse: {
-          status: 'CONFIRMED',
-          respondedAt: `${dateToday}T08:30:00+07:00`,
-        },
-        cvFileName: 'CV_LeQuocBao_Senior_Frontend_Lead_2026.pdf',
-        cvUrl: '/assets/sample-cv.pdf',
-        isEvaluationSubmitted: false,
-        notes: 'Tập trung đánh giá sâu về React 19, Tối ưu hiệu năng và Tư duy phân rã component.',
-      },
-      {
-        id: 'int-cal-002',
-        candidateId: 'can-demo-892',
-        candidateName: 'Nguyễn Hoàng Nam',
-        candidateEmail: 'nam.nguyen.backend@gmail.com',
-        applicationId: 'app-2026-003',
-        jobTitle: 'Backend Tech Lead (Golang / Microservices)',
-        departmentName: 'Khối Công nghệ & Sản phẩm',
-        roundName: 'Vòng 2: Kiến trúc Hệ thống',
-        interviewRound: 'Vòng 2: Kiến trúc Hệ thống',
-        interviewDate: dateYesterday,
-        interviewTime: '10:00',
-        scheduledDateTimeISO: `${dateYesterday}T10:00:00+07:00`,
-        startTime: `${dateYesterday}T10:00:00+07:00`,
-        durationMinutes: 60,
-        format: 'ONLINE' as InterviewFormat,
-        interviewType: 'ONLINE' as InterviewFormat,
-        locationOrLink: 'https://zoom.us/j/9876543210?pwd=rec',
-        interviewerIds: [interviewerId, 'usr-003'],
-        interviewers: [
-          {
-            id: interviewerId,
-            name: interviewerName,
-            email: interviewerEmail,
-            role: 'Người phỏng vấn chính',
-          },
-          {
-            id: 'usr-003',
-            name: 'Lê Minh Tuấn',
-            email: 'tuan.le@smartrecruitment.vn',
-            role: 'Kiến trúc sư Phần mềm (Principal Architect)',
-          },
-        ],
-        status: 'COMPLETED',
-        candidateResponse: {
-          status: 'CONFIRMED',
-        },
-        cvFileName: 'CV_NguyenHoangNam_Backend_Lead.pdf',
-        cvUrl: '/assets/sample-cv-backend.pdf',
-        isEvaluationSubmitted: false, // Buổi đã diễn ra nhưng CHƯA NỘP PHIẾU ĐÁNH GIÁ (AC 2)
-        notes: 'Buổi phỏng vấn đã diễn ra ngày hôm qua. Cần hoàn tất nộp phiếu đánh giá năng lực sớm.',
-      },
-      {
-        id: 'int-cal-003',
-        candidateId: 'can-demo-893',
-        candidateName: 'Trần Mai Anh',
-        candidateEmail: 'maianh.designer@gmail.com',
-        applicationId: 'app-2026-004',
-        jobTitle: 'Lead UI/UX Designer',
-        departmentName: 'Trung tâm Trải nghiệm Khách hàng',
-        roundName: 'Vòng 1: Đánh giá Portfolio & Năng lực Thiết kế',
-        interviewRound: 'Vòng 1: Đánh giá Portfolio & Năng lực Thiết kế',
-        interviewDate: dateTomorrow,
-        interviewTime: '09:30',
-        scheduledDateTimeISO: `${dateTomorrow}T09:30:00+07:00`,
-        startTime: `${dateTomorrow}T09:30:00+07:00`,
-        durationMinutes: 45,
-        format: 'OFFLINE' as InterviewFormat,
-        interviewType: 'OFFLINE' as InterviewFormat,
-        locationOrLink: 'Phòng họp Tokyo - Tầng 5, Tòa nhà Innovation Hub',
-        interviewerIds: [interviewerId, 'usr-004'],
-        interviewers: [
-          {
-            id: interviewerId,
-            name: interviewerName,
-            email: interviewerEmail,
-            role: 'Người phỏng vấn',
-          },
-          {
-            id: 'usr-004',
-            name: 'Phạm Thị Lan Hương',
-            email: 'huong.pham@smartrecruitment.vn',
-            role: 'Giám đốc Nhân sự (HR Director)',
-          },
-        ],
-        status: 'SCHEDULED',
-        candidateResponse: {
-          status: 'CONFIRMED',
-        },
-        cvFileName: 'Portfolio_CV_TranMaiAnh_Design.pdf',
-        cvUrl: '/assets/sample-cv-design.pdf',
-        isEvaluationSubmitted: false,
-        notes: 'Ứng viên sẽ trình chiếu Case Study dự án thiết kế Design System doanh nghiệp.',
-      },
-      {
-        id: 'int-cal-004',
-        candidateId: 'can-demo-894',
-        candidateName: 'Vũ Phương Thảo',
-        candidateEmail: 'thao.vu.qa@gmail.com',
-        applicationId: 'app-2026-005',
-        jobTitle: 'Chuyên viên QA/QC Automation Lead',
-        departmentName: 'Bộ phận Đảm bảo Chất lượng',
-        roundName: 'Vòng 1: Phỏng vấn Kỹ thuật Automation',
-        interviewRound: 'Vòng 1: Phỏng vấn Kỹ thuật Automation',
-        interviewDate: datePast3Days,
-        interviewTime: '15:30',
-        scheduledDateTimeISO: `${datePast3Days}T15:30:00+07:00`,
-        startTime: `${datePast3Days}T15:30:00+07:00`,
-        durationMinutes: 60,
-        format: 'OFFLINE' as InterviewFormat,
-        interviewType: 'OFFLINE' as InterviewFormat,
-        locationOrLink: 'Phòng họp Hà Nội - Tầng 3, Trụ sở chính',
-        interviewerIds: [interviewerId, 'usr-006'],
-        interviewers: [
-          {
-            id: interviewerId,
-            name: interviewerName,
-            email: interviewerEmail,
-            role: 'Người phỏng vấn',
-          },
-          {
-            id: 'usr-006',
-            name: 'Hoàng Minh Châu',
-            email: 'chau.hoang@smartrecruitment.vn',
-            role: 'Trưởng nhóm Kiểm thử (QA Lead)',
-          },
-        ],
-        status: 'COMPLETED',
-        candidateResponse: {
-          status: 'CONFIRMED',
-        },
-        cvFileName: 'CV_VuPhuongThao_QA_Automation.pdf',
-        cvUrl: '/assets/sample-cv-qa.pdf',
-        isEvaluationSubmitted: true, // ĐÃ HOÀN TẤT NỘP PHIẾU ĐÁNH GIÁ
-        evaluationScore: 4.4,
-        notes: 'Đã hoàn tất đánh giá và chấm điểm năng lực. Kết luận: Đạt yêu cầu cao.',
-      },
-    ];
-  }, [interviewerId, interviewerName, interviewerEmail]);
-
-  // State chính - khởi tạo sẵn danh sách phỏng vấn cá nhân hóa (AC 1 & AC 3)
-  const [interviews, setInterviews] = useState<InterviewSchedulePayload[]>(() => createDefaultInterviews());
+  // Only verified API results populate the calendar.
+  const [interviews, setInterviews] = useState<InterviewSchedulePayload[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<CalendarViewMode>('CARDS');
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('ALL');
@@ -306,7 +111,7 @@ export const InterviewerCalendarPage: React.FC = () => {
       // Kiểm soát chặt chẽ ở tầng giao diện và dữ liệu (AC 3: Data Privacy & Access Control)
       // TUYỆT ĐỐI CHỈ HIỂN THỊ CÁC BUỔI MÀ CHÍNH TÀI KHOẢN HIỆN TẠI ĐƯỢC MỜI
       const sanitizedUserEmail = (interviewerEmail || '').toLowerCase().trim();
-      let assignedList = (rawList || []).filter((item) => {
+      const assignedList = (rawList || []).filter((item) => {
         const inIds = Boolean(item.interviewerIds && item.interviewerIds.includes(interviewerId));
         const inInterviewers = Boolean(
           item.interviewers &&
@@ -319,32 +124,12 @@ export const InterviewerCalendarPage: React.FC = () => {
         return inIds || inInterviewers;
       });
 
-      // Nếu bộ nhớ trống (lần đầu truy cập / demo), khởi tạo danh sách mẫu cá nhân hóa
-      if (assignedList.length === 0) {
-        const defaults = createDefaultInterviews();
-        assignedList = defaults;
-        defaults.forEach((item) => interviewService.saveInterviewToStorage(item));
-      }
-
-      // Kiểm tra trạng thái nộp phiếu đánh giá từ LocalStorage đồng bộ
-      const enrichedList = assignedList.map((item) => {
-        const evalKey = `${LOCAL_STORAGE_EVALUATION_PREFIX}${item.id}_${interviewerId}`;
-        const hasSavedEvaluation = localStorage.getItem(evalKey);
-
-        if (hasSavedEvaluation) {
-          try {
-            const parsed = JSON.parse(hasSavedEvaluation);
-            return {
-              ...item,
-              isEvaluationSubmitted: true,
-              evaluationScore: parsed.calculatedTotalScore ?? item.evaluationScore,
-            };
-          } catch {
-            return { ...item, isEvaluationSubmitted: true };
-          }
-        }
-        return item;
-      });
+      const enrichedList = await Promise.all(assignedList.map(async item => {
+        if (!item.id || featureStatus('evaluations') !== 'AVAILABLE') return { ...item, isEvaluationSubmitted: undefined };
+        const state = await interviewerCalendarService.checkEvaluationSubmittedStatus(item.id);
+        return { ...item, isEvaluationSubmitted: state.hasSubmitted,
+          evaluationScore: state.score, evaluationSubmittedAt: state.submittedAt };
+      }));
 
       // Sắp xếp theo mốc thời gian diễn ra gần nhất (Sắp xếp tăng dần theo startTime / ISO)
       enrichedList.sort((a, b) => {
@@ -356,15 +141,14 @@ export const InterviewerCalendarPage: React.FC = () => {
       setInterviews(enrichedList);
     } catch {
       addToast({
-        message: 'Không thể đồng bộ lịch phỏng vấn cá nhân từ máy chủ, đang dùng dữ liệu dự phòng.',
+        message: 'Không thể tải lịch hoặc trạng thái đánh giá từ máy chủ. Vui lòng thử lại.',
         type: 'warning',
       });
-      const defaults = createDefaultInterviews();
-      setInterviews(defaults);
+      setInterviews([]);
     } finally {
       setIsLoading(false);
     }
-  }, [interviewerId, interviewerEmail, createDefaultInterviews, addToast]);
+  }, [interviewerId, interviewerEmail, addToast]);
 
   useEffect(() => {
     loadSchedule();
@@ -453,7 +237,7 @@ export const InterviewerCalendarPage: React.FC = () => {
     const upcoming = interviews.filter((i) => i.interviewDate >= todayVN && i.status === 'SCHEDULED').length;
 
     // Các buổi đã diễn ra nhưng CHƯA NỘP PHIẾU ĐÁNH GIÁ (AC 2)
-    const needEvaluation = interviews.filter((i) => checkIsPastInterview(i) && !i.isEvaluationSubmitted).length;
+    const needEvaluation = interviews.filter((i) => checkIsPastInterview(i) && i.isEvaluationSubmitted === false).length;
     const completed = interviews.filter((i) => i.isEvaluationSubmitted || i.status === 'COMPLETED').length;
 
     return { total, today, upcoming, needEvaluation, completed };
@@ -467,10 +251,10 @@ export const InterviewerCalendarPage: React.FC = () => {
       const isPast = checkIsPastInterview(item);
 
       // 1. Lọc theo trạng thái
-      if (statusFilter === 'NEED_EVALUATION' && (!isPast || item.isEvaluationSubmitted)) return false;
+      if (statusFilter === 'NEED_EVALUATION' && (!isPast || item.isEvaluationSubmitted !== false)) return false;
       if (statusFilter === 'TODAY' && item.interviewDate !== todayVN) return false;
       if (statusFilter === 'UPCOMING' && (item.interviewDate < todayVN || item.status !== 'SCHEDULED')) return false;
-      if (statusFilter === 'COMPLETED' && !item.isEvaluationSubmitted && item.status !== 'COMPLETED') return false;
+      if (statusFilter === 'COMPLETED' && item.isEvaluationSubmitted !== true && item.status !== 'COMPLETED') return false;
 
       // 2. Lọc theo hình thức
       if (formatFilter !== 'ALL' && item.format !== formatFilter) return false;
@@ -532,6 +316,9 @@ export const InterviewerCalendarPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-6 space-y-6">
+      <CapabilityNotice feature="schedules" />
+      <CapabilityNotice feature="evaluations" />
+      <CapabilityNotice feature="assignedProfile" />
       {/* 1. Header Trang & Phân quyền bảo mật cá nhân (AC 3) */}
       <div className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-7 shadow-xs">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
@@ -885,7 +672,7 @@ export const InterviewerCalendarPage: React.FC = () => {
           {filteredInterviews.map((item) => {
             const isToday = item.interviewDate === todayVN;
             const isPast = checkIsPastInterview(item);
-            const isNeedEvaluation = isPast && !item.isEvaluationSubmitted;
+            const isNeedEvaluation = isPast && item.isEvaluationSubmitted === false;
             const isCompletedEvaluation = item.isEvaluationSubmitted;
 
             return (
@@ -1054,9 +841,9 @@ export const InterviewerCalendarPage: React.FC = () => {
                       {/* LIÊN KẾT MỞ XEM TRƯỚC CV ỨNG VIÊN (AC 2) */}
                       <button
                         type="button"
-                        onClick={() => setPreviewCvInterview(item)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 text-indigo-700 transition cursor-pointer shadow-2xs"
-                        title="Xem trước tệp CV của ứng viên ngay trong hệ thống"
+                        disabled
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-indigo-200 bg-indigo-50/60 text-indigo-700 opacity-60 cursor-not-allowed shadow-2xs"
+                        title="Chức năng xem CV theo phân công hiện chưa khả dụng"
                       >
                         <FileText className="w-3.5 h-3.5 text-indigo-600" />
                         Xem trước CV
@@ -1065,6 +852,7 @@ export const InterviewerCalendarPage: React.FC = () => {
                       {/* NÚT ĐÁNH GIÁ NĂNG LỰC / NỘP PHIẾU ĐÁNH GIÁ (AC 2) */}
                       <button
                         type="button"
+                        disabled={featureStatus('evaluations') !== 'AVAILABLE'}
                         onClick={() => setEvaluatingInterview(item)}
                         className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl transition cursor-pointer shadow-xs ${
                           isNeedEvaluation
@@ -1292,6 +1080,7 @@ export const InterviewerCalendarPage: React.FC = () => {
       {/* 7. MODAL PHIẾU ĐÁNH GIÁ NĂNG LỰC PHỎNG VẤN (Tích hợp InterviewEvaluationModal) */}
       {evaluatingInterview && (
         <InterviewEvaluationModal
+          interviewId={evaluatingInterview.id}
           isOpen={true}
           onClose={() => setEvaluatingInterview(null)}
           candidateId={evaluatingInterview.candidateId}
@@ -1318,9 +1107,6 @@ export const InterviewerCalendarPage: React.FC = () => {
           frameworkVersion="v1.0"
           criteria={resolveEvaluationCriteriaForJob(evaluatingInterview.jobTitle)}
           onSubmit={(evaluationData) => {
-            const evalKey = `${LOCAL_STORAGE_EVALUATION_PREFIX}${evaluatingInterview.id}_${interviewerId}`;
-            localStorage.setItem(evalKey, JSON.stringify(evaluationData));
-
             // Cập nhật trạng thái ngay trên danh sách hiện tại
             setInterviews((prev) =>
               prev.map((item) =>
@@ -1328,7 +1114,7 @@ export const InterviewerCalendarPage: React.FC = () => {
                   ? {
                       ...item,
                       isEvaluationSubmitted: true,
-                      status: 'COMPLETED',
+
                       evaluationScore: evaluationData.calculatedTotalScore ?? undefined,
                     }
                   : item,

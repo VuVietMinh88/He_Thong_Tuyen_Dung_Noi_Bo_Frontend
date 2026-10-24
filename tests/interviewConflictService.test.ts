@@ -1,3 +1,4 @@
+import { interview } from './fixtures/interviewContract';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import axios from 'axios';
@@ -31,6 +32,7 @@ describe('TKNHTTDNB1-440 / S6-04: Tích hợp cho phép ghi đè xung đột có
       clear: () => storage.clear(),
     });
     vi.restoreAllMocks();
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-10-20T00:00:00Z').getTime());
   });
 
   afterEach(() => {
@@ -76,59 +78,30 @@ describe('TKNHTTDNB1-440 / S6-04: Tích hợp cho phép ghi đè xung đột có
       );
     });
 
-    it('ném InterviewConflictValidationError khi lý do ghi đè dưới 5 ký tự', async () => {
-      const shortReason = { ...validPayload, overrideReason: 'abc' };
-      await expect(interviewConflictService.overrideInterviewConflict(shortReason)).rejects.toThrow(
-        InterviewConflictValidationError,
-      );
-      await expect(interviewConflictService.overrideInterviewConflict(shortReason)).rejects.toThrow(
-        /tối thiểu 5 ký tự/i,
-      );
+    it('chấp nhận lý do ngắn không rỗng theo contract, không tự thêm giới hạn 5 ký tự', async () => {
+      const post = vi.spyOn(axiosClient, 'post').mockResolvedValue({ data: interview() });
+      await expect(interviewConflictService.overrideInterviewConflict({ ...validPayload, overrideReason: 'abc' })).resolves.toMatchObject({ status: 'SCHEDULED' });
+      expect(post).toHaveBeenCalledWith('/applications/app-override-001/interviews', expect.objectContaining({ overrideReason: 'abc', overrideConflicts: true }));
     });
   });
 
   describe('2. Thực thi ghi đè thành công và lưu trữ (overrideInterviewConflict)', () => {
-    it('gọi API thành công, lưu vào LocalStorage và đồng bộ Timeline sự kiện ghi đè', async () => {
-      vi.spyOn(axiosClient, 'post').mockResolvedValueOnce({
-        data: {
-          id: 'intv-ovr-saved-01',
-          applicationId: 'app-override-001',
-          roundName: 'Vòng Kỹ thuật & Chuyên môn',
-          isOverride: true,
-          overrideReason: 'Đã có thỏa thuận ưu tiên phòng họp với Ban Giám đốc khối Tech.',
-        },
-      });
-
+    it('ghi đè thành công dựa trên Backend và không tạo nhật ký local giả', async () => {
+      const post = vi.spyOn(axiosClient, 'post').mockResolvedValue({ data: interview() });
       const result = await interviewConflictService.overrideInterviewConflict(validPayload);
-
-      expect(result).toBeDefined();
-      expect(result.isOverride).toBe(true);
-      expect(result.overrideReason).toBe(validPayload.overrideReason);
-
-      // Kiểm tra lưu vào LocalStorage
-      const stored = JSON.parse(storage.get(LOCAL_STORAGE_INTERVIEWS_KEY) || '[]');
-      expect(stored.some((i: { isOverride?: boolean }) => i.isOverride === true)).toBe(true);
-
-      // Kiểm tra đồng bộ vào Timeline
-      const timeline = JSON.parse(storage.get(LOCAL_STORAGE_TIMELINE_KEY) || '[]');
-      const overrideEvent = timeline.find((e: { eventType: string }) => e.eventType === 'INTERVIEW_OVERRIDE');
-      expect(overrideEvent).toBeDefined();
-      expect(overrideEvent?.title).toContain('Ghi đè lịch phỏng vấn');
-
-      // Kiểm tra getOverrideHistory
-      const history = interviewConflictService.getOverrideHistory();
-      expect(history.length).toBeGreaterThanOrEqual(1);
+      expect(result.status).toBe('SCHEDULED');
+      expect(result.id).toBe('interview-1');
+      expect(post).toHaveBeenCalledWith('/applications/app-override-001/interviews', expect.objectContaining({ overrideConflicts: true, overrideReason: validPayload.overrideReason }));
+      expect(storage.has(LOCAL_STORAGE_INTERVIEWS_KEY)).toBe(false);
+      expect(storage.has(LOCAL_STORAGE_TIMELINE_KEY)).toBe(false);
+      expect(() => interviewConflictService.getOverrideHistory()).toThrow('Backend');
     });
 
-    it('fallback lưu dữ liệu offline khi mạng lỗi hoặc máy chủ chưa sẵn sàng', async () => {
-      vi.spyOn(axiosClient, 'post').mockRejectedValueOnce(new Error('Network disconnected'));
-
-      const result = await interviewConflictService.overrideInterviewConflict(validPayload);
-
-      expect(result).toBeDefined();
-      expect(result.candidateName).toBe('Đặng Tuấn Anh');
-      expect(result.isOverride).toBe(true);
-      expect(result.overrideReason).toBe(validPayload.overrideReason);
+    it('không báo ghi đè thành công khi mạng lỗi', async () => {
+      vi.spyOn(axiosClient, 'post').mockRejectedValue(new Error('Network disconnected'));
+      await expect(interviewConflictService.overrideInterviewConflict(validPayload)).rejects.toThrow('Network disconnected');
+      expect(storage.has(LOCAL_STORAGE_INTERVIEWS_KEY)).toBe(false);
+      expect(storage.has(LOCAL_STORAGE_TIMELINE_KEY)).toBe(false);
     });
   });
 
@@ -146,7 +119,7 @@ describe('TKNHTTDNB1-440 / S6-04: Tích hợp cho phép ghi đè xung đột có
         config: {} as any,
       };
 
-      vi.spyOn(axiosClient, 'post').mockRejectedValueOnce(axiosError);
+      vi.spyOn(axiosClient, 'post').mockRejectedValue(axiosError);
 
       await expect(
         interviewConflictService.overrideInterviewConflict(validPayload),
@@ -175,7 +148,7 @@ describe('TKNHTTDNB1-440 / S6-04: Tích hợp cho phép ghi đè xung đột có
         config: {} as any,
       };
 
-      vi.spyOn(axiosClient, 'post').mockRejectedValueOnce(axiosError);
+      vi.spyOn(axiosClient, 'post').mockRejectedValue(axiosError);
 
       await expect(
         interviewConflictService.overrideInterviewConflict(validPayload),
@@ -195,7 +168,7 @@ describe('TKNHTTDNB1-440 / S6-04: Tích hợp cho phép ghi đè xung đột có
         config: {} as any,
       };
 
-      vi.spyOn(axiosClient, 'post').mockRejectedValueOnce(axiosError);
+      vi.spyOn(axiosClient, 'post').mockRejectedValue(axiosError);
 
       await expect(
         interviewConflictService.overrideInterviewConflict(validPayload),
@@ -215,7 +188,7 @@ describe('TKNHTTDNB1-440 / S6-04: Tích hợp cho phép ghi đè xung đột có
         config: {} as any,
       };
 
-      vi.spyOn(axiosClient, 'post').mockRejectedValueOnce(axiosError);
+      vi.spyOn(axiosClient, 'post').mockRejectedValue(axiosError);
 
       await expect(
         interviewConflictService.overrideInterviewConflict(validPayload),
