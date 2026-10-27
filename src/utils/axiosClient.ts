@@ -15,7 +15,6 @@ import { tokenService } from '../services/token.service';
 import { authSyncService } from '../services/authSync.service';
 import { captureSessionExpiryDraft } from '../services/sessionDraft.service';
 import { getOrCreateDeviceId } from './deviceId';
-import { getMockApiResponse } from './mockApiFallback';
 
 export type RetryRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
@@ -263,24 +262,7 @@ axiosClient.interceptors.response.use(
     const originalRequest = error.config as RetryRequestConfig | undefined;
     const status = error.response?.status;
 
-    // Fallback mock API in local dev / offline mode (bypassed in automated tests)
-    if (!error.response && originalRequest?.url && import.meta.env.MODE !== 'test') {
-      const mockResult = getMockApiResponse(
-        originalRequest.url,
-        originalRequest.method,
-        originalRequest.params,
-        originalRequest.data,
-      );
-      if (mockResult !== null) {
-        return {
-          data: mockResult,
-          status: 200,
-          statusText: 'OK (Mock Data Fallback)',
-          headers: {},
-          config: originalRequest,
-        };
-      }
-    }
+
 
     // 403 Forbidden handler
     if (status === 403 && originalRequest && !isAuthRequest(originalRequest.url)) {

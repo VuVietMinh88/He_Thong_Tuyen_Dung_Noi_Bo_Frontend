@@ -47,20 +47,7 @@ export const LoginForm = () => {
     return () => window.clearInterval(intervalId);
   }, [email, lockVersion]);
 
-  // Đăng nhập nhanh chế độ Quản trị viên (Khắc phục khi chưa có backend hoặc cần vào nhanh)
-  const handleQuickAdminLogin = () => {
-    tokenService.setAccessToken('mock-admin-token-123');
-    tokenService.setUserData({
-      id: 'admin-01',
-      email: 'admin@smartrecruitment.vn',
-      fullName: 'Quản Trị Viên',
-      roles: ['ADMIN'],
-    });
-    window.dispatchEvent(new Event('auth:changed'));
-    setSuccessUserName('Quản Trị Viên');
-    setPendingNavigateTo('/dashboard');
-    setShowSuccessOverlay(true);
-  };
+
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -69,31 +56,24 @@ export const LoginForm = () => {
     setSubmitError('');
 
     const normalizedEmail = email.trim().toLowerCase();
-    const isSpecialAdmin = normalizedEmail === 'admin' || normalizedEmail === 'administrator';
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     let isValid = true;
 
     if (!normalizedEmail) {
-      setEmailError('Vui lòng nhập email hoặc tài khoản công ty');
+      setEmailError('Vui lòng nhập email');
       isValid = false;
-    } else if (!isSpecialAdmin && !emailRegex.test(normalizedEmail)) {
-      setEmailError('Vui lòng nhập email hợp lệ (vd: admin@congty.com hoặc admin)');
+    } else if (!emailRegex.test(normalizedEmail)) {
+      setEmailError('Vui lòng nhập email hợp lệ (vd: user@congty.com)');
       isValid = false;
     }
     if (!password) {
       setPasswordError('Vui lòng nhập mật khẩu');
       isValid = false;
-    } else if (password.length < 4 && !isSpecialAdmin) {
+    } else if (password.length < 4) {
       setPasswordError('Mật khẩu phải có độ dài tối thiểu từ 4 ký tự trở lên');
       isValid = false;
     }
     if (!isValid || lockStatus.isLocked) return;
-
-    // Nếu gõ tài khoản admin -> cho phép đăng nhập ngay
-    if (isSpecialAdmin) {
-      handleQuickAdminLogin();
-      return;
-    }
 
     setIsLoading(true);
     try {
@@ -152,12 +132,6 @@ export const LoginForm = () => {
 
       const errorMessage = error instanceof Error ? error.message : 'LOGIN_REQUEST_FAILED';
 
-      // Nếu gặp lỗi mạng nhưng người dùng đang nhập email admin -> fallback tự động vào demo admin
-      if (errorMessage === 'NETWORK_ERROR' && (normalizedEmail.includes('admin') || normalizedEmail.includes('quan_tri'))) {
-        handleQuickAdminLogin();
-        return;
-      }
-
       if (errorMessage === 'INVALID_CREDENTIALS') {
         const lock = registerFailedLoginAttempt(normalizedEmail);
         setLockVersion((version) => version + 1);
@@ -175,7 +149,7 @@ export const LoginForm = () => {
         return;
       }
       if (errorMessage === 'NETWORK_ERROR') {
-        const msg = 'Không thể kết nối tới máy chủ backend. Bạn có thể bấm nút Đăng nhập nhanh bên dưới.';
+        const msg = 'Không thể kết nối tới máy chủ backend. Vui lòng kiểm tra lại kết nối mạng.';
         setSubmitError(msg);
         addToast({ type: 'error', message: msg });
         return;
@@ -313,25 +287,6 @@ export const LoginForm = () => {
               {isLoading ? 'Đang xác thực...' : 'Đăng nhập hệ thống'}
             </button>
 
-            {/* Phân cách */}
-            <div className="relative pt-2">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-gray-200" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-3 text-gray-400 font-semibold">Hoặc truy cập nhanh</span>
-              </div>
-            </div>
-
-            {/* Nút vào thẳng Dashboard */}
-            <button
-              type="button"
-              onClick={handleQuickAdminLogin}
-              className="w-full rounded-xl border border-indigo-200 bg-indigo-50/90 py-3 px-4 text-xs font-bold text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer"
-            >
-              <span className="text-sm">⚡</span>
-              <span>Đăng nhập nhanh với quyền Quản trị viên (Admin)</span>
-            </button>
           </form>
         </>
       )}
