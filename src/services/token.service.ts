@@ -40,18 +40,7 @@ const clearPersistedTokens = (): void => {
 
 export const tokenService = {
   getToken(): string | null {
-    if (typeof window !== 'undefined' && window.location?.search?.includes('demo=admin')) {
-      try {
-        window.localStorage.setItem(ACCESS_TOKEN_KEY, 'demo-admin-token');
-        window.localStorage.setItem(USER_DATA_KEY, JSON.stringify({
-          id: 'admin-01',
-          email: 'admin@smartrecruitment.vn',
-          fullName: 'Quản Trị Viên',
-          roles: ['ADMIN'],
-        }));
-      } catch {}
-      return 'demo-admin-token';
-    }
+
     try {
       const token = window.localStorage.getItem(ACCESS_TOKEN_KEY);
       if (isInvalidStoredToken(token)) {
@@ -139,14 +128,7 @@ export const tokenService = {
   },
 
   getUserData(): User | null {
-    if (typeof window !== 'undefined' && window.location?.search?.includes('demo=admin')) {
-      return {
-        id: 'admin-01',
-        email: 'admin@smartrecruitment.vn',
-        fullName: 'Quản Trị Viên',
-        roles: ['ADMIN'],
-      };
-    }
+
     try {
       const serializedUser = window.localStorage.getItem(USER_DATA_KEY);
       if (!serializedUser) return null;

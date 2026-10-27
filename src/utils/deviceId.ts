@@ -58,13 +58,16 @@ export const getOrCreateDeviceId = (): string => {
   const storage = getStorage();
   if (storage) {
     try {
-      const storedId = storage.getItem(AUTH_STORAGE_KEYS.DEVICE_ID);
+      const storedId = storage.getItem(AUTH_STORAGE_KEYS.DEVICE_ID) ?? storage.getItem('loginDeviceId');
       if (isValidUuidV4(storedId)) {
+        storage.setItem(AUTH_STORAGE_KEYS.DEVICE_ID, storedId.trim());
+        storage.setItem('loginDeviceId', storedId.trim());
         return storedId.trim();
       }
 
       const newDeviceId = generateUuidV4();
       storage.setItem(AUTH_STORAGE_KEYS.DEVICE_ID, newDeviceId);
+      storage.setItem('loginDeviceId', newDeviceId);
       return newDeviceId;
     } catch {
       // Storage quota or restriction fallback
@@ -81,7 +84,7 @@ export const getDeviceId = (): string | null => {
   const storage = getStorage();
   if (storage) {
     try {
-      const storedId = storage.getItem(AUTH_STORAGE_KEYS.DEVICE_ID);
+      const storedId = storage.getItem(AUTH_STORAGE_KEYS.DEVICE_ID) ?? storage.getItem('loginDeviceId');
       return isValidUuidV4(storedId) ? storedId.trim() : null;
     } catch {
       // Fallback
