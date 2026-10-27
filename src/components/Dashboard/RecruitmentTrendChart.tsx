@@ -89,7 +89,7 @@ const RecruitmentTrendChart: FC<RecruitmentTrendChartProps> = ({ candidates }) =
                   borderRadius: 12,
                   boxShadow: '0 8px 24px rgb(15 23 42 / 0.1)',
                 }}
-                formatter={(value) => [`${value ?? 0} hồ sơ`, 'CV tiếp nhận']}
+                formatter={(value: any) => [`${value ?? 0} hồ sơ`, 'CV tiếp nhận']}
                 labelStyle={{ color: '#0f172a', fontWeight: 600 }}
               />
               <Line

@@ -108,7 +108,10 @@ export function getMockApiResponse(url = '', method = 'get', _params?: unknown, 
   }
 
   // 5. HỒ SƠ ỨNG VIÊN (CANDIDATES)
-  if (cleanUrl.includes('/candidates')) {
+  if (cleanUrl.includes('/candidates/')) {
+    return null;
+  }
+  if (cleanUrl.endsWith('/candidates') || cleanUrl.includes('/candidates?') || cleanUrl.includes('/recruitment/candidates')) {
     return {
       items: mockCandidates,
       total: mockCandidates.length,

@@ -8,7 +8,7 @@ export interface MainLayoutProps {
 }
 
 export const MainLayout: FC<MainLayoutProps> = ({ children }) => (
-  <div className="flex h-screen w-screen overflow-hidden bg-slate-100">
+  <div className="flex h-screen w-screen overflow-hidden bg-gray-100">
     <Sidebar />
     <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
       <main className="flex-1 overflow-y-auto bg-slate-50/70 flex flex-col">

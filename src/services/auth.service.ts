@@ -1,6 +1,9 @@
 import axios from "axios";
 import axiosClient from "../utils/axiosClient";
 import type { LoginResponse } from "../types/auth";
+import { tokenService } from "./token.service";
+import { authSyncService } from "./authSync.service";
+import { AUTH_ROUTES } from "../constants/auth.constants";
 
 type ApiFieldErrors = Record<string, string[] | string | undefined>;
 
@@ -269,7 +272,30 @@ export const authService = {
     }
   },
 
-  logout: async (): Promise<void> => {
-    await axiosClient.post("/auth/logout");
+  logout: async (shouldRedirect = true): Promise<void> => {
+    try {
+      await axiosClient.post("/auth/logout");
+    } catch (error) {
+      console.warn("Backend logout API failed:", error);
+    } finally {
+      tokenService.clearAll();
+      authSyncService.broadcastLogout();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('auth:changed'));
+        if (
+          shouldRedirect
+          && window.location
+          && typeof window.location.pathname === 'string'
+          && window.location.pathname !== AUTH_ROUTES.LOGIN
+          && 'href' in window.location
+        ) {
+          try {
+            window.location.href = AUTH_ROUTES.LOGIN;
+          } catch {
+            // Safe fallback
+          }
+        }
+      }
+    }
   },
 };

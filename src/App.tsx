@@ -3,6 +3,7 @@ import {
   BrowserRouter as Router,
   Routes,
   Route,
+  useNavigate,
 } from "react-router-dom";
 import ToastProvider from "./components/notifications/ToastProvider";
 import LoginPage from "./pages/Login/LoginPage";
@@ -110,11 +111,47 @@ function HealthCheck() {
 
 
 
+import { autoRefreshService } from "./services/autoRefresh.service";
+import { authSyncService } from "./services/authSync.service";
+import { tokenService } from "./services/token.service";
+import { AUTH_ROUTES, AUTH_SYNC_EVENTS } from "./constants/auth.constants";
+
+function AuthSessionManager() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    autoRefreshService.start();
+
+    const unsubscribe = authSyncService.subscribe((message) => {
+      if (message.type === AUTH_SYNC_EVENTS.LOGOUT) {
+        tokenService.clearAll();
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+          window.dispatchEvent(new Event('auth:changed'));
+        }
+        navigate(AUTH_ROUTES.LOGIN, { replace: true });
+      } else if (message.type === AUTH_SYNC_EVENTS.SESSION_EXPIRED) {
+        const redirectParam = message.payload?.redirectUrl
+          ? `&redirect_url=${encodeURIComponent(message.payload.redirectUrl)}`
+          : '';
+        navigate(`${AUTH_ROUTES.LOGIN}?sessionExpired=1${redirectParam}`, { replace: true });
+      }
+    });
+
+    return () => {
+      autoRefreshService.stop();
+      unsubscribe();
+    };
+  }, [navigate]);
+
+  return null;
+}
+
 function App() {
   return (
     <ToastProvider>
       <Router>
         <PermissionProvider>
+          <AuthSessionManager />
           <SessionDraftRestorer />
           <Routes>
             <Route path="/" element={<CompanyLandingPage />} />
