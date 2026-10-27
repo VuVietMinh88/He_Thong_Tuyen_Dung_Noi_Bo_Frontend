@@ -8,6 +8,8 @@ import {
   LoginValidationError,
 } from '../../services/auth.service';
 import { tokenService } from '../../services/token.service';
+import { authSyncService } from '../../services/authSync.service';
+import { resetRedirectState } from '../../utils/axiosClient';
 import {
   clearSessionExpiryReturnTo,
   getSessionExpiryReturnTo,
@@ -108,9 +110,17 @@ export const LoginForm = () => {
       setLockVersion((version) => version + 1);
       if (rememberMe) localStorage.setItem('rememberedEmail', normalizedEmail);
       else localStorage.removeItem('rememberedEmail');
+      authSyncService.broadcastLogin({
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
+        user: response.user,
+      });
+      resetRedirectState();
       window.dispatchEvent(new Event('auth:changed'));
 
-      // Tính toán route trước khi hiển thị overlay
+      // Tính toán route trước khi hiển thị overlay (ưu tiên redirect_url từ session expiry)
+      const searchParams = new URLSearchParams(location.search);
+      const redirectUrlParam = searchParams.get('redirect_url');
       const routeFromState = (location.state as { from?: { pathname?: unknown; search?: unknown; hash?: unknown } } | null)?.from;
       const fromPath = typeof routeFromState?.pathname === 'string'
         && routeFromState.pathname.startsWith('/')
@@ -122,7 +132,7 @@ export const LoginForm = () => {
       // Hiển thị overlay thành công với tên người dùng
       const displayName = response.user.fullName ?? response.user.email ?? undefined;
       setSuccessUserName(displayName);
-      setPendingNavigateTo(returnTo ?? fromPath ?? '/dashboard');
+      setPendingNavigateTo(redirectUrlParam ?? returnTo ?? fromPath ?? '/dashboard');
       setShowSuccessOverlay(true);
     } catch (error) {
       if (error instanceof InvalidLoginResponseError) {

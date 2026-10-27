@@ -4,11 +4,26 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 import type { LoginResponse } from '../types/auth';
+import {
+  AUTH_CONFIG,
+  AUTH_HEADERS,
+  AUTH_MESSAGES,
+  AUTH_ROUTES,
+  AUTH_SYNC_EVENTS,
+} from '../constants/auth.constants';
 import { tokenService } from '../services/token.service';
+import { authSyncService } from '../services/authSync.service';
 import { captureSessionExpiryDraft } from '../services/sessionDraft.service';
+import { getOrCreateDeviceId } from './deviceId';
 import { getMockApiResponse } from './mockApiFallback';
 
-type RetryRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
+export type RetryRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
+
+interface QueuedRequestItem {
+  resolve: (value: AxiosResponse) => void;
+  reject: (reason: unknown) => void;
+  config: RetryRequestConfig;
+}
 
 const normalizeApiBaseUrl = (baseUrl?: string): string => {
   const trimmed = (baseUrl ?? '').trim().replace(/\/+$/, '');
@@ -30,7 +45,8 @@ const isStringArray = (value: unknown): value is string[] =>
 const isTokenResponse = (value: unknown): value is LoginResponse => {
   if (!isRecord(value) || !isRecord(value.user)) return false;
   const { user } = value;
-  return typeof value.accessToken === 'string'
+  return (
+    typeof value.accessToken === 'string'
     && value.accessToken.trim().length > 0
     && value.accessToken.trim().toLowerCase() !== 'undefined'
     && typeof value.refreshToken === 'string'
@@ -44,10 +60,14 @@ const isTokenResponse = (value: unknown): value is LoginResponse => {
     && typeof user.email === 'string'
     && typeof user.fullName === 'string'
     && isStringArray(user.roles)
-    && user.roles.length > 0;
+    && user.roles.length > 0
+  );
 };
 
-const isAuthRequest = (url?: string): boolean =>
+export const isLoginRequest = (url?: string): boolean =>
+  /\/auth\/login\/?$/i.test(url ?? '');
+
+export const isAuthRequest = (url?: string): boolean =>
   /\/auth\/(?:login|refresh)\/?$/i.test(url ?? '');
 
 const axiosClient = axios.create({
@@ -58,47 +78,174 @@ const axiosClient = axios.create({
 
 let isRefreshing = false;
 let isRedirectingToLogin = false;
-let failedQueue: Array<{
-  resolve: (token: string) => void;
-  reject: (reason: unknown) => void;
-}> = [];
+let failedQueue: QueuedRequestItem[] = [];
 
-const processQueue = (error: unknown | null, token?: string): void => {
-  failedQueue.forEach((request) => {
-    if (error !== null) request.reject(error);
-    else if (token) request.resolve(token);
-    else request.reject(new Error('Token refresh did not return an access token.'));
-  });
-  failedQueue = [];
+export const resetRedirectState = (): void => {
+  isRedirectingToLogin = false;
 };
 
-const redirectToLogin = (): void => {
+export const resetRefreshQueue = (): void => {
+  failedQueue = [];
+  isRefreshing = false;
+};
+
+/**
+ * Re-runs queued requests one-by-one sequentially once the new token is active.
+ */
+const processQueueSequentially = async (token: string): Promise<void> => {
+  const queuedItems = [...failedQueue];
+  failedQueue = [];
+
+  for (const item of queuedItems) {
+    try {
+      if (item.config.headers) {
+        if (typeof item.config.headers.set === 'function') {
+          item.config.headers.set(AUTH_HEADERS.AUTHORIZATION, `Bearer ${token}`);
+        } else {
+          item.config.headers[AUTH_HEADERS.AUTHORIZATION] = `Bearer ${token}`;
+        }
+      }
+      const response = await axiosClient(item.config);
+      item.resolve(response);
+    } catch (retryError) {
+      item.reject(retryError);
+    }
+  }
+};
+
+/**
+ * Rejects all queued requests if token refresh fails.
+ */
+const rejectQueue = (error: unknown): void => {
+  const queuedItems = [...failedQueue];
+  failedQueue = [];
+  for (const item of queuedItems) {
+    item.reject(error);
+  }
+};
+
+/**
+ * Handles session expiry flow:
+ * 1. Triggers global notification: "Phiên làm việc hết hạn"
+ * 2. Clears persisted tokens & drafts
+ * 3. Broadcasts session expiry to other tabs
+ * 4. Redirects to /login?sessionExpired=1&redirect_url=<currentRoute>
+ */
+export const handleSessionExpiry = (): void => {
   if (isRedirectingToLogin) return;
   isRedirectingToLogin = true;
-  const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  captureSessionExpiryDraft(returnTo);
+
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(
+      new CustomEvent('app:toast', {
+        detail: {
+          type: 'error',
+          message: AUTH_MESSAGES.SESSION_EXPIRED,
+        },
+      }),
+    );
+  }
+
+  const currentRoute =
+    typeof window !== 'undefined' && window.location
+      ? `${window.location.pathname || ''}${window.location.search || ''}${window.location.hash || ''}`
+      : '';
+
+  captureSessionExpiryDraft(currentRoute || '/');
   tokenService.clearAll();
-  if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-    window.location.href = '/login?sessionExpired=1';
+  authSyncService.broadcastSessionExpired(currentRoute);
+
+  if (
+    typeof window !== 'undefined'
+    && window.location
+    && typeof window.location.pathname === 'string'
+    && window.location.pathname !== AUTH_ROUTES.LOGIN
+  ) {
+    const redirectParam = currentRoute ? `&redirect_url=${encodeURIComponent(currentRoute)}` : '';
+    window.location.href = `${AUTH_ROUTES.LOGIN}?sessionExpired=1${redirectParam}`;
   }
 };
 
 const redirectToUnauthorized = (): void => {
-  if (typeof window !== 'undefined' && window.location.pathname !== '/unauthorized') {
-    window.location.href = '/unauthorized';
+  if (typeof window !== 'undefined' && window.location?.pathname !== AUTH_ROUTES.UNAUTHORIZED) {
+    window.location.href = AUTH_ROUTES.UNAUTHORIZED;
   }
 };
 
+// Listen to multi-tab sync events
+if (typeof window !== 'undefined') {
+  authSyncService.subscribe(async (message) => {
+    if (message.type === AUTH_SYNC_EVENTS.TOKEN_REFRESHED && message.payload?.accessToken) {
+      const { accessToken, refreshToken, user } = message.payload;
+      if (refreshToken) {
+        tokenService.saveTokens(accessToken, refreshToken);
+      }
+      if (user) {
+        tokenService.setUserData(user);
+      }
+      isRefreshing = false;
+      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new Event('auth:changed'));
+      }
+      if (failedQueue.length > 0) {
+        await processQueueSequentially(accessToken);
+      }
+    } else if (
+      message.type === AUTH_SYNC_EVENTS.REFRESH_FAILED
+      || message.type === AUTH_SYNC_EVENTS.SESSION_EXPIRED
+    ) {
+      isRefreshing = false;
+      if (failedQueue.length > 0) {
+        rejectQueue(new Error(AUTH_MESSAGES.SESSION_EXPIRED));
+      }
+      handleSessionExpiry();
+    } else if (message.type === AUTH_SYNC_EVENTS.LOGOUT) {
+      isRefreshing = false;
+      if (failedQueue.length > 0) {
+        rejectQueue(new Error('User logged out'));
+      }
+      tokenService.clearAll();
+      if (
+        typeof window !== 'undefined'
+        && window.location
+        && typeof window.location.pathname === 'string'
+        && window.location.pathname !== AUTH_ROUTES.LOGIN
+      ) {
+        window.location.href = AUTH_ROUTES.LOGIN;
+      }
+    }
+  });
+}
+
+// Request Interceptor: Inject Device ID & Authorization Bearer
 axiosClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     tokenService.removeInvalidStoredTokens();
+
+    if (isLoginRequest(config.url)) {
+      const deviceId = getOrCreateDeviceId();
+      if (typeof config.headers.set === 'function') {
+        config.headers.set(AUTH_HEADERS.DEVICE_ID, deviceId);
+      } else {
+        config.headers[AUTH_HEADERS.DEVICE_ID] = deviceId;
+      }
+      config.headers.delete(AUTH_HEADERS.AUTHORIZATION);
+      return config;
+    }
+
     if (isAuthRequest(config.url)) {
-      config.headers.delete('Authorization');
+      config.headers.delete(AUTH_HEADERS.AUTHORIZATION);
       return config;
     }
 
     const accessToken = tokenService.getAccessToken();
-    if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
+    if (accessToken) {
+      if (typeof config.headers.set === 'function') {
+        config.headers.set(AUTH_HEADERS.AUTHORIZATION, `Bearer ${accessToken}`);
+      } else {
+        config.headers[AUTH_HEADERS.AUTHORIZATION] = `Bearer ${accessToken}`;
+      }
+    }
 
     if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
       config.headers.delete('Content-Type');
@@ -109,14 +256,15 @@ axiosClient.interceptors.request.use(
   (error: unknown) => Promise.reject(error),
 );
 
+// Response Interceptor: 401 Interception, Request Queue & Sequential Retry
 axiosClient.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as RetryRequestConfig | undefined;
     const status = error.response?.status;
 
-    // NẾU GẶP LỖI MẠNG (BACKEND CHƯA BẬT) -> TỰ ĐỘNG PHẢN HỒI DỮ LIỆU MẪU ĐẦY ĐỦ ĐỂ TEST CHỨC NĂNG
-    if (!error.response && originalRequest?.url) {
+    // Fallback mock API in local dev / offline mode (bypassed in automated tests)
+    if (!error.response && originalRequest?.url && import.meta.env.MODE !== 'test') {
       const mockResult = getMockApiResponse(
         originalRequest.url,
         originalRequest.method,
@@ -134,20 +282,23 @@ axiosClient.interceptors.response.use(
       }
     }
 
+    // 403 Forbidden handler
     if (status === 403 && originalRequest && !isAuthRequest(originalRequest.url)) {
       redirectToUnauthorized();
       return Promise.reject(error);
     }
 
+    // Session ended if a retried request still returns 401
     if (
       status === 401
       && originalRequest?._retry
       && !isAuthRequest(originalRequest.url)
     ) {
-      redirectToLogin();
+      handleSessionExpiry();
       return Promise.reject(error);
     }
 
+    // Non-401 or auth endpoint errors
     if (
       status !== 401
       || !originalRequest
@@ -171,23 +322,24 @@ axiosClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (isRefreshing) {
+    // If another refresh is already in flight (either in this tab or another tab), queue this request
+    if (isRefreshing || authSyncService.isRemoteRefreshing()) {
       originalRequest._retry = true;
-      return new Promise<string>((resolve, reject) => {
-        failedQueue.push({ resolve, reject });
-      }).then((accessToken) => {
-        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-        return axiosClient(originalRequest);
+      return new Promise<AxiosResponse>((resolve, reject) => {
+        failedQueue.push({ resolve, reject, config: originalRequest });
       });
     }
 
+    // Begin refreshing in this tab
     originalRequest._retry = true;
     isRefreshing = true;
+    authSyncService.broadcastRefreshStart();
+
     const refreshToken = tokenService.getRefreshToken();
     if (!refreshToken) {
       isRefreshing = false;
-      processQueue(error);
-      redirectToLogin();
+      rejectQueue(error);
+      handleSessionExpiry();
       return Promise.reject(error);
     }
 
@@ -195,8 +347,9 @@ axiosClient.interceptors.response.use(
       const refreshResponse = await axios.post<unknown>(
         `${axiosClient.defaults.baseURL}/auth/refresh`,
         { refreshToken },
-        { headers: { 'Content-Type': 'application/json' }, timeout: 15000 },
+        { headers: { 'Content-Type': 'application/json' }, timeout: AUTH_CONFIG.TOKEN_REFRESH_TIMEOUT_MS },
       );
+
       if (!isTokenResponse(refreshResponse.data)) {
         throw new Error('Backend trả về dữ liệu refresh token không đúng hợp đồng API.');
       }
@@ -206,12 +359,37 @@ axiosClient.interceptors.response.use(
         throw new Error('Không thể lưu phiên đăng nhập mới.');
       }
 
-      processQueue(null, accessToken);
-      originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-      return await axiosClient(originalRequest);
+      // Sync the active token to other tabs
+      authSyncService.broadcastTokenRefreshed({
+        accessToken,
+        refreshToken: rotatedRefreshToken,
+        user,
+      });
+      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new Event('auth:changed'));
+      }
+
+      // Retry the original request with the new active token
+      if (originalRequest.headers) {
+        if (typeof originalRequest.headers.set === 'function') {
+          originalRequest.headers.set(AUTH_HEADERS.AUTHORIZATION, `Bearer ${accessToken}`);
+        } else {
+          originalRequest.headers[AUTH_HEADERS.AUTHORIZATION] = `Bearer ${accessToken}`;
+        }
+      }
+      const originalResponse = await axiosClient(originalRequest);
+
+      // Sequentially retry all subsequent requests that were queued during refresh
+      await processQueueSequentially(accessToken);
+
+      return originalResponse;
     } catch (refreshError: unknown) {
-      processQueue(refreshError);
-      redirectToLogin();
+      // If refresh fails, reject the entire queue
+      rejectQueue(refreshError);
+      authSyncService.broadcastRefreshFailed(
+        refreshError instanceof Error ? refreshError.message : String(refreshError),
+      );
+      handleSessionExpiry();
       return Promise.reject(refreshError);
     } finally {
       isRefreshing = false;

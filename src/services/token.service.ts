@@ -1,8 +1,9 @@
 import type { User } from '../types/auth';
+import { AUTH_STORAGE_KEYS } from '../constants/auth.constants';
 
-const ACCESS_TOKEN_KEY = 'accessToken';
-const REFRESH_TOKEN_KEY = 'refreshToken';
-const USER_DATA_KEY = 'userData';
+const ACCESS_TOKEN_KEY = AUTH_STORAGE_KEYS.ACCESS_TOKEN;
+const REFRESH_TOKEN_KEY = AUTH_STORAGE_KEYS.REFRESH_TOKEN;
+const USER_DATA_KEY = AUTH_STORAGE_KEYS.USER_DATA;
 
 export type TokenUserData = User;
 
@@ -39,7 +40,7 @@ const clearPersistedTokens = (): void => {
 
 export const tokenService = {
   getToken(): string | null {
-    if (typeof window !== 'undefined' && window.location.search.includes('demo=admin')) {
+    if (typeof window !== 'undefined' && window.location?.search?.includes('demo=admin')) {
       try {
         window.localStorage.setItem(ACCESS_TOKEN_KEY, 'demo-admin-token');
         window.localStorage.setItem(USER_DATA_KEY, JSON.stringify({
@@ -138,7 +139,7 @@ export const tokenService = {
   },
 
   getUserData(): User | null {
-    if (typeof window !== 'undefined' && window.location.search.includes('demo=admin')) {
+    if (typeof window !== 'undefined' && window.location?.search?.includes('demo=admin')) {
       return {
         id: 'admin-01',
         email: 'admin@smartrecruitment.vn',

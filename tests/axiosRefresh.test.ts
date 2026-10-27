@@ -130,6 +130,6 @@ describe('axios session refresh', () => {
     await expect(axiosClient.get('/resource')).rejects.toBeInstanceOf(AxiosError);
     expect(requestCount).toBe(2);
     expect(tokenService.getAccessToken()).toBeNull();
-    expect(location.href).toBe('/login?sessionExpired=1');
+    expect(location.href).toBe('/login?sessionExpired=1&redirect_url=%2Fusers');
   });
 });
